@@ -8,15 +8,20 @@ import {
   Image,
   Animated,
   Dimensions,
-  Switch,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Location from 'expo-location';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, DeliveryMode } from '../types';
-import { generateNearbyNurseries } from '../services/nurseryService';
+import { loadNearbyNurseries } from '../services/nurseryService';
 import { colors } from '../constants/colors';
+
+// Tel Aviv center — used as fallback when location permission is denied
+const FALLBACK_LAT = 32.0853;
+const FALLBACK_LNG = 34.7818;
 
 const { width } = Dimensions.get('window');
 
@@ -36,6 +41,7 @@ const CONDITION_CONFIG = {
 export default function DiagnosisScreen({ navigation, route }: Props) {
   const { imageUri, diagnosis } = route.params;
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('delivery');
+  const [findingNurseries, setFindingNurseries] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
@@ -48,8 +54,27 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
 
   const condition = CONDITION_CONFIG[diagnosis.condition] || CONDITION_CONFIG.moderate;
 
-  const handleFindReplacement = () => {
-    const nurseries = generateNearbyNurseries(diagnosis.plantName);
+  const handleFindReplacement = async () => {
+    setFindingNurseries(true);
+    let lat = FALLBACK_LAT;
+    let lng = FALLBACK_LNG;
+
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        lat = loc.coords.latitude;
+        lng = loc.coords.longitude;
+      }
+    } catch {
+      // Permission denied or GPS unavailable — Tel Aviv fallback used
+    } finally {
+      setFindingNurseries(false);
+    }
+
+    const nurseries = loadNearbyNurseries(diagnosis.plantName, lat, lng);
     navigation.navigate('Nurseries', {
       plantName: diagnosis.plantName,
       nurseries,
@@ -224,18 +249,26 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
                 </TouchableOpacity>
               </View>
 
-              <TouchableOpacity style={styles.findBtn} onPress={handleFindReplacement}>
+              <TouchableOpacity
+                style={styles.findBtn}
+                onPress={handleFindReplacement}
+                disabled={findingNurseries}
+              >
                 <LinearGradient
                   colors={['#2D6A4F', '#40916C']}
                   style={styles.findBtnGradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                 >
-                  <Text style={styles.findBtnText}>
-                    {deliveryMode === 'delivery'
-                      ? '🚚 Find Delivery Options'
-                      : '🏪 Find Nearby Nurseries'}
-                  </Text>
+                  {findingNurseries ? (
+                    <ActivityIndicator color={colors.white} />
+                  ) : (
+                    <Text style={styles.findBtnText}>
+                      {deliveryMode === 'delivery'
+                        ? '🚚 Find Delivery Options'
+                        : '🏪 Find Nearby Nurseries'}
+                    </Text>
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
             </LinearGradient>
