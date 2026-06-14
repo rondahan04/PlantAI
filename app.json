@@ -5,21 +5,48 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#0A1628"
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "PlantAI needs camera access to diagnose your plants.",
+        "NSPhotoLibraryUsageDescription": "PlantAI needs photo library access to analyze plant photos.",
+        "NSLocationWhenInUseUsageDescription": "PlantAI uses your location to find nearby nurseries."
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#0A1628",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "PlantAI needs camera access to diagnose your plants."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "PlantAI needs photo library access to analyze plant photos."
+        }
+      ]
+    ]
   }
 }

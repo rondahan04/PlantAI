@@ -1,0 +1,31 @@
+export const colors = {
+  primary: '#2D6A4F',
+  primaryLight: '#40916C',
+  primaryDark: '#1B4332',
+  secondary: '#95D5B2',
+  accent: '#B7E4C7',
+  background: '#0A1628',
+  surface: '#0F2140',
+  surfaceLight: '#162A4D',
+  card: '#1A3358',
+  text: '#FFFFFF',
+  textSecondary: '#A8C5DA',
+  textMuted: '#6B8FA8',
+  success: '#52B788',
+  warning: '#F4A261',
+  danger: '#E63946',
+  gold: '#FFB703',
+  white: '#FFFFFF',
+  black: '#000000',
+  overlay: 'rgba(0, 0, 0, 0.6)',
+  cardGlass: 'rgba(26, 51, 88, 0.85)',
+  greenGlass: 'rgba(45, 106, 79, 0.3)',
+};
+
+export const gradients = {
+  primary: ['#2D6A4F', '#1B4332'],
+  background: ['#0A1628', '#0F2140'],
+  card: ['#1A3358', '#0F2140'],
+  success: ['#52B788', '#2D6A4F'],
+  hero: ['rgba(45, 106, 79, 0.9)', 'rgba(10, 22, 40, 0.95)'],
+};
