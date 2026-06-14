@@ -15,14 +15,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
-import { diagnosePlant, getMockDiagnosis } from '../services/plantDiagnosis';
+import { diagnosePlant, getMockDiagnosis, NotAPlantError } from '../services/plantDiagnosis';
 import { colors } from '../constants/colors';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Camera'>;
 };
 
-const API_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY || '';
+const API_KEY = process.env.EXPO_PUBLIC_PLANTID_API_KEY || '';
 
 export default function CameraScreen({ navigation }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
@@ -44,7 +44,14 @@ export default function CameraScreen({ navigation }: Props) {
         }
         navigation.replace('Diagnosis', { imageUri: uri, diagnosis });
       } catch (err: any) {
-        Alert.alert('Analysis Failed', err.message || 'Could not analyze plant. Please try again.');
+        if (err instanceof NotAPlantError) {
+          Alert.alert(
+            "That's Not a Plant 🌿",
+            "Point the camera at leaves, stems, or flowers and try again."
+          );
+        } else {
+          Alert.alert('Analysis Failed', err.message || 'Could not analyze plant. Please try again.');
+        }
         setCapturedUri(null);
         setAnalyzing(false);
       }
