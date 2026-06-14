@@ -1,91 +1,158 @@
 import { Nursery } from '../types';
 
-const NURSERY_NAMES = [
-  'GreenLeaf Garden Center',
-  'The Plant Loft',
-  'Urban Roots Nursery',
-  'Bloom & Grow',
-  'The Potting Shed',
-  'Leafy Paradise',
-  'Roots & Branches',
-  'Garden & Grace',
-];
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const NURSERIES_DATA = require('../../assets/nurseries.json') as NurseryJSON[];
 
-const STREET_NAMES = [
-  'Oak Street',
-  'Maple Avenue',
-  'Garden Boulevard',
-  'Cedar Lane',
-  'Willow Drive',
-  'Rose Street',
-  'Elm Avenue',
-];
-
-function randomBetween(min: number, max: number): number {
-  return Math.random() * (max - min) + min;
+interface PlantJSON {
+  name: string;
+  aliases: string[];
+  price: string;
+  inStock: boolean;
 }
 
-function randomInt(min: number, max: number): number {
-  return Math.floor(randomBetween(min, max + 1));
+interface NurseryJSON {
+  nurseryId: string;
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  deliveryAvailable: boolean;
+  deliveryFee: string;
+  deliveryTime: string;
+  pickupAvailable: boolean;
+  hours: string;
+  phone: string;
+  rating: number;
+  reviewCount: number;
+  image: string;
+  plants: PlantJSON[];
 }
 
-export function generateNearbyNurseries(
+/*
+ * Haversine formula — great-circle distance in km.
+ *
+ *   a = sin²(Δlat/2) + cos(lat1) · cos(lat2) · sin²(Δlng/2)
+ *   d = 2R · atan2(√a, √(1−a))
+ */
+function haversineKm(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+): number {
+  const R = 6371;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/*
+ * Normalize plant name for alias matching:
+ * - lowercase
+ * - strip pot size qualifiers (6in, 4", medium, large)
+ * - trim whitespace
+ */
+function normalizeName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\b\d+\s*['"]?\s*(inch|in|cm|gallon|gal|pot|liter|l)\b/gi, '')
+    .replace(/\b(small|medium|large|xl|extra\s+large|big)\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+/*
+ * Returns true if the queried plant name matches a nursery plant entry.
+ * Matching strategy (in order of precision):
+ *   1. Exact normalized match on scientific name or any alias
+ *   2. First-word match (genus match: "Monstera" matches "Monstera deliciosa")
+ *   3. Query is a substring of a candidate name or vice versa
+ *
+ * If nothing matches → caller falls back to showing all nurseries (by design).
+ */
+function plantMatches(queryRaw: string, plant: PlantJSON): boolean {
+  const query = normalizeName(queryRaw);
+  const queryFirstWord = query.split(/\s+/)[0];
+
+  const candidates = [plant.name, ...plant.aliases].map(normalizeName);
+
+  return candidates.some((c) => {
+    const cFirstWord = c.split(/\s+/)[0];
+    return (
+      c === query ||
+      c.includes(query) ||
+      query.includes(c) ||
+      cFirstWord === queryFirstWord
+    );
+  });
+}
+
+/*
+ * Load real nurseries from assets/nurseries.json, compute haversine distance
+ * from the user's position, match the diagnosed plant against each nursery's
+ * inventory, and sort by: matched nurseries first, then by distance ascending.
+ *
+ * If no nursery matches the plant name, all nurseries are returned (unfiltered)
+ * so the user always sees results rather than an empty screen.
+ *
+ * @param plantName  Common or scientific name from Plant.id diagnosis
+ * @param userLat    User latitude (defaults to Tel Aviv center as demo fallback)
+ * @param userLng    User longitude (defaults to Tel Aviv center as demo fallback)
+ */
+export function loadNearbyNurseries(
   plantName: string,
   userLat: number = 32.0853,
-  userLon: number = 34.7818
+  userLng: number = 34.7818
 ): Nursery[] {
-  const count = randomInt(4, 6);
-  const nurseries: Nursery[] = [];
-
-  for (let i = 0; i < count; i++) {
-    const distanceKm = parseFloat(randomBetween(0.3, 8).toFixed(1));
+  const nurseries: Nursery[] = NURSERIES_DATA.map((n: NurseryJSON) => {
+    const distanceKm = haversineKm(userLat, userLng, n.lat, n.lng);
     const distanceStr =
       distanceKm < 1
         ? `${Math.round(distanceKm * 1000)}m`
         : `${distanceKm.toFixed(1)} km`;
 
-    const rating = parseFloat(randomBetween(3.8, 5.0).toFixed(1));
-    const reviewCount = randomInt(24, 312);
-    const streetNum = randomInt(1, 200);
-    const streetName =
-      STREET_NAMES[randomInt(0, STREET_NAMES.length - 1)];
-    const name = NURSERY_NAMES[i % NURSERY_NAMES.length];
+    const matchedPlant = n.plants.find(
+      (p) => plantMatches(plantName, p) && p.inStock
+    );
 
-    const price = randomBetween(29, 89);
-    const priceStr = `$${price.toFixed(0)}`;
-
-    const deliveryFee = randomBetween(4.99, 12.99);
-    const deliveryTime = `${randomInt(1, 4)}–${randomInt(5, 8)} hrs`;
-
-    const latOffset = (distanceKm / 111) * (Math.random() > 0.5 ? 1 : -1);
-    const lonOffset =
-      (distanceKm / (111 * Math.cos((userLat * Math.PI) / 180))) *
-      (Math.random() > 0.5 ? 1 : -1);
-
-    const openHour = randomInt(7, 9);
-    const closeHour = randomInt(17, 20);
-
-    nurseries.push({
-      id: `nursery-${i}`,
-      name,
+    return {
+      id: n.nurseryId,
+      name: n.name,
       distance: distanceStr,
       distanceKm,
-      rating,
-      reviewCount,
-      address: `${streetNum} ${streetName}`,
-      hasPlant: true,
-      plantPrice: priceStr,
-      deliveryAvailable: Math.random() > 0.25,
-      deliveryTime,
-      deliveryFee: `$${deliveryFee.toFixed(2)}`,
-      pickupAvailable: true,
-      hours: `${openHour}:00 AM – ${closeHour > 12 ? closeHour - 12 : closeHour}:00 ${closeHour >= 12 ? 'PM' : 'AM'}`,
-      phone: `+1 (${randomInt(200, 999)}) ${randomInt(100, 999)}-${randomInt(1000, 9999)}`,
-      image: `https://picsum.photos/seed/${name.replace(/\s/g, '')}/400/300`,
-      latitude: userLat + latOffset,
-      longitude: userLon + lonOffset,
-    });
+      rating: n.rating,
+      reviewCount: n.reviewCount,
+      address: n.address,
+      hasPlant: !!matchedPlant,
+      plantPrice: matchedPlant?.price ?? n.plants.find((p) => p.inStock)?.price ?? '—',
+      deliveryAvailable: n.deliveryAvailable,
+      deliveryTime: n.deliveryTime,
+      deliveryFee: n.deliveryFee,
+      pickupAvailable: n.pickupAvailable,
+      hours: n.hours,
+      phone: n.phone,
+      image: n.image,
+      latitude: n.lat,
+      longitude: n.lng,
+    };
+  });
+
+  const anyMatch = nurseries.some((n) => n.hasPlant);
+
+  if (!anyMatch) {
+    // No nursery stocks this plant — show all sorted by distance
+    console.log(`[nurseryService] No alias match for "${plantName}" — showing all nurseries`);
+    return nurseries.sort((a, b) => a.distanceKm - b.distanceKm);
   }
 
-  return nurseries.sort((a, b) => a.distanceKm - b.distanceKm);
+  // Matched nurseries first, then by distance
+  return nurseries.sort((a, b) => {
+    if (a.hasPlant && !b.hasPlant) return -1;
+    if (!a.hasPlant && b.hasPlant) return 1;
+    return a.distanceKm - b.distanceKm;
+  });
 }
