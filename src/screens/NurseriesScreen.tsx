@@ -1,40 +1,28 @@
-import React, { useState, useRef, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Image,
-  Animated,
-  Linking,
-  Alert,
-  Dimensions,
-} from 'react-native';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, Animated, Linking, Alert } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, Nursery, DeliveryMode } from '../types';
-import { colors } from '../constants/colors';
+import { Theme, useTheme } from '../theme';
 
-const { width } = Dimensions.get('window');
+type Styles = ReturnType<typeof makeStyles>;
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Nurseries'>;
   route: RouteProp<RootStackParamList, 'Nurseries'>;
 };
 
-function StarRating({ rating }: { rating: number }) {
+function StarRating({ rating, t, s }: { rating: number; t: Theme; s: Styles }) {
   return (
-    <View style={styles.starRow}>
-      {[1, 2, 3, 4, 5].map((s) => (
-        <Text key={s} style={styles.star}>
-          {s <= Math.floor(rating) ? '★' : s - rating < 1 ? '½' : '☆'}
-        </Text>
-      ))}
-      <Text style={styles.ratingNum}>{rating.toFixed(1)}</Text>
+    <View style={s.starRow}>
+      {[1, 2, 3, 4, 5].map((i) => {
+        const name = i <= Math.floor(rating) ? 'star' : i - rating < 1 ? 'star-half' : 'star-outline';
+        return <Ionicons key={i} name={name} size={13} color={t.color.warning} />;
+      })}
+      <Text style={s.ratingNum}>{rating.toFixed(1)}</Text>
     </View>
   );
 }
@@ -43,6 +31,8 @@ function NurseryCard({
   nursery,
   mode,
   index,
+  t,
+  s,
   onOrder,
   onCall,
   onDirections,
@@ -50,151 +40,116 @@ function NurseryCard({
   nursery: Nursery;
   mode: DeliveryMode;
   index: number;
+  t: Theme;
+  s: Styles;
   onOrder: () => void;
   onCall: () => void;
   onDirections: () => void;
 }) {
-  const slideAnim = useRef(new Animated.Value(40)).current;
+  const slideAnim = useRef(new Animated.Value(24)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    // Staggered entrance (~80ms per card).
     Animated.parallel([
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 400,
-        delay: index * 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 400,
-        delay: index * 100,
-        useNativeDriver: true,
-      }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 350, delay: index * 80, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 350, delay: index * 80, useNativeDriver: true }),
     ]).start();
   }, []);
 
   const isAvailable = mode === 'delivery' ? nursery.deliveryAvailable : nursery.pickupAvailable;
 
   return (
-    <Animated.View
-      style={[styles.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}
-    >
-      <LinearGradient
-        colors={['rgba(26,51,88,0.95)', 'rgba(15,33,64,0.9)']}
-        style={styles.cardGradient}
-      >
-        {/* Image + Distance Badge */}
-        <View style={styles.cardImageWrap}>
-          <Image
-            source={{ uri: nursery.image }}
-            style={styles.cardImage}
-            defaultSource={{ uri: 'https://picsum.photos/400/300' }}
-          />
-          <LinearGradient
-            colors={['transparent', 'rgba(15,33,64,0.9)']}
-            style={styles.cardImageFade}
-          />
-          <View style={styles.distanceBadge}>
-            <Text style={styles.distanceText}>📍 {nursery.distance}</Text>
+    <Animated.View style={[s.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+      <View style={s.cardImageWrap}>
+        <Image source={{ uri: nursery.image }} style={s.cardImage} />
+        <View style={s.distanceBadge}>
+          <Ionicons name="location-outline" size={12} color={t.color.foreground} />
+          <Text style={s.distanceText}>{nursery.distance}</Text>
+        </View>
+        {index === 0 && (
+          <View style={s.closestBadge}>
+            <Text style={s.closestText}>Closest</Text>
           </View>
-          {index === 0 && (
-            <View style={styles.closestBadge}>
-              <Text style={styles.closestText}>Closest</Text>
-            </View>
-          )}
+        )}
+      </View>
+
+      <View style={s.cardContent}>
+        <View style={s.cardHeader}>
+          <View style={s.cardTitleWrap}>
+            <Text style={s.cardName}>{nursery.name}</Text>
+            <StarRating rating={nursery.rating} t={t} s={s} />
+            <Text style={s.reviewCount}>({nursery.reviewCount} reviews)</Text>
+          </View>
+          <View style={s.priceTag}>
+            <Text style={s.priceText}>{nursery.plantPrice}</Text>
+          </View>
         </View>
 
-        {/* Content */}
-        <View style={styles.cardContent}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardTitleWrap}>
-              <Text style={styles.cardName}>{nursery.name}</Text>
-              <StarRating rating={nursery.rating} />
-              <Text style={styles.reviewCount}>({nursery.reviewCount} reviews)</Text>
-            </View>
-            <View style={styles.priceTag}>
-              <Text style={styles.priceText}>{nursery.plantPrice}</Text>
-            </View>
-          </View>
+        <View style={s.metaRow}>
+          <Ionicons name="home-outline" size={13} color={t.color.textMuted} />
+          <Text style={s.metaText}>{nursery.address}</Text>
+        </View>
+        <View style={s.metaRow}>
+          <Ionicons name="time-outline" size={13} color={t.color.textMuted} />
+          <Text style={s.metaText}>{nursery.hours}</Text>
+        </View>
 
-          <Text style={styles.address}>🏠 {nursery.address}</Text>
-          <Text style={styles.hours}>🕐 {nursery.hours}</Text>
-
-          {/* Delivery/Pickup info */}
-          {mode === 'delivery' ? (
-            nursery.deliveryAvailable ? (
-              <View style={styles.deliveryInfo}>
-                <Text style={styles.deliveryInfoText}>
-                  🚚 Delivery in {nursery.deliveryTime} · {nursery.deliveryFee} delivery fee
-                </Text>
-              </View>
-            ) : (
-              <View style={[styles.deliveryInfo, styles.noDeliveryInfo]}>
-                <Text style={styles.noDeliveryText}>⚠️ No delivery — pickup only</Text>
-              </View>
-            )
+        {mode === 'delivery' ? (
+          nursery.deliveryAvailable ? (
+            <View style={s.infoPill}>
+              <Ionicons name="rocket-outline" size={14} color={t.color.primary} />
+              <Text style={s.infoPillText}>Delivery in {nursery.deliveryTime} · {nursery.deliveryFee} fee</Text>
+            </View>
           ) : (
-            <View style={styles.deliveryInfo}>
-              <Text style={styles.deliveryInfoText}>🏪 Ready for pickup today</Text>
+            <View style={[s.infoPill, s.infoPillWarn]}>
+              <Ionicons name="warning-outline" size={14} color={t.color.warning} />
+              <Text style={[s.infoPillText, { color: t.color.warning }]}>No delivery — pickup only</Text>
             </View>
-          )}
-
-          {/* Action buttons */}
-          <View style={styles.actionRow}>
-            <TouchableOpacity
-              style={styles.actionSecondary}
-              onPress={onCall}
-            >
-              <Text style={styles.actionSecondaryText}>📞 Call</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionSecondary}
-              onPress={onDirections}
-            >
-              <Text style={styles.actionSecondaryText}>🗺️ Directions</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionPrimary, !isAvailable && styles.actionPrimaryDisabled]}
-              onPress={isAvailable ? onOrder : undefined}
-              activeOpacity={isAvailable ? 0.8 : 1}
-            >
-              <LinearGradient
-                colors={isAvailable ? ['#2D6A4F', '#40916C'] : ['#555', '#444']}
-                style={styles.actionPrimaryGrad}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                <Text style={styles.actionPrimaryText}>
-                  {mode === 'delivery'
-                    ? isAvailable
-                      ? '🛒 Order'
-                      : 'Pickup Only'
-                    : '✓ Reserve'}
-                </Text>
-              </LinearGradient>
-            </TouchableOpacity>
+          )
+        ) : (
+          <View style={s.infoPill}>
+            <Ionicons name="storefront-outline" size={14} color={t.color.primary} />
+            <Text style={s.infoPillText}>Ready for pickup today</Text>
           </View>
+        )}
+
+        <View style={s.actionRow}>
+          <Pressable style={s.actionSecondary} onPress={onCall} accessibilityRole="button" accessibilityLabel="Call nursery">
+            <Ionicons name="call-outline" size={16} color={t.color.foreground} />
+            <Text style={s.actionSecondaryText}>Call</Text>
+          </Pressable>
+          <Pressable style={s.actionSecondary} onPress={onDirections} accessibilityRole="button" accessibilityLabel="Directions">
+            <Ionicons name="navigate-outline" size={16} color={t.color.foreground} />
+            <Text style={s.actionSecondaryText}>Directions</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [s.actionPrimary, !isAvailable && s.actionPrimaryDisabled, pressed && isAvailable && s.btnPressed]}
+            onPress={isAvailable ? onOrder : undefined}
+            disabled={!isAvailable}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !isAvailable }}
+          >
+            <Text style={s.actionPrimaryText}>
+              {mode === 'delivery' ? (isAvailable ? 'Order' : 'Pickup Only') : 'Reserve'}
+            </Text>
+          </Pressable>
         </View>
-      </LinearGradient>
+      </View>
     </Animated.View>
   );
 }
 
 export default function NurseriesScreen({ navigation, route }: Props) {
+  const t = useTheme();
+  const s = useMemo(() => makeStyles(t), [t]);
   const { plantName, nurseries, mode: initialMode } = route.params;
   const [mode, setMode] = useState<DeliveryMode>(initialMode);
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const headerFade = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.timing(headerFade, {
-      toValue: 1,
-      duration: 500,
-      useNativeDriver: true,
-    }).start();
+    Animated.timing(headerFade, { toValue: 1, duration: 400, useNativeDriver: true }).start();
   }, []);
 
   const deliveryCount = nurseries.filter((n) => n.deliveryAvailable).length;
@@ -202,337 +157,247 @@ export default function NurseriesScreen({ navigation, route }: Props) {
 
   const handleOrder = (nursery: Nursery) => {
     Alert.alert(
-      mode === 'delivery' ? 'Order Placed! 🎉' : 'Reserved! 🌿',
+      mode === 'delivery' ? 'Order placed' : 'Reserved',
       mode === 'delivery'
         ? `Your ${plantName} from ${nursery.name} is on its way! Expected in ${nursery.deliveryTime}.`
         : `Your ${plantName} is reserved at ${nursery.name}. It'll be ready when you arrive!`,
-      [{ text: 'Great!', style: 'default' }]
+      [{ text: 'Great', style: 'default' }]
     );
   };
-
-  const handleCall = (nursery: Nursery) => {
-    Linking.openURL(`tel:${nursery.phone}`);
-  };
-
-  const handleDirections = (nursery: Nursery) => {
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${nursery.latitude},${nursery.longitude}`;
-    Linking.openURL(url);
-  };
+  const handleCall = (nursery: Nursery) => Linking.openURL(`tel:${nursery.phone}`);
+  const handleDirections = (nursery: Nursery) =>
+    Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${nursery.latitude},${nursery.longitude}`);
 
   return (
-    <LinearGradient colors={['#0A1628', '#0F2140', '#0A1628']} style={styles.container}>
-      <SafeAreaView style={styles.safe} edges={['top']}>
-        {/* Fixed Header */}
-        <Animated.View style={[styles.header, { opacity: headerFade }]}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-            <Text style={styles.backText}>← Back</Text>
-          </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>{plantName}</Text>
-            <Text style={styles.headerSub}>{nurseries.length} nurseries nearby</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.viewToggleBtn}
-            onPress={() => setViewMode(viewMode === 'list' ? 'map' : 'list')}
-          >
-            <Text style={styles.viewToggleText}>{viewMode === 'list' ? '🗺️ Map' : '☰ List'}</Text>
-          </TouchableOpacity>
-        </Animated.View>
+    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      {/* Header */}
+      <Animated.View style={[s.header, { opacity: headerFade }]}>
+        <Pressable style={s.backBtn} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Back">
+          <Ionicons name="chevron-back" size={22} color={t.color.primary} />
+        </Pressable>
+        <View style={s.headerCenter}>
+          <Text style={s.headerTitle} numberOfLines={1}>{plantName}</Text>
+          <Text style={s.headerSub}>{nurseries.length} nurseries nearby</Text>
+        </View>
+        <Pressable
+          style={s.viewToggleBtn}
+          onPress={() => setViewMode(viewMode === 'list' ? 'map' : 'list')}
+          accessibilityRole="button"
+          accessibilityLabel={viewMode === 'list' ? 'Show map' : 'Show list'}
+        >
+          <Ionicons name={viewMode === 'list' ? 'map-outline' : 'list-outline'} size={18} color={t.color.primary} />
+        </Pressable>
+      </Animated.View>
 
-        {/* Mode Toggle */}
-        <Animated.View style={[styles.modeToggle, { opacity: headerFade }]}>
-          <LinearGradient
-            colors={['rgba(26,51,88,0.95)', 'rgba(15,33,64,0.9)']}
-            style={styles.modeToggleInner}
-          >
-            <TouchableOpacity
-              style={[styles.modeBtn, mode === 'delivery' && styles.modeBtnActive]}
-              onPress={() => setMode('delivery')}
+      {/* Mode toggle */}
+      <Animated.View style={[s.modeToggle, { opacity: headerFade }]}>
+        {(['delivery', 'pickup'] as DeliveryMode[]).map((m) => {
+          const active = mode === m;
+          const count = m === 'delivery' ? deliveryCount : pickupCount;
+          return (
+            <Pressable
+              key={m}
+              style={[s.modeBtn, active && s.modeBtnActive]}
+              onPress={() => setMode(m)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
             >
-              <Text style={styles.modeBtnIcon}>🚚</Text>
-              <Text style={[styles.modeBtnText, mode === 'delivery' && styles.modeBtnTextActive]}>
-                Deliver Today
-              </Text>
-              <View style={[styles.modeCount, mode === 'delivery' && styles.modeCountActive]}>
-                <Text style={[styles.modeCountText, mode === 'delivery' && styles.modeCountTextActive]}>
-                  {deliveryCount}
-                </Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.modeBtn, mode === 'pickup' && styles.modeBtnActive]}
-              onPress={() => setMode('pickup')}
-            >
-              <Text style={styles.modeBtnIcon}>🏪</Text>
-              <Text style={[styles.modeBtnText, mode === 'pickup' && styles.modeBtnTextActive]}>
-                Pick Up
-              </Text>
-              <View style={[styles.modeCount, mode === 'pickup' && styles.modeCountActive]}>
-                <Text style={[styles.modeCountText, mode === 'pickup' && styles.modeCountTextActive]}>
-                  {pickupCount}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </LinearGradient>
-        </Animated.View>
-
-        {viewMode === 'map' ? (
-          <MapView
-            style={styles.map}
-            initialRegion={{
-              latitude: nurseries[0]?.latitude ?? 32.0853,
-              longitude: nurseries[0]?.longitude ?? 34.7818,
-              latitudeDelta: 0.12,
-              longitudeDelta: 0.12,
-            }}
-          >
-            {nurseries.map((nursery) => (
-              <Marker
-                key={nursery.id}
-                coordinate={{ latitude: nursery.latitude, longitude: nursery.longitude }}
-                title={nursery.name}
-                description={`${nursery.distance} · ${nursery.plantPrice}${nursery.hasPlant ? ' · In stock' : ''}`}
-                pinColor={nursery.hasPlant ? '#52B788' : '#888'}
-                onCalloutPress={() => handleDirections(nursery)}
+              <Ionicons
+                name={m === 'delivery' ? 'rocket-outline' : 'storefront-outline'}
+                size={16}
+                color={active ? t.color.primary : t.color.textMuted}
               />
-            ))}
-          </MapView>
-        ) : (
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.list}
-          >
-            {nurseries.map((nursery, i) => (
-              <NurseryCard
-                key={nursery.id}
-                nursery={nursery}
-                mode={mode}
-                index={i}
-                onOrder={() => handleOrder(nursery)}
-                onCall={() => handleCall(nursery)}
-                onDirections={() => handleDirections(nursery)}
-              />
-            ))}
+              <Text style={[s.modeBtnText, active && s.modeBtnTextActive]}>
+                {m === 'delivery' ? 'Deliver Today' : 'Pick Up'}
+              </Text>
+              <View style={[s.modeCount, active && s.modeCountActive]}>
+                <Text style={[s.modeCountText, active && s.modeCountTextActive]}>{count}</Text>
+              </View>
+            </Pressable>
+          );
+        })}
+      </Animated.View>
 
-            <TouchableOpacity
-              style={styles.scanMoreBtn}
-              onPress={() => navigation.navigate('Home')}
-            >
-              <Text style={styles.scanMoreText}>📷 Diagnose Another Plant</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        )}
-      </SafeAreaView>
-    </LinearGradient>
+      {viewMode === 'map' ? (
+        <MapView
+          style={s.map}
+          initialRegion={{
+            latitude: nurseries[0]?.latitude ?? 32.0853,
+            longitude: nurseries[0]?.longitude ?? 34.7818,
+            latitudeDelta: 0.12,
+            longitudeDelta: 0.12,
+          }}
+        >
+          {nurseries.map((nursery) => (
+            <Marker
+              key={nursery.id}
+              coordinate={{ latitude: nursery.latitude, longitude: nursery.longitude }}
+              title={nursery.name}
+              description={`${nursery.distance} · ${nursery.plantPrice}${nursery.hasPlant ? ' · In stock' : ''}`}
+              pinColor={nursery.hasPlant ? t.color.primary : '#888'}
+              onCalloutPress={() => handleDirections(nursery)}
+            />
+          ))}
+        </MapView>
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.list}>
+          {nurseries.map((nursery, i) => (
+            <NurseryCard
+              key={nursery.id}
+              nursery={nursery}
+              mode={mode}
+              index={i}
+              t={t}
+              s={s}
+              onOrder={() => handleOrder(nursery)}
+              onCall={() => handleCall(nursery)}
+              onDirections={() => handleDirections(nursery)}
+            />
+          ))}
+          <Pressable style={s.scanMoreBtn} onPress={() => navigation.navigate('Home')} accessibilityRole="button">
+            <Ionicons name="camera-outline" size={18} color={t.color.primary} />
+            <Text style={s.scanMoreText}>Diagnose Another Plant</Text>
+          </Pressable>
+        </ScrollView>
+      )}
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  safe: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  backBtn: { padding: 4 },
-  backText: { color: colors.secondary, fontSize: 15, fontWeight: '600' },
-  headerCenter: { alignItems: 'center' },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: colors.white,
-    letterSpacing: -0.3,
-  },
-  headerSub: {
-    fontSize: 12,
-    color: colors.textMuted,
-    marginTop: 1,
-  },
-  modeToggle: {
-    marginHorizontal: 20,
-    marginBottom: 12,
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(82,183,136,0.2)',
-  },
-  modeToggleInner: {
-    flexDirection: 'row',
-    padding: 6,
-    gap: 6,
-  },
-  modeBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    gap: 6,
-  },
-  modeBtnActive: {
-    backgroundColor: 'rgba(45,106,79,0.4)',
-    borderWidth: 1,
-    borderColor: 'rgba(82,183,136,0.4)',
-  },
-  modeBtnIcon: { fontSize: 16 },
-  modeBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.textMuted,
-  },
-  modeBtnTextActive: { color: colors.secondary },
-  modeCount: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  modeCountActive: { backgroundColor: 'rgba(82,183,136,0.25)' },
-  modeCountText: { fontSize: 11, fontWeight: '700', color: colors.textMuted },
-  modeCountTextActive: { color: colors.secondary },
-  list: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-    gap: 14,
-  },
-  card: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(82,183,136,0.15)',
-  },
-  cardGradient: {},
-  cardImageWrap: {
-    height: 160,
-    position: 'relative',
-  },
-  cardImage: { width: '100%', height: '100%' },
-  cardImageFade: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 80,
-  },
-  distanceBadge: {
-    position: 'absolute',
-    bottom: 10,
-    right: 10,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  distanceText: { color: colors.white, fontSize: 12, fontWeight: '600' },
-  closestBadge: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    backgroundColor: colors.primary,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  closestText: { color: colors.white, fontSize: 11, fontWeight: '700' },
-  cardContent: { padding: 16 },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-  },
-  cardTitleWrap: { flex: 1, marginRight: 12 },
-  cardName: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.white,
-    marginBottom: 4,
-  },
-  starRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    marginBottom: 2,
-  },
-  star: { color: colors.gold, fontSize: 13 },
-  ratingNum: { color: colors.textSecondary, fontSize: 12, marginLeft: 4, fontWeight: '600' },
-  reviewCount: { fontSize: 11, color: colors.textMuted },
-  priceTag: {
-    backgroundColor: 'rgba(45,106,79,0.3)',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(82,183,136,0.3)',
-  },
-  priceText: { color: colors.secondary, fontSize: 16, fontWeight: '800' },
-  address: { fontSize: 13, color: colors.textSecondary, marginBottom: 4 },
-  hours: { fontSize: 13, color: colors.textSecondary, marginBottom: 10 },
-  deliveryInfo: {
-    backgroundColor: 'rgba(82,183,136,0.1)',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(82,183,136,0.2)',
-  },
-  deliveryInfoText: { fontSize: 13, color: colors.secondary, fontWeight: '500' },
-  noDeliveryInfo: {
-    backgroundColor: 'rgba(244,162,97,0.1)',
-    borderColor: 'rgba(244,162,97,0.2)',
-  },
-  noDeliveryText: { fontSize: 13, color: colors.warning, fontWeight: '500' },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionSecondary: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(82,183,136,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionSecondaryText: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
-  actionPrimary: {
-    flex: 1.5,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  actionPrimaryDisabled: { opacity: 0.6 },
-  actionPrimaryGrad: {
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionPrimaryText: { fontSize: 13, fontWeight: '700', color: colors.white },
-  viewToggleBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(82,183,136,0.3)',
-    minWidth: 60,
-    alignItems: 'center',
-  },
-  viewToggleText: { color: colors.secondary, fontSize: 13, fontWeight: '600' },
-  map: { flex: 1 },
-  scanMoreBtn: {
-    marginTop: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(82,183,136,0.3)',
-  },
-  scanMoreText: { fontSize: 15, fontWeight: '600', color: colors.secondary },
-});
+function makeStyles(t: Theme) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: t.color.background },
+    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: t.space.xl, paddingVertical: t.space.md },
+    backBtn: { width: 44, height: 44, alignItems: 'flex-start', justifyContent: 'center' },
+    headerCenter: { flex: 1, alignItems: 'center' },
+    headerTitle: { ...t.type.heading, color: t.color.foreground },
+    headerSub: { ...t.type.caption, color: t.color.textMuted, marginTop: 1 },
+    viewToggleBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: t.radius.md,
+      borderWidth: 1,
+      borderColor: t.color.border,
+      backgroundColor: t.color.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    modeToggle: {
+      flexDirection: 'row',
+      gap: t.space.sm,
+      marginHorizontal: t.space.xl,
+      marginBottom: t.space.md,
+      padding: t.space.xs,
+      borderRadius: t.radius.lg,
+      backgroundColor: t.color.surfaceMuted,
+    },
+    modeBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: t.space.xs,
+      paddingVertical: t.space.md,
+      borderRadius: t.radius.md,
+      minHeight: 44,
+    },
+    modeBtnActive: { backgroundColor: t.color.surface, ...t.elevation.card },
+    modeBtnText: { ...t.type.label, color: t.color.textMuted },
+    modeBtnTextActive: { color: t.color.primary, fontWeight: '700' },
+    modeCount: { backgroundColor: t.color.surfaceMuted, borderRadius: t.radius.pill, paddingHorizontal: t.space.sm, paddingVertical: 2 },
+    modeCountActive: { backgroundColor: '#E7F6EC' },
+    modeCountText: { ...t.type.caption, fontSize: 11, fontWeight: '700', color: t.color.textMuted },
+    modeCountTextActive: { color: t.color.primary },
+    list: { paddingHorizontal: t.space.xl, paddingBottom: t.space['2xl'], gap: t.space.lg },
+    card: {
+      borderRadius: t.radius.xl,
+      overflow: 'hidden',
+      backgroundColor: t.color.surface,
+      borderWidth: 1,
+      borderColor: t.color.border,
+      ...t.elevation.card,
+    },
+    cardImageWrap: { height: 160, position: 'relative' },
+    cardImage: { width: '100%', height: '100%' },
+    distanceBadge: {
+      position: 'absolute',
+      bottom: t.space.sm,
+      right: t.space.sm,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: t.space.xs,
+      backgroundColor: t.color.surface,
+      paddingHorizontal: t.space.sm,
+      paddingVertical: t.space.xs,
+      borderRadius: t.radius.pill,
+      ...t.elevation.card,
+    },
+    distanceText: { ...t.type.caption, color: t.color.foreground, fontWeight: '600' },
+    closestBadge: { position: 'absolute', top: t.space.sm, left: t.space.sm, backgroundColor: t.color.primary, paddingHorizontal: t.space.sm, paddingVertical: t.space.xs, borderRadius: t.radius.sm },
+    closestText: { ...t.type.caption, color: t.color.onPrimary, fontWeight: '700' },
+    cardContent: { padding: t.space.lg },
+    cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: t.space.sm },
+    cardTitleWrap: { flex: 1, marginRight: t.space.md },
+    cardName: { ...t.type.bodyStrong, fontSize: 16, fontWeight: '700', color: t.color.foreground, marginBottom: t.space.xs },
+    starRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginBottom: 2 },
+    ratingNum: { ...t.type.caption, color: t.color.textSecondary, marginLeft: t.space.xs, fontWeight: '600' },
+    reviewCount: { ...t.type.caption, fontSize: 11, color: t.color.textMuted },
+    priceTag: { backgroundColor: '#E7F6EC', borderRadius: t.radius.md, paddingHorizontal: t.space.md, paddingVertical: t.space.xs },
+    priceText: { ...t.type.bodyStrong, fontSize: 16, fontWeight: '800', color: t.color.primary },
+    metaRow: { flexDirection: 'row', alignItems: 'center', gap: t.space.xs, marginBottom: t.space.xs },
+    metaText: { ...t.type.label, fontWeight: '400', fontSize: 13, color: t.color.textSecondary },
+    infoPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: t.space.xs,
+      backgroundColor: t.color.surfaceMuted,
+      borderRadius: t.radius.md,
+      paddingHorizontal: t.space.md,
+      paddingVertical: t.space.sm,
+      marginVertical: t.space.md,
+    },
+    infoPillWarn: { backgroundColor: '#FEF3E7' },
+    infoPillText: { ...t.type.label, fontWeight: '500', fontSize: 13, color: t.color.primary, flex: 1 },
+    actionRow: { flexDirection: 'row', gap: t.space.sm },
+    actionSecondary: {
+      flex: 1,
+      flexDirection: 'row',
+      gap: t.space.xs,
+      paddingVertical: t.space.md,
+      borderRadius: t.radius.md,
+      borderWidth: 1,
+      borderColor: t.color.border,
+      backgroundColor: t.color.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 44,
+    },
+    actionSecondaryText: { ...t.type.label, fontWeight: '600', fontSize: 13, color: t.color.foreground },
+    actionPrimary: {
+      flex: 1.5,
+      borderRadius: t.radius.md,
+      backgroundColor: t.color.primary,
+      paddingVertical: t.space.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 44,
+    },
+    actionPrimaryDisabled: { backgroundColor: t.color.textMuted, opacity: 0.5 },
+    btnPressed: { backgroundColor: t.color.primaryPressed, transform: [{ scale: 0.98 }] },
+    actionPrimaryText: { ...t.type.label, fontWeight: '700', fontSize: 13, color: t.color.onPrimary },
+    map: { flex: 1 },
+    scanMoreBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: t.space.sm,
+      marginTop: t.space.sm,
+      paddingVertical: t.space.md,
+      minHeight: 44,
+      borderRadius: t.radius.md,
+      borderWidth: 1,
+      borderColor: t.color.border,
+    },
+    scanMoreText: { ...t.type.label, fontWeight: '600', color: t.color.primary },
+  });
+}

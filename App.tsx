@@ -6,25 +6,27 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { RootStackParamList } from './src/types';
+import { getTheme } from './src/theme';
 import HomeScreen from './src/screens/HomeScreen';
 import CameraScreen from './src/screens/CameraScreen';
 import DiagnosisScreen from './src/screens/DiagnosisScreen';
 import NurseriesScreen from './src/screens/NurseriesScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+const theme = getTheme('light');
 
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <StatusBar style="light" />
+        <StatusBar style="dark" />
         <NavigationContainer>
           <Stack.Navigator
             initialRouteName="Home"
             screenOptions={{
               headerShown: false,
               animation: 'slide_from_right',
-              contentStyle: { backgroundColor: '#0A1628' },
+              contentStyle: { backgroundColor: theme.color.background },
             }}
           >
             <Stack.Screen name="Home" component={HomeScreen} />
