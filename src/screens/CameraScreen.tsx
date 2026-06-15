@@ -22,7 +22,8 @@ type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Camera'>;
 };
 
-const API_KEY = process.env.EXPO_PUBLIC_PLANTID_API_KEY || '';
+const PLANTNET_KEY = process.env.EXPO_PUBLIC_PLANTNET_API_KEY || '';
+const OPENAI_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
 
 export default function CameraScreen({ navigation }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
@@ -32,12 +33,12 @@ export default function CameraScreen({ navigation }: Props) {
   const cameraRef = useRef<CameraView>(null);
 
   const analyzeImage = useCallback(
-    async (uri: string, base64?: string | null) => {
+    async (uri: string) => {
       setAnalyzing(true);
       try {
         let diagnosis;
-        if (API_KEY && base64) {
-          diagnosis = await diagnosePlant(base64, API_KEY);
+        if (PLANTNET_KEY && OPENAI_KEY) {
+          diagnosis = await diagnosePlant(uri, PLANTNET_KEY, OPENAI_KEY);
         } else {
           await new Promise((r) => setTimeout(r, 2000));
           diagnosis = getMockDiagnosis();
@@ -62,13 +63,10 @@ export default function CameraScreen({ navigation }: Props) {
   const takePicture = useCallback(async () => {
     if (!cameraRef.current || analyzing) return;
     try {
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.7,
-        base64: true,
-      });
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.7 });
       if (photo) {
         setCapturedUri(photo.uri);
-        await analyzeImage(photo.uri, photo.base64);
+        await analyzeImage(photo.uri);
       }
     } catch (err: any) {
       Alert.alert('Camera Error', err.message || 'Failed to take picture');
@@ -84,12 +82,11 @@ export default function CameraScreen({ navigation }: Props) {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 0.7,
-      base64: true,
     });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
       setCapturedUri(asset.uri);
-      await analyzeImage(asset.uri, asset.base64);
+      await analyzeImage(asset.uri);
     }
   }, [analyzeImage]);
 

@@ -14,6 +14,7 @@ interface NurseryJSON {
   nurseryId: string;
   name: string;
   address: string;
+  website?: string;
   lat: number;
   lng: number;
   deliveryAvailable: boolean;

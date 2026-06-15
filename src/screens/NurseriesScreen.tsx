@@ -11,6 +11,7 @@ import {
   Alert,
   Dimensions,
 } from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -185,6 +186,7 @@ function NurseryCard({
 export default function NurseriesScreen({ navigation, route }: Props) {
   const { plantName, nurseries, mode: initialMode } = route.params;
   const [mode, setMode] = useState<DeliveryMode>(initialMode);
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const headerFade = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -229,7 +231,12 @@ export default function NurseriesScreen({ navigation, route }: Props) {
             <Text style={styles.headerTitle}>{plantName}</Text>
             <Text style={styles.headerSub}>{nurseries.length} nurseries nearby</Text>
           </View>
-          <View style={{ width: 60 }} />
+          <TouchableOpacity
+            style={styles.viewToggleBtn}
+            onPress={() => setViewMode(viewMode === 'list' ? 'map' : 'list')}
+          >
+            <Text style={styles.viewToggleText}>{viewMode === 'list' ? '🗺️ Map' : '☰ List'}</Text>
+          </TouchableOpacity>
         </Animated.View>
 
         {/* Mode Toggle */}
@@ -270,29 +277,52 @@ export default function NurseriesScreen({ navigation, route }: Props) {
           </LinearGradient>
         </Animated.View>
 
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.list}
-        >
-          {nurseries.map((nursery, i) => (
-            <NurseryCard
-              key={nursery.id}
-              nursery={nursery}
-              mode={mode}
-              index={i}
-              onOrder={() => handleOrder(nursery)}
-              onCall={() => handleCall(nursery)}
-              onDirections={() => handleDirections(nursery)}
-            />
-          ))}
-
-          <TouchableOpacity
-            style={styles.scanMoreBtn}
-            onPress={() => navigation.navigate('Home')}
+        {viewMode === 'map' ? (
+          <MapView
+            style={styles.map}
+            initialRegion={{
+              latitude: nurseries[0]?.latitude ?? 32.0853,
+              longitude: nurseries[0]?.longitude ?? 34.7818,
+              latitudeDelta: 0.12,
+              longitudeDelta: 0.12,
+            }}
           >
-            <Text style={styles.scanMoreText}>📷 Diagnose Another Plant</Text>
-          </TouchableOpacity>
-        </ScrollView>
+            {nurseries.map((nursery) => (
+              <Marker
+                key={nursery.id}
+                coordinate={{ latitude: nursery.latitude, longitude: nursery.longitude }}
+                title={nursery.name}
+                description={`${nursery.distance} · ${nursery.plantPrice}${nursery.hasPlant ? ' · In stock' : ''}`}
+                pinColor={nursery.hasPlant ? '#52B788' : '#888'}
+                onCalloutPress={() => handleDirections(nursery)}
+              />
+            ))}
+          </MapView>
+        ) : (
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.list}
+          >
+            {nurseries.map((nursery, i) => (
+              <NurseryCard
+                key={nursery.id}
+                nursery={nursery}
+                mode={mode}
+                index={i}
+                onOrder={() => handleOrder(nursery)}
+                onCall={() => handleCall(nursery)}
+                onDirections={() => handleDirections(nursery)}
+              />
+            ))}
+
+            <TouchableOpacity
+              style={styles.scanMoreBtn}
+              onPress={() => navigation.navigate('Home')}
+            >
+              <Text style={styles.scanMoreText}>📷 Diagnose Another Plant</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        )}
       </SafeAreaView>
     </LinearGradient>
   );
@@ -485,6 +515,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   actionPrimaryText: { fontSize: 13, fontWeight: '700', color: colors.white },
+  viewToggleBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(82,183,136,0.3)',
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  viewToggleText: { color: colors.secondary, fontSize: 13, fontWeight: '600' },
+  map: { flex: 1 },
   scanMoreBtn: {
     marginTop: 8,
     paddingVertical: 14,

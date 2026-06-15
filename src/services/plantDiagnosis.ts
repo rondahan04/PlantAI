@@ -1,10 +1,11 @@
 import { PlantDiagnosis, Treatment } from '../types';
 
-const PLANT_ID_URL = 'https://plant.id/api/v3/identification';
+const PLANTNET_URL = 'https://my-api.plantnet.org/v2/identify/all';
+const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 
 /*
- * Thrown when Plant.id identifies the image as not a plant (is_plant.binary === false).
- * CameraScreen catches this specifically to show a user-friendly "try again" prompt.
+ * Thrown when PlantNet returns 404 (no plant recognized) or returns no results.
+ * CameraScreen catches this to show a user-friendly "try again" prompt.
  */
 export class NotAPlantError extends Error {
   constructor() {
@@ -13,166 +14,131 @@ export class NotAPlantError extends Error {
   }
 }
 
-// ─── Plant.id v3 response shape ──────────────────────────────────────────────
+// ─── PlantNet ─────────────────────────────────────────────────────────────────
 
-interface PlantIdDisease {
-  name: string;
-  probability: number;
-  details?: {
-    description?: string;
-    treatment?: {
-      biological?: string[];
-      chemical?: string[];
-      prevention?: string[];
-    };
-  };
+interface PlantNetResult {
+  scientificName: string;
+  commonName: string;
+  confidence: number;
 }
 
-interface PlantIdSuggestion {
-  name: string;
-  probability: number;
-  details?: {
-    common_names?: string[];
-    description?: { value: string };
-  };
-}
-
-interface PlantIdResponse {
-  result: {
-    is_plant: { binary: boolean; probability: number };
-    classification: { suggestions: PlantIdSuggestion[] };
-    is_healthy?: { binary: boolean; probability: number };
-    disease?: { suggestions: PlantIdDisease[] };
-  };
-}
-
-// ─── Condition mapping (agreed thresholds from eng review D6) ────────────────
-
-/*
- * Maps Plant.id health output to the 5-level condition scale used in the UI.
- *
- *   healthy   → is_healthy = true
- *   mild      → max disease probability < 0.30
- *   moderate  → max disease probability < 0.60
- *   severe    → max disease probability < 0.85
- *   critical  → max disease probability ≥ 0.85
- */
-function mapCondition(
-  isHealthy: boolean,
-  maxDiseaseProbability: number
-): PlantDiagnosis['condition'] {
-  if (isHealthy) return 'healthy';
-  if (maxDiseaseProbability < 0.3) return 'mild';
-  if (maxDiseaseProbability < 0.6) return 'moderate';
-  if (maxDiseaseProbability < 0.85) return 'severe';
-  return 'critical';
-}
-
-// ─── API call ─────────────────────────────────────────────────────────────────
-
-export async function diagnosePlant(
-  imageBase64: string,
+async function identifyWithPlantNet(
+  imageUri: string,
   apiKey: string
-): Promise<PlantDiagnosis> {
-  const response = await fetch(PLANT_ID_URL, {
+): Promise<PlantNetResult> {
+  const formData = new FormData();
+  formData.append('images', {
+    uri: imageUri,
+    name: 'plant.jpg',
+    type: 'image/jpeg',
+  } as any);
+  formData.append('organs', 'auto');
+
+  const response = await fetch(
+    `${PLANTNET_URL}?api-key=${apiKey}&nb-results=1&lang=en`,
+    { method: 'POST', body: formData }
+  );
+
+  if (response.status === 404) throw new NotAPlantError();
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    throw new Error(`PlantNet error: ${response.status}. ${errText.slice(0, 120)}`);
+  }
+
+  const data = await response.json();
+  const top = data.results?.[0];
+  if (!top) throw new NotAPlantError();
+
+  return {
+    scientificName: top.species.scientificName ?? '',
+    commonName: top.species.commonNames?.[0] ?? top.species.scientificName,
+    confidence: Math.round(top.score * 100),
+  };
+}
+
+// ─── OpenAI health assessment ─────────────────────────────────────────────────
+
+interface HealthAssessment {
+  condition: PlantDiagnosis['condition'];
+  conditionLabel: string;
+  issues: string[];
+  treatments: Treatment[];
+  description: string;
+  canBeSaved: boolean;
+}
+
+async function assessHealthWithOpenAI(
+  commonName: string,
+  scientificName: string,
+  apiKey: string
+): Promise<HealthAssessment> {
+  const response = await fetch(OPENAI_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Api-Key': apiKey,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      images: [`data:image/jpeg;base64,${imageBase64}`],
-      health: 'all',
-      details: 'common_names,description,treatment',
-      disease_details: 'description,treatment',
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'user',
+          content: `You are a plant health expert. For ${commonName} (${scientificName}), return a JSON health assessment in this exact shape:
+{
+  "condition": "healthy",
+  "conditionLabel": "Healthy",
+  "issues": [],
+  "treatments": [
+    { "title": "string", "description": "string (max 100 chars)", "urgent": false }
+  ],
+  "description": "string (max 180 chars)",
+  "canBeSaved": true
+}
+condition must be one of: healthy, mild, moderate, severe, critical.
+List 2-3 common care tips as treatments. Return ONLY valid JSON.`,
+        },
+      ],
+      response_format: { type: 'json_object' },
+      max_tokens: 500,
     }),
   });
 
   if (!response.ok) {
     const errText = await response.text().catch(() => '');
-    throw new Error(
-      response.status === 401
-        ? 'Invalid Plant.id API key. Check your EXPO_PUBLIC_PLANTID_API_KEY.'
-        : `Plant.id API error: ${response.status}. ${errText.slice(0, 120)}`
-    );
+    throw new Error(`OpenAI error: ${response.status}. ${errText.slice(0, 120)}`);
   }
 
-  const data: PlantIdResponse = await response.json();
+  const data = await response.json();
+  return JSON.parse(data.choices[0].message.content) as HealthAssessment;
+}
 
-  if (!data.result.is_plant.binary) {
-    throw new NotAPlantError();
-  }
+// ─── Public API ───────────────────────────────────────────────────────────────
 
-  const suggestions = data.result.classification?.suggestions ?? [];
-  if (!suggestions.length) {
-    throw new Error('Plant could not be identified. Try a clearer photo.');
-  }
-
-  const top = suggestions[0];
-  const commonNames = top.details?.common_names;
-  const plantName = commonNames?.[0] ?? top.name;
-  const confidence = Math.round(top.probability * 100);
-
-  const isHealthy = data.result.is_healthy?.binary ?? true;
-  const diseases = data.result.disease?.suggestions ?? [];
-  const maxDiseaseProbability = diseases.length > 0 ? diseases[0].probability : 0;
-
-  const condition = mapCondition(isHealthy, maxDiseaseProbability);
-  const conditionLabel = isHealthy
-    ? 'Healthy'
-    : (diseases[0]?.name ?? 'Unknown Issue');
-
-  const issues = diseases.slice(0, 3).map((d) => d.name);
-
-  const treatments: Treatment[] = [];
-  if (diseases.length > 0) {
-    const topDisease = diseases[0];
-    const tr = topDisease.details?.treatment;
-    const isUrgent = maxDiseaseProbability > 0.6;
-
-    if (tr?.biological?.length) {
-      treatments.push({
-        title: 'Biological Treatment',
-        description: tr.biological[0],
-        urgent: isUrgent,
-      });
-    }
-    if (tr?.chemical?.length) {
-      treatments.push({
-        title: 'Chemical Treatment',
-        description: tr.chemical[0],
-        urgent: false,
-      });
-    }
-    if (tr?.prevention?.length) {
-      treatments.push({
-        title: 'Prevention',
-        description: tr.prevention[0],
-        urgent: false,
-      });
-    }
-  }
-
-  const descriptionValue = top.details?.description?.value;
-  const description = descriptionValue
-    ? `${plantName}: ${descriptionValue.slice(0, 180)}${descriptionValue.length > 180 ? '...' : ''}`
-    : isHealthy
-    ? `Your ${plantName} looks healthy! No signs of disease detected.`
-    : `Your ${plantName} shows signs of ${conditionLabel}. ${diseases.length} issue(s) detected.`;
+export async function diagnosePlant(
+  imageUri: string,
+  plantNetKey: string,
+  openAiKey: string
+): Promise<PlantDiagnosis> {
+  const { scientificName, commonName, confidence } = await identifyWithPlantNet(
+    imageUri,
+    plantNetKey
+  );
+  const health = await assessHealthWithOpenAI(commonName, scientificName, openAiKey);
 
   return {
-    plantName,
-    condition,
-    conditionLabel,
-    issues,
-    treatments,
-    canBeSaved: condition !== 'critical',
+    plantName: commonName,
+    condition: health.condition,
+    conditionLabel: health.conditionLabel,
+    issues: health.issues,
+    treatments: health.treatments,
+    canBeSaved: health.canBeSaved,
     confidence,
-    description,
+    description: health.description,
   };
 }
 
-// ─── Mock fallback (used when no API key is set) ──────────────────────────────
+// ─── Mock fallback (used when API keys are missing) ───────────────────────────
 
 export function getMockDiagnosis(): PlantDiagnosis {
   return {
