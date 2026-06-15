@@ -80,7 +80,7 @@ async function assessHealthWithOpenAI(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
+      model: 'gpt-5.5-mini',
       messages: [
         {
           role: 'user',

@@ -340,8 +340,10 @@ export function priceFocusedExcerpt(markdown: string, max = 18000): string {
 
 // --- OpenAI ----------------------------------------------------------------
 
-/* Call gpt-4o-mini in JSON mode and return the parsed object. Throws on
+/* Call the OpenAI model in JSON mode and return the parsed object. Throws on
  * non-2xx or unparseable content so callers can decide how to degrade. */
+export const OPENAI_MODEL = 'gpt-5.5-mini';
+
 export async function callOpenAIJson(
   prompt: string,
   openaiKey: string,
@@ -351,7 +353,7 @@ export async function callOpenAIJson(
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
+      model: OPENAI_MODEL,
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' },
       max_tokens: maxTokens,
