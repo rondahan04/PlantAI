@@ -1,10 +1,10 @@
 /**
- * Unit tests for platform detection + search URL building.
- * Pure functions, no network. Run: node --test dashboard/platform.test.mjs
+ * Unit tests for the pure scraper-core functions. No network.
+ * Run: node --test scraper/core.test.ts
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { detectPlatform, searchUrlsFor, scoreMarkdown } from './platform.mjs';
+import { detectPlatform, searchUrlsFor, scoreMarkdown, priceFocusedExcerpt } from './core.ts';
 
 test('detectPlatform: Shopify markers', () => {
   assert.equal(detectPlatform('![x](https://rootine.co.il/cdn/shop/files/a.png)'), 'shopify');
@@ -30,7 +30,6 @@ test('detectPlatform: unknown / custom', () => {
 });
 
 test('detectPlatform: Shopify wins over Woo when both /products/ and /product/ appear', () => {
-  // Shopify check runs first; /collections/ is unambiguous Shopify.
   const md = '[a](https://x.co.il/collections/all) [b](https://x.co.il/product/x/)';
   assert.equal(detectPlatform(md), 'shopify');
 });
@@ -48,7 +47,7 @@ test('searchUrlsFor: known platforms return exactly one URL', () => {
 test('searchUrlsFor: unknown returns an ordered probe list', () => {
   const urls = searchUrlsFor('https://x.co.il', 'mint', 'unknown');
   assert.equal(urls.length, 3);
-  assert.ok(urls[0].includes('post_type=product')); // Woo first (most common)
+  assert.ok(urls[0].includes('post_type=product'));
   assert.ok(urls.some((u) => u.includes('/search?q=')));
 });
 
@@ -57,13 +56,28 @@ test('searchUrlsFor: query is URL-encoded (no injection / spaces)', () => {
   assert.ok(url.includes('aloe%20vera'));
 });
 
-test('scoreMarkdown: results page (prices + product links + query echo) beats homepage', () => {
+test('scoreMarkdown: results page beats homepage fallback', () => {
   const resultsPage = '# תוצאות חיפוש עבור: נענע\n[נענע](https://x.co.il/product/mint/) ₪14';
-  const homepageFallback = '[a](https://x.co.il/product/rose/) ₪20 ₪30 ₪40'; // more prices, no query
+  const homepageFallback = '[a](https://x.co.il/product/rose/) ₪20 ₪30 ₪40';
   assert.ok(scoreMarkdown(resultsPage, 'נענע') > scoreMarkdown(homepageFallback, 'נענע'));
 });
 
 test('scoreMarkdown: empty / null is zero', () => {
   assert.equal(scoreMarkdown('', 'mint'), 0);
   assert.equal(scoreMarkdown(null, 'mint'), 0);
+});
+
+test('priceFocusedExcerpt: keeps product/price lines, drops images + boilerplate', () => {
+  const md = [
+    '![logo](data:image/png;base64,AAAA)',
+    'Some cookie banner text that should be dropped',
+    '##### [נענע](https://x.co.il/product/mint/)',
+    '₪14.00',
+    'random footer line',
+  ].join('\n');
+  const out = priceFocusedExcerpt(md);
+  assert.ok(out.includes('נענע'));
+  assert.ok(out.includes('₪14.00'));
+  assert.ok(!out.includes('cookie banner'));
+  assert.ok(!out.includes('footer line'));
 });

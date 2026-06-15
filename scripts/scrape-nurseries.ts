@@ -11,17 +11,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { loadEnv, scrapeUrl, callOpenAIJson, priceFocusedExcerpt } from '../scraper/core.ts';
 
-// Load .env manually (no dotenv dependency required)
-const envPath = path.join(__dirname, '..', '.env');
-if (fs.existsSync(envPath)) {
-  fs.readFileSync(envPath, 'utf8')
-    .split('\n')
-    .forEach((line) => {
-      const [key, ...rest] = line.split('=');
-      if (key && rest.length) process.env[key.trim()] = rest.join('=').trim().replace(/^"|"$/g, '');
-    });
-}
+loadEnv(path.join(__dirname, '..', '.env'));
 
 const FIRECRAWL_KEY = process.env.EXPO_PUBLIC_FIRECRAWL_API_KEY;
 const OPENAI_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
@@ -47,40 +39,15 @@ interface NurseryEntry {
   [key: string]: unknown;
 }
 
-async function scrapeUrl(url: string): Promise<string> {
-  const res = await fetch('https://api.firecrawl.dev/v1/scrape', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${FIRECRAWL_KEY}` },
-    body: JSON.stringify({ url, formats: ['markdown'], onlyMainContent: true }),
-  });
-  if (!res.ok) throw new Error(`Firecrawl ${res.status} for ${url}`);
-  const data = await res.json();
-  return data.data?.markdown ?? '';
-}
-
 async function extractPlants(markdown: string, nurseryName: string): Promise<PlantEntry[]> {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_KEY}` },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'user',
-          content: `Extract plant products sold by ${nurseryName}. Return JSON array only:
-[{ "name": "scientific name", "aliases": ["common name"], "price": "₪XX", "inStock": true }]
-If no plants found, return [].
-Content:\n${markdown.slice(0, 4000)}`,
-        },
-      ],
-      response_format: { type: 'json_object' },
-      max_tokens: 1000,
-    }),
-  });
-  if (!res.ok) return [];
+  const excerpt = priceFocusedExcerpt(markdown);
+  if (!excerpt.trim()) return [];
+  const prompt = `Extract plant products sold by ${nurseryName}. Return JSON only:
+{ "plants": [{ "name": "scientific name", "aliases": ["common name"], "price": "₪XX", "inStock": true }] }
+Prices in ILS (₪). If no plants found, return { "plants": [] }.
+Content:\n${excerpt}`;
   try {
-    const data = await res.json();
-    const parsed = JSON.parse(data.choices[0].message.content);
+    const parsed = await callOpenAIJson(prompt, OPENAI_KEY!, 1000);
     return Array.isArray(parsed) ? parsed : (parsed.plants ?? []);
   } catch {
     return [];
@@ -98,7 +65,7 @@ async function main() {
     }
     try {
       console.log(`🔍 Scraping ${nursery.name} (${nursery.website})...`);
-      const markdown = await scrapeUrl(nursery.website);
+      const markdown = await scrapeUrl(nursery.website, FIRECRAWL_KEY!);
       const plants = await extractPlants(markdown, nursery.name);
 
       if (plants.length > 0) {

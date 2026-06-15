@@ -4,5 +4,5 @@
     "strict": true,
     "resolveJsonModule": true
   },
-  "exclude": ["node_modules", "scripts"]
+  "exclude": ["node_modules", "scripts", "scraper", "dashboard"]
 }
