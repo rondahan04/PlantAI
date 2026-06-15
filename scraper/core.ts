@@ -93,6 +93,68 @@ export function detectPlatform(content: string | null): Platform {
   return 'unknown';
 }
 
+// --- platform template registry -------------------------------------------
+
+/*
+ * Search-URL templates keyed by platform slug. A template is a string with
+ * {origin} and {query} placeholders. Built-ins cover the common platforms; the
+ * LLM fallback (Layer 4) can teach us new ones at runtime via registerPlatform,
+ * which persist to a JSON file so we only pay the LLM once per new platform.
+ */
+const BUILTIN_TEMPLATES: Record<string, string> = {
+  shopify: '{origin}/search?q={query}',
+  woo: '{origin}/?s={query}&post_type=product',
+  wix: '{origin}/search?q={query}',
+};
+
+/* Normalize the many names an LLM or site uses down to our canonical slugs. */
+const PLATFORM_ALIASES: Record<string, string> = {
+  woocommerce: 'woo',
+  wordpress: 'woo',
+  'wordpress/woocommerce': 'woo',
+  wixstores: 'wix',
+};
+
+let learnedTemplates: Record<string, string> = {};
+
+export function normalizePlatform(name: string): string {
+  const slug = (name || '').toLowerCase().trim().replace(/\s+/g, '');
+  return PLATFORM_ALIASES[slug] ?? slug;
+}
+
+/* Load previously learned platform→template pairs (merged over built-ins). */
+export function loadLearnedPlatforms(file: string): void {
+  try {
+    if (fs.existsSync(file)) learnedTemplates = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    learnedTemplates = {};
+  }
+}
+
+/* Teach the registry a new platform and persist it ("add it to the formats"). */
+export function registerPlatform(name: string, template: string, file?: string): void {
+  learnedTemplates[normalizePlatform(name)] = template;
+  if (file) {
+    try {
+      fs.writeFileSync(file, JSON.stringify(learnedTemplates, null, 2));
+    } catch {
+      /* best-effort persistence */
+    }
+  }
+}
+
+/* Return the search-URL template for a platform, or null if we don't know it. */
+export function templateFor(platform: string): string | null {
+  const slug = normalizePlatform(platform);
+  return BUILTIN_TEMPLATES[slug] ?? learnedTemplates[slug] ?? null;
+}
+
+function applyTemplate(template: string, origin: string, query: string): string {
+  return template.replace(/\{origin\}/g, origin).replace(/\{query\}/g, encodeURIComponent(query));
+}
+
+// --- LLM platform classification (Layer 4) --------------------------------
+
 /* Signature of the scrape function identifyPlatform depends on. Injectable so
  * the cascade can be unit-tested without hitting the network. */
 export type ScrapeFn = (
@@ -101,37 +163,117 @@ export type ScrapeFn = (
   opts?: { waitFor?: number; attempt?: number }
 ) => Promise<string>;
 
+/* Signature of the JSON LLM call. Injectable for tests. */
+export type ClassifyFn = (prompt: string, key: string, maxTokens?: number) => Promise<any>;
+
+/*
+ * Distill homepage content into a compact platform fingerprint for the LLM:
+ * the host/CDN/script URLs plus any generator hint and a content head. Pure.
+ */
+export function platformFingerprint(content: string, max = 2500): string {
+  const s = content || '';
+  const signals = new Set<string>();
+  for (const m of s.matchAll(/https?:\/\/[a-z0-9.\-]+\.[a-z]{2,}[^\s)"']*/gi)) {
+    signals.add(m[0].slice(0, 120));
+    if (signals.size >= 40) break;
+  }
+  const generator = (s.match(/generator["'>\s:]+[^"'<\n]{0,60}/i) || [])[0] ?? '';
+  return [generator, [...signals].join('\n'), '---', s.slice(0, max)].filter(Boolean).join('\n');
+}
+
+export interface LLMClassification {
+  platform: string;
+  searchTemplate: string | null;
+}
+
+/*
+ * Ask the LLM to name the e-commerce platform and give a product-search URL
+ * template. Returns {platform:'unknown'} on any failure. Never throws.
+ */
+export async function classifyPlatformLLM(
+  fingerprint: string,
+  openaiKey: string,
+  classify: ClassifyFn = callOpenAIJson
+): Promise<LLMClassification> {
+  const prompt = `You are identifying the e-commerce platform / CMS of a website from its homepage signals.
+Common platforms: shopify, woocommerce, wix, magento, bigcommerce, squarespace, prestashop, opencart, or "custom".
+Return ONLY JSON: { "platform": "<lowercase slug>", "searchTemplate": "<product search URL template using {origin} and {query}, or null>" }
+Template examples: woocommerce -> "{origin}/?s={query}&post_type=product", shopify -> "{origin}/search?q={query}", magento -> "{origin}/catalogsearch/result/?q={query}".
+If you cannot tell, return { "platform": "unknown", "searchTemplate": null }.
+Homepage signals:\n${fingerprint}`;
+  try {
+    const out = await classify(prompt, openaiKey, 300);
+    const platform = normalizePlatform(String(out.platform ?? 'unknown'));
+    const searchTemplate =
+      typeof out.searchTemplate === 'string' && out.searchTemplate.includes('{query}')
+        ? out.searchTemplate
+        : null;
+    return { platform, searchTemplate };
+  } catch {
+    return { platform: 'unknown', searchTemplate: null };
+  }
+}
+
 /*
  * Identify a site's platform with layered fallbacks so a cold first run lands
  * on a real platform with high probability instead of bailing to 'unknown':
  *
- *   Layer 1  fast static homepage (waitFor 0) ─ markers ─▶ done (common case)
- *   Layer 2  rendered homepage (waitFor)       ─ markers ─▶ catches JS/SPA sites
- *   Layer 3  well-known endpoints              ─▶ Shopify /products.json,
- *                                                 WordPress/Woo /wp-json/
- *   else     'unknown' → caller probes search URLs (still self-corrects)
+ *   L1  fast static homepage markers      ─▶ done (common case)
+ *   L2  rendered homepage markers         ─▶ catches JS/SPA sites
+ *   L3  well-known endpoints              ─▶ Shopify /products.json, Woo /wp-json/
+ *   L4  LLM classifies homepage signals   ─▶ names platform + search template;
+ *                                            brand-new platforms are registered
+ *                                            so future sites skip the LLM
+ *   else 'unknown' → caller probes search URLs (still self-corrects)
  *
  * Never throws; each layer is best-effort.
  */
+export interface IdentifyOpts {
+  scrape?: ScrapeFn;
+  openaiKey?: string;
+  learnedFile?: string;
+  classify?: ClassifyFn;
+}
+
 export async function identifyPlatform(
   origin: string,
   firecrawlKey: string,
-  scrape: ScrapeFn = scrapeUrl
-): Promise<Platform> {
-  // Layer 1 — fast static homepage.
-  let p = detectPlatform(await safeScrape(scrape, origin, firecrawlKey, 0));
+  opts: IdentifyOpts = {}
+): Promise<string> {
+  const { scrape = scrapeUrl, openaiKey, learnedFile, classify } = opts;
+
+  // L1 — fast static homepage.
+  const home0 = await safeScrape(scrape, origin, firecrawlKey, 0);
+  let p: string = detectPlatform(home0);
   if (p !== 'unknown') return p;
 
-  // Layer 2 — rendered homepage (client-rendered storefronts).
-  p = detectPlatform(await safeScrape(scrape, origin, firecrawlKey, 4000));
+  // L2 — rendered homepage (client-rendered storefronts).
+  const home = await safeScrape(scrape, origin, firecrawlKey, 4000);
+  p = detectPlatform(home);
   if (p !== 'unknown') return p;
 
-  // Layer 3 — platform-specific endpoints (content-independent tells).
+  // L3 — platform-specific endpoints (content-independent tells).
   const shopify = await safeScrape(scrape, `${origin}/products.json`, firecrawlKey, 0);
   if (/"handle"\s*:|"variants"\s*:|"product_type"\s*:/.test(shopify)) return 'shopify';
-
   const wp = await safeScrape(scrape, `${origin}/wp-json/`, firecrawlKey, 0);
   if (/wp\/v2|"namespace"|"routes"/.test(wp)) return 'woo';
+
+  // L4 — LLM classifies whatever homepage content we have, and teaches us the
+  // search template for platforms we don't yet know.
+  const content = home || home0;
+  if (openaiKey && content) {
+    const { platform, searchTemplate } = await classifyPlatformLLM(
+      platformFingerprint(content),
+      openaiKey,
+      classify
+    );
+    if (platform && platform !== 'unknown') {
+      if (!templateFor(platform) && searchTemplate) {
+        registerPlatform(platform, searchTemplate, learnedFile);
+      }
+      if (templateFor(platform)) return platform;
+    }
+  }
 
   return 'unknown';
 }
@@ -150,25 +292,18 @@ async function safeScrape(
 }
 
 /*
- * Build product-search URL(s) for a site. Known platforms return one URL;
- * unknown returns an ordered probe list (most-likely first).
+ * Build product-search URL(s) for a site. Known/learned platforms return one
+ * URL from their template; unknown returns an ordered probe list.
  */
-export function searchUrlsFor(origin: string, query: string, platform: Platform): string[] {
+export function searchUrlsFor(origin: string, query: string, platform: string): string[] {
+  const tpl = templateFor(platform);
+  if (tpl) return [applyTemplate(tpl, origin, query)];
   const q = encodeURIComponent(query);
-  switch (platform) {
-    case 'shopify':
-      return [`${origin}/search?q=${q}`];
-    case 'woo':
-      return [`${origin}/?s=${q}&post_type=product`];
-    case 'wix':
-      return [`${origin}/search?q=${q}`];
-    default:
-      return [
-        `${origin}/?s=${q}&post_type=product`,
-        `${origin}/search?q=${q}`,
-        `${origin}/?s=${q}`,
-      ];
-  }
+  return [
+    `${origin}/?s=${q}&post_type=product`,
+    `${origin}/search?q=${q}`,
+    `${origin}/?s=${q}`,
+  ];
 }
 
 /*
@@ -234,23 +369,33 @@ export async function callOpenAIJson(
 
 export interface SearchResult {
   md: string;
-  platform: Platform;
+  platform: string;
   picked: string | null;
+}
+
+export interface SearcherOpts {
+  openaiKey?: string;
+  learnedFile?: string;
 }
 
 /*
  * Create a searcher bound to a Firecrawl key, with a per-host platform cache.
  * A cold host pays one extra homepage fetch to detect its platform; warm hosts
- * reuse the cached value. Unknown platforms probe candidate URLs in parallel
- * and keep the highest-scoring result.
+ * reuse the cached value. Pass openaiKey to enable the LLM Layer-4 fallback for
+ * sites the heuristics can't classify. Unknown platforms probe candidate URLs
+ * in parallel and keep the highest-scoring result.
  */
-export function createSearcher(firecrawlKey: string) {
-  const platformCache = new Map<string, Platform>();
+export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
+  const platformCache = new Map<string, string>();
+  if (opts.learnedFile) loadLearnedPlatforms(opts.learnedFile);
 
-  async function resolvePlatform(origin: string, host: string): Promise<Platform> {
+  async function resolvePlatform(origin: string, host: string): Promise<string> {
     const cached = platformCache.get(host);
     if (cached) return cached;
-    const platform = await identifyPlatform(origin, firecrawlKey);
+    const platform = await identifyPlatform(origin, firecrawlKey, {
+      openaiKey: opts.openaiKey,
+      learnedFile: opts.learnedFile,
+    });
     platformCache.set(host, platform);
     return platform;
   }

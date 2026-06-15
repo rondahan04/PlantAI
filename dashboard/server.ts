@@ -37,7 +37,10 @@ if (!FIRECRAWL_KEY || !OPENAI_KEY) {
   process.exit(1);
 }
 
-const searcher = createSearcher(FIRECRAWL_KEY);
+const searcher = createSearcher(FIRECRAWL_KEY, {
+  openaiKey: OPENAI_KEY,
+  learnedFile: path.join(__dirname, '..', 'scraper', 'learned-platforms.json'),
+});
 
 interface Row {
   site: string;

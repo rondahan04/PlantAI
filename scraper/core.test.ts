@@ -10,8 +10,13 @@ import {
   searchUrlsFor,
   scoreMarkdown,
   priceFocusedExcerpt,
+  normalizePlatform,
+  templateFor,
+  registerPlatform,
+  platformFingerprint,
+  classifyPlatformLLM,
 } from './core.ts';
-import type { ScrapeFn } from './core.ts';
+import type { ScrapeFn, ClassifyFn } from './core.ts';
 
 test('detectPlatform: Shopify markers', () => {
   assert.equal(detectPlatform('![x](https://rootine.co.il/cdn/shop/files/a.png)'), 'shopify');
@@ -63,7 +68,7 @@ function fakeScrape(map: Record<string, string>): ScrapeFn {
 
 test('identifyPlatform L1: static homepage markers win immediately', async () => {
   const scrape = fakeScrape({ 'x.co.il': '[a](https://x.co.il/collections/all)' });
-  assert.equal(await identifyPlatform('https://x.co.il', 'k', scrape), 'shopify');
+  assert.equal(await identifyPlatform('https://x.co.il', 'k', { scrape }), 'shopify');
 });
 
 test('identifyPlatform L2: empty static, rendered homepage reveals platform', async () => {
@@ -75,7 +80,7 @@ test('identifyPlatform L2: empty static, rendered homepage reveals platform', as
     }
     return '';
   };
-  assert.equal(await identifyPlatform('https://x.co.il', 'k', scrape), 'woo');
+  assert.equal(await identifyPlatform('https://x.co.il', 'k', { scrape }), 'woo');
   assert.equal(calls, 2); // tried static then rendered
 });
 
@@ -83,24 +88,105 @@ test('identifyPlatform L3: endpoint fallback — Shopify /products.json', async 
   const scrape = fakeScrape({
     '/products.json': '{"products":[{"handle":"mint","variants":[]}]}',
   });
-  assert.equal(await identifyPlatform('https://x.co.il', 'k', scrape), 'shopify');
+  assert.equal(await identifyPlatform('https://x.co.il', 'k', { scrape }), 'shopify');
 });
 
 test('identifyPlatform L3: endpoint fallback — WordPress /wp-json/', async () => {
   const scrape = fakeScrape({ '/wp-json/': '{"namespace":"wp/v2","routes":{}}' });
-  assert.equal(await identifyPlatform('https://x.co.il', 'k', scrape), 'woo');
+  assert.equal(await identifyPlatform('https://x.co.il', 'k', { scrape }), 'woo');
 });
 
 test('identifyPlatform: truly unknown stays unknown (caller will probe)', async () => {
   const scrape = fakeScrape({ nothing: 'x' });
-  assert.equal(await identifyPlatform('https://x.co.il', 'k', scrape), 'unknown');
+  assert.equal(await identifyPlatform('https://x.co.il', 'k', { scrape }), 'unknown');
 });
 
 test('identifyPlatform: never throws when scrape rejects', async () => {
   const scrape: ScrapeFn = async () => {
     throw new Error('network down');
   };
-  assert.equal(await identifyPlatform('https://x.co.il', 'k', scrape), 'unknown');
+  assert.equal(await identifyPlatform('https://x.co.il', 'k', { scrape }), 'unknown');
+});
+
+// --- platform template registry -------------------------------------------
+
+test('normalizePlatform: aliases collapse to canonical slugs', () => {
+  assert.equal(normalizePlatform('WooCommerce'), 'woo');
+  assert.equal(normalizePlatform('WordPress'), 'woo');
+  assert.equal(normalizePlatform('Shopify'), 'shopify');
+  assert.equal(normalizePlatform('Magento'), 'magento'); // unknown-but-valid slug
+});
+
+test('templateFor: built-ins known, unseen platform is null until learned', () => {
+  assert.equal(templateFor('woo'), '{origin}/?s={query}&post_type=product');
+  assert.equal(templateFor('shopify'), '{origin}/search?q={query}');
+  assert.equal(templateFor('magento'), null);
+});
+
+test('registerPlatform: learned template is usable by searchUrlsFor', () => {
+  registerPlatform('Magento', '{origin}/catalogsearch/result/?q={query}'); // no file = in-memory
+  assert.equal(templateFor('magento'), '{origin}/catalogsearch/result/?q={query}');
+  assert.deepEqual(searchUrlsFor('https://x.co.il', 'mint', 'magento'), [
+    'https://x.co.il/catalogsearch/result/?q=mint',
+  ]);
+});
+
+test('searchUrlsFor: still probes for genuinely unknown platform', () => {
+  assert.equal(searchUrlsFor('https://x.co.il', 'mint', 'unknown').length, 3);
+});
+
+// --- LLM classification (Layer 4) -----------------------------------------
+
+test('platformFingerprint: extracts URLs + truncates', () => {
+  const md = 'x'.repeat(5000) + ' https://cdn.example.com/app.js';
+  const fp = platformFingerprint(md, 1000);
+  assert.ok(fp.includes('cdn.example.com'));
+  assert.ok(fp.length < md.length);
+});
+
+test('classifyPlatformLLM: normalizes platform, keeps template with {query}', async () => {
+  const classify: ClassifyFn = async () => ({
+    platform: 'WooCommerce',
+    searchTemplate: '{origin}/?s={query}&post_type=product',
+  });
+  const out = await classifyPlatformLLM('signals', 'k', classify);
+  assert.equal(out.platform, 'woo');
+  assert.equal(out.searchTemplate, '{origin}/?s={query}&post_type=product');
+});
+
+test('classifyPlatformLLM: rejects a template missing {query}', async () => {
+  const classify: ClassifyFn = async () => ({ platform: 'shopify', searchTemplate: '{origin}/all' });
+  const out = await classifyPlatformLLM('signals', 'k', classify);
+  assert.equal(out.searchTemplate, null);
+});
+
+test('classifyPlatformLLM: never throws when the LLM call fails', async () => {
+  const classify: ClassifyFn = async () => {
+    throw new Error('openai down');
+  };
+  assert.deepEqual(await classifyPlatformLLM('signals', 'k', classify), {
+    platform: 'unknown',
+    searchTemplate: null,
+  });
+});
+
+test('identifyPlatform L4: LLM names a new platform, registers + returns it', async () => {
+  // L1-L3 all empty so the cascade reaches the LLM with homepage content.
+  const scrape: ScrapeFn = async (url, _k, opts) =>
+    url === 'https://x.co.il' && opts?.waitFor ? 'some custom storefront html' : '';
+  const classify: ClassifyFn = async () => ({
+    platform: 'bigcommerce',
+    searchTemplate: '{origin}/search.php?search_query={query}',
+  });
+  const p = await identifyPlatform('https://x.co.il', 'k', { scrape, openaiKey: 'o', classify });
+  assert.equal(p, 'bigcommerce');
+  assert.equal(templateFor('bigcommerce'), '{origin}/search.php?search_query={query}');
+});
+
+test('identifyPlatform L4: skipped without openaiKey → unknown', async () => {
+  const scrape: ScrapeFn = async (url, _k, opts) =>
+    url === 'https://x.co.il' && opts?.waitFor ? 'some custom storefront html' : '';
+  assert.equal(await identifyPlatform('https://x.co.il', 'k', { scrape }), 'unknown');
 });
 
 test('searchUrlsFor: known platforms return exactly one URL', () => {
