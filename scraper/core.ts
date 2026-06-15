@@ -69,17 +69,84 @@ export async function scrapeUrl(
 // --- platform detection (pure) ---------------------------------------------
 
 /*
- * Detect the store platform from homepage markdown.
+ * Detect the store platform from page content (markdown or raw HTML).
  * Order matters — check Shopify before Woo. Shopify uses /products/ (plural)
  * and /collections/; Woo uses /product/ (singular) and /product-category/,
  * so the Woo `/product/` test never matches a Shopify /products/ link.
+ *
+ * Markers are deliberately broad (theme JS globals, CDN hosts, REST roots,
+ * cart endpoints) so a single homepage read identifies most stores.
  */
-export function detectPlatform(markdown: string | null): Platform {
-  const s = markdown || '';
-  if (/\/cdn\/shop\/|cdn\.shopify|Shopify\.theme|\/collections\/|\/products\//.test(s)) return 'shopify';
-  if (/wp-content|woocommerce|\/product-category\/|\/product\//.test(s)) return 'woo';
-  if (/wixstatic\.com|_wix|wixsite|static\.wixstatic/.test(s)) return 'wix';
+export function detectPlatform(content: string | null): Platform {
+  const s = content || '';
+  if (
+    /\/cdn\/shop\/|cdn\.shopify\.com|myshopify\.com|Shopify\.theme|window\.Shopify|shopify-section|\/collections\/|\/products\//.test(
+      s
+    )
+  )
+    return 'shopify';
+  if (
+    /wp-content|wp-json|woocommerce|wc-block|add-to-cart=|\/product-category\/|\/product\//.test(s)
+  )
+    return 'woo';
+  if (/wixstatic\.com|static\.wixstatic|_wix|wixsite|X-Wix|Pepyaka/.test(s)) return 'wix';
   return 'unknown';
+}
+
+/* Signature of the scrape function identifyPlatform depends on. Injectable so
+ * the cascade can be unit-tested without hitting the network. */
+export type ScrapeFn = (
+  url: string,
+  key: string,
+  opts?: { waitFor?: number; attempt?: number }
+) => Promise<string>;
+
+/*
+ * Identify a site's platform with layered fallbacks so a cold first run lands
+ * on a real platform with high probability instead of bailing to 'unknown':
+ *
+ *   Layer 1  fast static homepage (waitFor 0) ─ markers ─▶ done (common case)
+ *   Layer 2  rendered homepage (waitFor)       ─ markers ─▶ catches JS/SPA sites
+ *   Layer 3  well-known endpoints              ─▶ Shopify /products.json,
+ *                                                 WordPress/Woo /wp-json/
+ *   else     'unknown' → caller probes search URLs (still self-corrects)
+ *
+ * Never throws; each layer is best-effort.
+ */
+export async function identifyPlatform(
+  origin: string,
+  firecrawlKey: string,
+  scrape: ScrapeFn = scrapeUrl
+): Promise<Platform> {
+  // Layer 1 — fast static homepage.
+  let p = detectPlatform(await safeScrape(scrape, origin, firecrawlKey, 0));
+  if (p !== 'unknown') return p;
+
+  // Layer 2 — rendered homepage (client-rendered storefronts).
+  p = detectPlatform(await safeScrape(scrape, origin, firecrawlKey, 4000));
+  if (p !== 'unknown') return p;
+
+  // Layer 3 — platform-specific endpoints (content-independent tells).
+  const shopify = await safeScrape(scrape, `${origin}/products.json`, firecrawlKey, 0);
+  if (/"handle"\s*:|"variants"\s*:|"product_type"\s*:/.test(shopify)) return 'shopify';
+
+  const wp = await safeScrape(scrape, `${origin}/wp-json/`, firecrawlKey, 0);
+  if (/wp\/v2|"namespace"|"routes"/.test(wp)) return 'woo';
+
+  return 'unknown';
+}
+
+async function safeScrape(
+  scrape: ScrapeFn,
+  url: string,
+  key: string,
+  waitFor: number
+): Promise<string> {
+  try {
+    return await scrape(url, key, { waitFor });
+  } catch {
+    return '';
+  }
 }
 
 /*
@@ -183,13 +250,7 @@ export function createSearcher(firecrawlKey: string) {
   async function resolvePlatform(origin: string, host: string): Promise<Platform> {
     const cached = platformCache.get(host);
     if (cached) return cached;
-    let platform: Platform = 'unknown';
-    try {
-      const home = await scrapeUrl(origin, firecrawlKey, { waitFor: 0 });
-      platform = detectPlatform(home);
-    } catch {
-      // leave as 'unknown' → probe path
-    }
+    const platform = await identifyPlatform(origin, firecrawlKey);
     platformCache.set(host, platform);
     return platform;
   }
