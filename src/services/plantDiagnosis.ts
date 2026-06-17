@@ -80,7 +80,7 @@ async function assessHealthWithOpenAI(
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'gpt-5.5-mini',
+      model: 'gpt-5.5',
       messages: [
         {
           role: 'user',
@@ -100,7 +100,7 @@ List 2-3 common care tips as treatments. Return ONLY valid JSON.`,
         },
       ],
       response_format: { type: 'json_object' },
-      max_tokens: 500,
+      max_completion_tokens: 500,
     }),
   });
 

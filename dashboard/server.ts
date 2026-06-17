@@ -17,14 +17,28 @@ import * as http from 'http';
 import { fileURLToPath } from 'url';
 import {
   loadEnv,
-  priceFocusedExcerpt,
-  callOpenAIJson,
   createSearcher,
+  extractAndVerifyPlants,
 } from '../scraper/core.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 const PORT = 4000;
+
+// Tee all console output to scraper/scrape.log (appended, with timestamps)
+// so scrape runs are reviewable after the fact.
+const LOG_PATH = path.join(ROOT, 'scraper', 'scrape.log');
+const logStream = fs.createWriteStream(LOG_PATH, { flags: 'a' });
+for (const level of ['log', 'error', 'warn'] as const) {
+  const orig = console[level].bind(console);
+  console[level] = (...args: any[]) => {
+    orig(...args);
+    const line = args
+      .map((a) => (typeof a === 'string' ? a : JSON.stringify(a)))
+      .join(' ');
+    logStream.write(`[${new Date().toISOString()}] ${line}\n`);
+  };
+}
 
 loadEnv(path.join(ROOT, '.env'));
 
@@ -46,6 +60,7 @@ interface Row {
   site: string;
   name: string;
   price: string;
+  availability: string;
   error?: boolean;
 }
 
@@ -55,33 +70,6 @@ function readUrls(): string[] {
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => l && l.startsWith('http'));
-}
-
-async function extractItems(
-  markdown: string,
-  query: string,
-  site: string
-): Promise<{ name: string; price: string }[]> {
-  const excerpt = priceFocusedExcerpt(markdown);
-  console.log(`   [${site}] excerpt ${excerpt.length} chars from ${markdown.length} md`);
-  if (!excerpt.trim()) {
-    console.log(`   [${site}] ⚠️  empty excerpt — no product/price lines matched`);
-    return [];
-  }
-  const prompt = `You are extracting products from a plant nursery website (${site}).
-The content is mostly Hebrew. The user searched for: "${query}" (the query may be in English or Hebrew — match either language, including translations and related plant types).
-From the content below, return ONLY products that match the search query.
-Return ONLY valid JSON: { "items": [{ "name": "product name in its original language", "price": "₪XX" }] }
-Prices MUST be in ILS (₪). If a price has no currency symbol assume ILS and add ₪.
-Only return REAL products that have a price. Ignore blog posts, articles, guides ("איך לגדל"), categories, cart/shipping/total/free-shipping lines. If nothing matches, return { "items": [] }.
-Content:\n${excerpt}`;
-  try {
-    const parsed = await callOpenAIJson(prompt, OPENAI_KEY!, 1200);
-    return Array.isArray(parsed.items) ? parsed.items : [];
-  } catch (err: any) {
-    console.log(`   [${site}] ❌ ${err.message}`);
-    return [];
-  }
 }
 
 async function handleScrape(query: string): Promise<Row[]> {
@@ -95,19 +83,32 @@ async function handleScrape(query: string): Promise<Row[]> {
       try {
         const { md, platform, picked } = await searcher.fetchSearchMarkdown(url, query, site);
         console.log(`   [${site}] platform=${platform} picked=${picked}`);
-        const items = await extractItems(md, query, site);
-        console.log(`   [${site}] ✅ ${items.length} item(s) in ${Date.now() - ts}ms`);
-        return items.map((it) => ({ site, name: it.name ?? '?', price: it.price ?? '—' }));
+        const { plants, report, engines } = await extractAndVerifyPlants({
+          markdown: md,
+          query,
+          site,
+          openaiKey: OPENAI_KEY,
+        });
+        console.log(
+          `   [${site}] ✅ ${plants.length} item(s) [${engines.extractor}→${engines.verifier}] ` +
+            `valid=${report.is_valid} conf=${report.confidence_score} in ${Date.now() - ts}ms`
+        );
+        return plants.map((p) => ({
+          site,
+          name: p.name,
+          price: p.price,
+          availability: p.availability,
+        }));
       } catch (err: any) {
         console.log(`   [${site}] ❌ ${err.message} (${Date.now() - ts}ms)`);
-        return [{ site, name: `ERROR: ${err.message}`, price: '—', error: true }];
+        return [{ site, name: `ERROR: ${err.message}`, price: '—', availability: '—', error: true }];
       }
     })
   );
   // Dedup identical site+name+price rows (search grids repeat products).
   const seen = new Set<string>();
   const flat = results.flat().filter((r) => {
-    const k = `${r.site}|${r.name}|${r.price}`;
+    const k = `${r.site}|${r.name}|${r.price}|${r.availability}`;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
@@ -152,7 +153,7 @@ const HTML = `<!doctype html>
   </form>
   <div class="status" id="status"></div>
   <table id="tbl" hidden>
-    <thead><tr><th>Item</th><th>Price (ILS)</th><th>Source</th></tr></thead>
+    <thead><tr><th>Item</th><th>Price (ILS)</th><th>Stock</th><th>Source</th></tr></thead>
     <tbody></tbody>
   </table>
 
@@ -185,6 +186,7 @@ f.addEventListener('submit', async (e) => {
         tr.innerHTML =
           '<td class="' + (r.error ? 'err' : '') + '">' + esc(r.name) + '</td>' +
           '<td class="price">' + esc(r.price) + '</td>' +
+          '<td class="stock">' + esc(r.availability || '') + '</td>' +
           '<td class="site">' + esc(r.site) + '</td>';
         tbody.appendChild(tr);
       }

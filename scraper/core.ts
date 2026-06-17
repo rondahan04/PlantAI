@@ -342,7 +342,7 @@ export function priceFocusedExcerpt(markdown: string, max = 18000): string {
 
 /* Call the OpenAI model in JSON mode and return the parsed object. Throws on
  * non-2xx or unparseable content so callers can decide how to degrade. */
-export const OPENAI_MODEL = 'gpt-5.5-mini';
+export const OPENAI_MODEL = 'gpt-5.5';
 
 export async function callOpenAIJson(
   prompt: string,
@@ -356,7 +356,7 @@ export async function callOpenAIJson(
       model: OPENAI_MODEL,
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' },
-      max_tokens: maxTokens,
+      max_completion_tokens: maxTokens,
     }),
   });
   if (!res.ok) {
@@ -365,6 +365,152 @@ export async function callOpenAIJson(
   }
   const data = await res.json();
   return JSON.parse(data.choices[0].message.content);
+}
+
+// --- two-pass GPT extraction pipeline --------------------------------------
+//
+//   markdown ─▶ GPT-5.5 (extract) ─▶ GPT-5.5 (verify/critic) ─▶ verified plants
+//
+// Pass 1 extracts the plant JSON; pass 2 re-reads the source as a strict
+// auditor and confirms (or corrects) every field before we trust it. Only an
+// OpenAI key is required; missing key skips verification.
+
+export type Availability = 'in_stock' | 'out_of_stock' | 'unknown';
+
+/* The structural schema every pass extracts/returns. */
+export interface Plant {
+  name: string;
+  price: string; // ILS, e.g. "₪49"
+  availability: Availability;
+}
+
+/* GPT-5.5 auditor verdict. */
+export interface VerificationReport {
+  is_valid: boolean;
+  confidence_score: number; // 0..100
+  feedback: string;
+  corrected_output: Plant[];
+}
+
+export interface PipelineResult {
+  plants: Plant[];
+  report: VerificationReport;
+  engines: { extractor: 'gpt-5.5' | 'none'; verifier: 'gpt-5.5' | 'none' };
+}
+
+function coercePlants(items: any): Plant[] {
+  if (!Array.isArray(items)) return [];
+  const valid: Availability[] = ['in_stock', 'out_of_stock', 'unknown'];
+  return items
+    .filter((it) => it && typeof it === 'object' && it.name && it.price)
+    .map((it) => ({
+      name: String(it.name),
+      price: String(it.price),
+      availability: valid.includes(it.availability) ? it.availability : 'unknown',
+    }));
+}
+
+/* Extraction pass: GPT-5.5 reads the condensed markdown and returns the plant
+ * JSON array matching the Plant schema. */
+export async function extractPlants(
+  excerpt: string,
+  query: string,
+  site: string,
+  openaiKey: string
+): Promise<Plant[]> {
+  const prompt = `You are extracting products from a plant nursery website (${site}).
+The content is mostly Hebrew. The user searched for: "${query}" (match either English or Hebrew, including translations and related plant types).
+From the content below, return ONLY products that match the search query.
+Return ONLY valid JSON in exactly this shape:
+{ "plants": [{ "name": "product name in its original language", "price": "₪XX", "availability": "in_stock" | "out_of_stock" | "unknown" }] }
+Rules:
+- Prices MUST be in ILS (₪). If a price has no currency symbol assume ILS and add ₪.
+- Only REAL products that have a price. Ignore blog posts, articles, guides ("איך לגדל"), categories, cart/shipping/total/free-shipping lines.
+- availability: "out_of_stock" only if the text clearly says sold out / אזל / לא במלאי; "in_stock" if clearly purchasable; otherwise "unknown".
+- If nothing matches, return { "plants": [] }.
+Content:\n${excerpt}`;
+  return coercePlants((await callOpenAIJson(prompt, openaiKey, 2000)).plants);
+}
+
+/* Verification pass: GPT-5.5 acts strictly as an auditor. It cross-references
+ * the extracted JSON against the source text and returns a strict verdict. */
+export async function verifyPlantsWithGPT(
+  excerpt: string,
+  plants: Plant[],
+  query: string,
+  site: string,
+  openaiKey: string
+): Promise<VerificationReport> {
+  const prompt = `You are a strict data auditor for a plant nursery scraper (${site}). The data below was extracted in a separate pass. Your only job is to verify it against the SOURCE TEXT — do not extract anything new.
+The user searched for: "${query}". The source is mostly Hebrew.
+Cross-reference every field of the extracted JSON against the SOURCE TEXT and check:
+- Plant name: is it actually present in the source and accurately captured (not hallucinated, not a blog/category)?
+- Price: does it match the source EXACTLY? Was the number or the currency misread? Prices must be ILS (₪).
+- Availability: is in_stock/out_of_stock/unknown justified by the text context?
+Return ONLY valid JSON in exactly this shape:
+{
+  "is_valid": boolean,
+  "confidence_score": number,        // 0 to 100
+  "feedback": string,                // explain any issues found; "" if none
+  "corrected_output": [ { "name": "...", "price": "₪XX", "availability": "in_stock" | "out_of_stock" | "unknown" } ]
+}
+Rules:
+- is_valid = true only if every returned item is faithful to the source.
+- corrected_output: the verified, clean list. Fix minor errors (wrong price, bad availability), DROP hallucinated/unsupported items. If everything was already correct, return the same items.
+- Never invent products that are not in the source text.
+
+EXTRACTED JSON TO AUDIT:
+${JSON.stringify({ plants }, null, 2)}
+
+SOURCE TEXT:
+${excerpt}`;
+
+  const parsed = await callOpenAIJson(prompt, openaiKey, 2000);
+  return {
+    is_valid: Boolean(parsed.is_valid),
+    confidence_score: Number(parsed.confidence_score) || 0,
+    feedback: String(parsed.feedback ?? ''),
+    corrected_output: coercePlants(parsed.corrected_output),
+  };
+}
+
+/* Orchestrate the two-pass pipeline: GPT-5.5 extracts, GPT-5.5 verifies.
+ * Returns the verified plants plus the auditor's report. Per the workflow: on
+ * is_valid the verified data is returned; on a rejection the failure feedback
+ * is logged for evaluation. */
+export async function extractAndVerifyPlants(opts: {
+  markdown: string;
+  query: string;
+  site: string;
+  openaiKey?: string;
+}): Promise<PipelineResult> {
+  const { markdown, query, site, openaiKey } = opts;
+  const excerpt = priceFocusedExcerpt(markdown);
+
+  const empty = (feedback: string): PipelineResult => ({
+    plants: [],
+    report: { is_valid: false, confidence_score: 0, feedback, corrected_output: [] },
+    engines: { extractor: 'none', verifier: 'none' },
+  });
+
+  if (!excerpt.trim()) return empty('empty excerpt — no product/price lines matched');
+  if (!openaiKey) return empty('no OpenAI key available');
+
+  // --- Extraction pass -----------------------------------------------------
+  const extracted = await extractPlants(excerpt, query, site, openaiKey);
+
+  // --- Verification pass ----------------------------------------------------
+  const report = await verifyPlantsWithGPT(excerpt, extracted, query, site, openaiKey);
+  const verified = report.corrected_output.length ? report.corrected_output : extracted;
+
+  if (!report.is_valid) {
+    // Self-correction loop: log the failure feedback for evaluation.
+    console.log(
+      `   [${site}] ⚠️  verification REJECTED (conf ${report.confidence_score}): ${report.feedback}`
+    );
+  }
+
+  return { plants: verified, report, engines: { extractor: 'gpt-5.5', verifier: 'gpt-5.5' } };
 }
 
 // --- search orchestration --------------------------------------------------
