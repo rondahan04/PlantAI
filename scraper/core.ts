@@ -41,7 +41,16 @@ export function loadEnv(envPath: string): void {
  * (408/429/5xx + network blips) up to 3x. Pass waitFor 0 for static-HTML
  * reads (platform detection); the default lets JS search grids render.
  */
-export async function scrapeUrl(
+/*
+ * Primary scrape provider: Firecrawl. Retries up to 3x on network throw or a
+ * transient status (408/429/5xx). Returns markdown ('' if the page yielded
+ * none) or throws on a non-retryable / exhausted failure.
+ *
+ * The retry recursion lives HERE, one layer below the Tavily fallback in
+ * scrapeUrl, so a retried Firecrawl call can never accidentally drop the
+ * fallback key — the fallback decision is made once, after this resolves.
+ */
+async function firecrawlScrape(
   url: string,
   firecrawlKey: string,
   opts: { waitFor?: number; attempt?: number } = {}
@@ -55,15 +64,103 @@ export async function scrapeUrl(
       body: JSON.stringify({ url, formats: ['markdown'], onlyMainContent: true, waitFor }),
     });
   } catch (err) {
-    if (attempt < 3) return scrapeUrl(url, firecrawlKey, { waitFor, attempt: attempt + 1 });
+    if (attempt < 3) return firecrawlScrape(url, firecrawlKey, { waitFor, attempt: attempt + 1 });
     throw err;
   }
   if ((res.status === 408 || res.status === 429 || res.status >= 500) && attempt < 3) {
-    return scrapeUrl(url, firecrawlKey, { waitFor, attempt: attempt + 1 });
+    return firecrawlScrape(url, firecrawlKey, { waitFor, attempt: attempt + 1 });
   }
   if (!res.ok) throw new Error(`Firecrawl ${res.status}`);
   const data = await res.json();
   return data.data?.markdown ?? '';
+}
+
+/*
+ * Fallback scrape provider: Tavily Extract (https://api.tavily.com/extract).
+ * URL in, markdown out — a direct analog of Firecrawl scrape. `extract_depth`
+ * defaults to 'advanced' because Tavily is only ever reached after Firecrawl
+ * already failed, so we spend the extra credit to maximize rescue odds.
+ * `fetchImpl` is injectable so the parser can be unit-tested without network.
+ * Throws on a non-2xx response or when Tavily reports the URL in failed_results.
+ */
+export async function tavilyExtract(
+  url: string,
+  tavilyKey: string,
+  opts: { extractDepth?: 'basic' | 'advanced' } = {},
+  fetchImpl: typeof fetch = fetch
+): Promise<string> {
+  const { extractDepth = 'advanced' } = opts;
+  const res = await fetchImpl('https://api.tavily.com/extract', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tavilyKey}` },
+    body: JSON.stringify({ urls: url, format: 'markdown', extract_depth: extractDepth }),
+  });
+  if (!res.ok) throw new Error(`Tavily ${res.status}`);
+  const data = await res.json();
+  const first = data.results?.[0];
+  if (!first) {
+    const err = data.failed_results?.[0]?.error ?? 'no results';
+    throw new Error(`Tavily extract failed: ${err}`);
+  }
+  return first.raw_content ?? '';
+}
+
+/*
+ * Pure scrape orchestration: try the primary provider, fall back to Tavily on
+ * throw-OR-empty. "Empty" matters as much as "throw" — bot-walled sites
+ * (e.g. irism.co.il) return HTTP 200 with len=0 markdown rather than erroring,
+ * so a throw-only fallback would miss the common failure. Both providers are
+ * injected, so every branch is unit-testable without touching the network.
+ *
+ *   primary md non-empty ─▶ return it (Firecrawl won, no Tavily cost)
+ *   primary throws/empty + no tavilyKey ─▶ rethrow (throw) or return '' (empty)
+ *   primary throws/empty + tavilyKey ─▶ Tavily; on its failure, surface the
+ *                                       original primary error if there was one
+ */
+export async function resolveScrape(opts: {
+  url: string;
+  tavilyKey?: string;
+  primary: (url: string) => Promise<string>;
+  fallback: (url: string, key: string) => Promise<string>;
+}): Promise<string> {
+  const { url, tavilyKey, primary, fallback } = opts;
+  let primaryErr: unknown;
+  let md = '';
+  try {
+    md = await primary(url);
+  } catch (err) {
+    primaryErr = err;
+  }
+  if (md) return md;
+  if (!tavilyKey) {
+    if (primaryErr) throw primaryErr;
+    return md; // '' — preserve today's empty-is-OK contract when no fallback configured
+  }
+  try {
+    return await fallback(url, tavilyKey);
+  } catch (fallbackErr) {
+    throw primaryErr ?? fallbackErr; // both providers failed
+  }
+}
+
+/*
+ * Scrape a URL to markdown, with an optional Tavily fallback. Pass
+ * opts.tavilyKey ONLY for real product scrapes — not for identifyPlatform's
+ * detection probes, which return '' by design for the wrong platform and would
+ * waste Tavily credits. Firecrawl retry/timeout config is forwarded unchanged.
+ */
+export async function scrapeUrl(
+  url: string,
+  firecrawlKey: string,
+  opts: { waitFor?: number; attempt?: number; tavilyKey?: string } = {}
+): Promise<string> {
+  const { tavilyKey, ...fcOpts } = opts;
+  return resolveScrape({
+    url,
+    tavilyKey,
+    primary: (u) => firecrawlScrape(u, firecrawlKey, fcOpts),
+    fallback: (u, k) => tavilyExtract(u, k),
+  });
 }
 
 // --- platform detection (pure) ---------------------------------------------
@@ -524,6 +621,7 @@ export interface SearchResult {
 export interface SearcherOpts {
   openaiKey?: string;
   learnedFile?: string;
+  tavilyKey?: string;
 }
 
 /*
@@ -558,9 +656,13 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
     const urls = searchUrlsFor(origin, query, platform);
 
     if (urls.length === 1) {
-      return { md: await scrapeUrl(urls[0], firecrawlKey), platform, picked: urls[0] };
+      // Known platform → single canonical search URL gets the Tavily fallback.
+      const md = await scrapeUrl(urls[0], firecrawlKey, { tavilyKey: opts.tavilyKey });
+      return { md, platform, picked: urls[0] };
     }
 
+    // Unknown platform → probe candidates with Firecrawl only (no per-probe
+    // tavilyKey: most probes are empty by design and would waste credits).
     const settled = await Promise.allSettled(urls.map((u) => scrapeUrl(u, firecrawlKey)));
     let best: SearchResult & { score: number } = { md: '', platform, picked: null, score: -1 };
     settled.forEach((s, i) => {
@@ -569,6 +671,16 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
         if (score > best.score) best = { md: s.value, platform, picked: urls[i], score };
       }
     });
+
+    // All probes came back empty/failed — try Tavily once on the top candidate.
+    if (best.score <= 0 && opts.tavilyKey) {
+      try {
+        const md = await tavilyExtract(urls[0], opts.tavilyKey);
+        if (md) best = { md, platform, picked: urls[0], score: scoreMarkdown(md, query) };
+      } catch {
+        /* keep best (empty) — both providers failed for the probe set */
+      }
+    }
     return { md: best.md, platform, picked: best.picked };
   }
 

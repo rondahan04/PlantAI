@@ -11,12 +11,13 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { loadEnv, scrapeUrl, callOpenAIJson, priceFocusedExcerpt } from '../scraper/core.ts';
+import { loadEnv, scrapeUrl, extractAndVerifyPlants } from '../scraper/core.ts';
 
 loadEnv(path.join(__dirname, '..', '.env'));
 
 const FIRECRAWL_KEY = process.env.EXPO_PUBLIC_FIRECRAWL_API_KEY;
 const OPENAI_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
+const TAVILY_KEY = process.env.EXPO_PUBLIC_TAVILY_API_KEY; // optional Firecrawl fallback
 const NURSERIES_PATH = path.join(__dirname, '..', 'assets', 'nurseries.json');
 
 if (!FIRECRAWL_KEY || !OPENAI_KEY) {
@@ -31,6 +32,12 @@ interface PlantEntry {
   inStock: boolean;
 }
 
+// Broad harvest: the new pipeline filters by query, so use an all-encompassing
+// catch-all (houseplants, trees, shrubs, flowers) rather than a species search.
+const HARVEST_QUERY =
+  'any plant product for sale: houseplant, tree, shrub, flower, succulent / ' +
+  'כל מוצר צמחי למכירה — צמחי בית, עצים, שיחים, פרחים, עציצים';
+
 interface NurseryEntry {
   nurseryId: string;
   name: string;
@@ -40,15 +47,21 @@ interface NurseryEntry {
 }
 
 async function extractPlants(markdown: string, nurseryName: string): Promise<PlantEntry[]> {
-  const excerpt = priceFocusedExcerpt(markdown);
-  if (!excerpt.trim()) return [];
-  const prompt = `Extract plant products sold by ${nurseryName}. Return JSON only:
-{ "plants": [{ "name": "scientific name", "aliases": ["common name"], "price": "₪XX", "inStock": true }] }
-Prices in ILS (₪). If no plants found, return { "plants": [] }.
-Content:\n${excerpt}`;
   try {
-    const parsed = await callOpenAIJson(prompt, OPENAI_KEY!, 1000);
-    return Array.isArray(parsed) ? parsed : (parsed.plants ?? []);
+    const { plants } = await extractAndVerifyPlants({
+      markdown,
+      query: HARVEST_QUERY,
+      site: nurseryName,
+      openaiKey: OPENAI_KEY!,
+    });
+    // Map pipeline Plant ({ name, price, availability }) → nurseries.json shape.
+    // The pipeline doesn't generate aliases, so leave them empty for new entries.
+    return plants.map((p) => ({
+      name: p.name,
+      aliases: [],
+      price: p.price,
+      inStock: p.availability !== 'out_of_stock',
+    }));
   } catch {
     return [];
   }
@@ -65,7 +78,7 @@ async function main() {
     }
     try {
       console.log(`🔍 Scraping ${nursery.name} (${nursery.website})...`);
-      const markdown = await scrapeUrl(nursery.website, FIRECRAWL_KEY!);
+      const markdown = await scrapeUrl(nursery.website, FIRECRAWL_KEY!, { tavilyKey: TAVILY_KEY });
       const plants = await extractPlants(markdown, nursery.name);
 
       if (plants.length > 0) {

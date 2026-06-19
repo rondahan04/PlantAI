@@ -44,6 +44,7 @@ loadEnv(path.join(ROOT, '.env'));
 
 const FIRECRAWL_KEY = process.env.EXPO_PUBLIC_FIRECRAWL_API_KEY;
 const OPENAI_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
+const TAVILY_KEY = process.env.EXPO_PUBLIC_TAVILY_API_KEY; // optional Firecrawl fallback
 const URLS_PATH = path.join(ROOT, 'nurseries_scraping_testing');
 
 if (!FIRECRAWL_KEY || !OPENAI_KEY) {
@@ -54,6 +55,7 @@ if (!FIRECRAWL_KEY || !OPENAI_KEY) {
 const searcher = createSearcher(FIRECRAWL_KEY, {
   openaiKey: OPENAI_KEY,
   learnedFile: path.join(__dirname, '..', 'scraper', 'learned-platforms.json'),
+  tavilyKey: TAVILY_KEY,
 });
 
 interface Row {

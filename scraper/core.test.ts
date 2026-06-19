@@ -15,6 +15,8 @@ import {
   registerPlatform,
   platformFingerprint,
   classifyPlatformLLM,
+  resolveScrape,
+  tavilyExtract,
 } from './core.ts';
 import type { ScrapeFn, ClassifyFn } from './core.ts';
 
@@ -235,4 +237,116 @@ test('priceFocusedExcerpt: keeps product/price lines, drops images + boilerplate
   assert.ok(out.includes('₪14.00'));
   assert.ok(!out.includes('cookie banner'));
   assert.ok(!out.includes('footer line'));
+});
+
+// --- Tavily fallback: resolveScrape orchestration (pure, injected providers) ---
+
+const okPrimary = (md: string) => async () => md;
+const throwPrimary = (msg: string) => async () => {
+  throw new Error(msg);
+};
+
+test('resolveScrape: primary returns markdown → Tavily not called', async () => {
+  let tavilyCalls = 0;
+  const fallback = async () => {
+    tavilyCalls++;
+    return 'TAVILY';
+  };
+  const md = await resolveScrape({ url: 'x', tavilyKey: 'k', primary: okPrimary('FIRECRAWL'), fallback });
+  assert.equal(md, 'FIRECRAWL');
+  assert.equal(tavilyCalls, 0);
+});
+
+test('resolveScrape: primary throws → Tavily rescues', async () => {
+  const md = await resolveScrape({
+    url: 'x',
+    tavilyKey: 'k',
+    primary: throwPrimary('Firecrawl 500'),
+    fallback: async () => 'TAVILY',
+  });
+  assert.equal(md, 'TAVILY');
+});
+
+test('resolveScrape: primary empty → Tavily rescues', async () => {
+  const md = await resolveScrape({
+    url: 'x',
+    tavilyKey: 'k',
+    primary: okPrimary(''),
+    fallback: async () => 'TAVILY',
+  });
+  assert.equal(md, 'TAVILY');
+});
+
+test('resolveScrape: no tavilyKey → empty stays empty, throw rethrows', async () => {
+  let tavilyCalls = 0;
+  const fallback = async () => {
+    tavilyCalls++;
+    return 'TAVILY';
+  };
+  const empty = await resolveScrape({ url: 'x', primary: okPrimary(''), fallback });
+  assert.equal(empty, '');
+  await assert.rejects(
+    () => resolveScrape({ url: 'x', primary: throwPrimary('boom'), fallback }),
+    /boom/
+  );
+  assert.equal(tavilyCalls, 0);
+});
+
+test('resolveScrape: both fail → empty+empty is "", throw+throw surfaces primary error', async () => {
+  const bothEmpty = await resolveScrape({
+    url: 'x',
+    tavilyKey: 'k',
+    primary: okPrimary(''),
+    fallback: async () => '',
+  });
+  assert.equal(bothEmpty, '');
+  await assert.rejects(
+    () =>
+      resolveScrape({
+        url: 'x',
+        tavilyKey: 'k',
+        primary: throwPrimary('FIRECRAWL_ERR'),
+        fallback: throwPrimary('TAVILY_ERR'),
+      }),
+    /FIRECRAWL_ERR/
+  );
+});
+
+// --- Tavily fallback: tavilyExtract response parsing (injected fetch) ---
+
+const fakeFetch = (status: number, body: unknown): typeof fetch =>
+  (async () => ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  })) as unknown as typeof fetch;
+
+test('tavilyExtract: 200 → results[0].raw_content, sends markdown + extract_depth', async () => {
+  let sentBody: any = null;
+  const capturingFetch = (async (_url: string, init: any) => {
+    sentBody = JSON.parse(init.body);
+    return { ok: true, status: 200, json: async () => ({ results: [{ raw_content: 'MD' }] }) };
+  }) as unknown as typeof fetch;
+  const md = await tavilyExtract('https://x.co.il', 'k', {}, capturingFetch);
+  assert.equal(md, 'MD');
+  assert.equal(sentBody.urls, 'https://x.co.il');
+  assert.equal(sentBody.format, 'markdown');
+  assert.equal(sentBody.extract_depth, 'advanced');
+});
+
+test('tavilyExtract: failed_results → throws', async () => {
+  await assert.rejects(
+    () =>
+      tavilyExtract(
+        'https://x.co.il',
+        'k',
+        {},
+        fakeFetch(200, { results: [], failed_results: [{ url: 'https://x.co.il', error: 'blocked' }] })
+      ),
+    /blocked/
+  );
+});
+
+test('tavilyExtract: non-2xx → throws', async () => {
+  await assert.rejects(() => tavilyExtract('https://x.co.il', 'k', {}, fakeFetch(429, {})), /Tavily 429/);
 });
