@@ -69,6 +69,7 @@ interface Row {
   availability: string;
   error?: boolean;
   estimate?: boolean; // row is an availability guess (no exact listing scraped)
+  shipsToHome?: boolean; // national fallback nursery (no local match found)
 }
 
 function readUrls(): string[] {
@@ -78,6 +79,26 @@ function readUrls(): string[] {
     .map((l) => l.trim())
     .filter((l) => l && l.startsWith('http'));
 }
+
+// Curated nurseries that ship nationwide. When a local (Places) search finds no
+// nursery that actually stocks the queried plant, we fall back to these and
+// suggest them as ship-to-home options.
+const NATIONAL_NURSERIES = [
+  'https://al-haderech.co.il/',
+  'https://rootine.co.il/',
+  'https://www.peer-nursery.co.il/',
+  'https://www.plantit.co.il/',
+  'https://netaplants.co.il/',
+  'https://decogarden.co.il/',
+];
+
+const hostOf = (u: string): string => {
+  try {
+    return new URL(u).hostname.replace(/^www\./, '').toLowerCase();
+  } catch {
+    return u.toLowerCase();
+  }
+};
 
 async function handleScrape(query: string, urls: string[] = readUrls()): Promise<Row[]> {
   const t0 = Date.now();
@@ -172,6 +193,9 @@ const HTML = `<!doctype html>
   .site { color: #2e7d32; font-size: .85rem; }
   .err { color: #c62828; }
   .status { margin-top: 14px; color: #888; }
+  td.estimate { color: #888; font-style: italic; }
+  tr.ships td { background: #f1f8e9; }
+  td.shipbar { background: #2e7d32; color: #fff; font-weight: 600; font-size: .85rem; text-transform: none; letter-spacing: 0; }
 </style>
 </head>
 <body>
@@ -217,12 +241,25 @@ f.addEventListener('submit', async (e) => {
     if (!rows.length) {
       status.textContent = 'No matching items found.';
     } else {
-      status.textContent = rows.length + ' item(s) found.';
+      const ship = rows.filter((r) => r.shipsToHome).length;
+      const local = rows.length - ship;
+      status.textContent = ship
+        ? local + ' local result(s), no exact local match — ' + ship + ' ship-to-home option(s) below.'
+        : rows.length + ' item(s) found.';
       tbl.hidden = false;
+      let shipDivider = false;
       for (const r of rows) {
+        if (r.shipsToHome && !shipDivider) {
+          const dr = document.createElement('tr');
+          dr.innerHTML = '<td colspan="4" class="shipbar">🚚 No local match — these nurseries ship to your home</td>';
+          tbody.appendChild(dr);
+          shipDivider = true;
+        }
         const tr = document.createElement('tr');
+        if (r.shipsToHome) tr.className = 'ships';
+        const nameClass = r.error ? 'err' : r.estimate ? 'estimate' : '';
         tr.innerHTML =
-          '<td class="' + (r.error ? 'err' : '') + '">' + esc(r.name) + '</td>' +
+          '<td class="' + nameClass + '">' + esc(r.name) + '</td>' +
           '<td class="price">' + esc(r.price) + '</td>' +
           '<td class="stock">' + esc(r.availability || '') + '</td>' +
           '<td class="site">' + esc(r.site) + '</td>';
@@ -269,14 +306,26 @@ const server = http.createServer(async (req, res) => {
           `📍 DISCOVER ${lat},${lng} r=${radius}m → ${found.length} nurseries w/ website: ` +
             found.map((f) => f.website).join(', ')
         );
-        if (!found.length) {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify([]));
-          return;
-        }
-        urls = found.map((f) => f.website);
+        urls = found.map((f) => f.website); // may be [] if nothing discovered
       }
-      const rows = await handleScrape(query, urls);
+
+      let rows = await handleScrape(query, urls);
+
+      // National ship-to-home fallback (discovery mode only): if no local site
+      // returned a REAL product (estimates/errors don't count as a match),
+      // scrape the curated national shippers and suggest them. Skip any that
+      // were already covered by the local search.
+      if (loc.trim()) {
+        const hasLocalMatch = rows.some((r) => !r.estimate && !r.error);
+        if (!hasLocalMatch) {
+          const localHosts = new Set((urls ?? []).map(hostOf));
+          const natUrls = NATIONAL_NURSERIES.filter((nu) => !localHosts.has(hostOf(nu)));
+          console.log(`🚚 No local match for "${query}" — national fallback: ${natUrls.length} sites`);
+          const natRows = (await handleScrape(query, natUrls)).map((r) => ({ ...r, shipsToHome: true }));
+          rows = rows.concat(natRows);
+        }
+      }
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(rows));
     } catch (err: any) {
