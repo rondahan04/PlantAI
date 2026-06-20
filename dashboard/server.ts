@@ -20,6 +20,7 @@ import {
   createSearcher,
   extractAndVerifyPlants,
 } from '../scraper/core.ts';
+import { discoverNurseries } from '../scraper/places.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -45,6 +46,7 @@ loadEnv(path.join(ROOT, '.env'));
 const FIRECRAWL_KEY = process.env.EXPO_PUBLIC_FIRECRAWL_API_KEY;
 const OPENAI_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
 const TAVILY_KEY = process.env.EXPO_PUBLIC_TAVILY_API_KEY; // optional Firecrawl fallback
+const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY; // optional Places discovery
 const URLS_PATH = path.join(ROOT, 'nurseries_scraping_testing');
 
 if (!FIRECRAWL_KEY || !OPENAI_KEY) {
@@ -74,8 +76,7 @@ function readUrls(): string[] {
     .filter((l) => l && l.startsWith('http'));
 }
 
-async function handleScrape(query: string): Promise<Row[]> {
-  const urls = readUrls();
+async function handleScrape(query: string, urls: string[] = readUrls()): Promise<Row[]> {
   const t0 = Date.now();
   console.log(`\n🔍 SEARCH "${query}" — ${urls.length} sites @ ${new Date().toISOString()}`);
   const results = await Promise.all(
@@ -148,9 +149,10 @@ const HTML = `<!doctype html>
 </head>
 <body>
   <h1>🌱 Nursery Scraper Test</h1>
-  <p class="sub">Searches the nursery sites in <code>nurseries_scraping_testing</code> and lists matching items + prices (ILS).</p>
+  <p class="sub">Searches nursery sites and lists matching items + prices (ILS). Leave location blank to use <code>nurseries_scraping_testing</code>; enter <code>lat,lng</code> to discover nearby nurseries via Google Places.</p>
   <form id="f">
     <input id="q" placeholder="e.g. monstera, cactus, lavender…" autofocus />
+    <input id="loc" placeholder="lat,lng (optional → discover nearby, e.g. 32.0853,34.7818)" />
     <button id="go" type="submit">Search</button>
   </form>
   <div class="status" id="status"></div>
@@ -162,6 +164,7 @@ const HTML = `<!doctype html>
 <script>
 const f = document.getElementById('f');
 const q = document.getElementById('q');
+const loc = document.getElementById('loc');
 const go = document.getElementById('go');
 const status = document.getElementById('status');
 const tbl = document.getElementById('tbl');
@@ -174,9 +177,15 @@ f.addEventListener('submit', async (e) => {
   go.disabled = true;
   tbl.hidden = true;
   tbody.innerHTML = '';
-  status.textContent = 'Scraping nurseries… (can take ~20-40s)';
+  const locVal = loc.value.trim();
+  status.textContent = locVal
+    ? 'Discovering nearby nurseries + scraping… (can take ~30-60s)'
+    : 'Scraping nurseries… (can take ~20-40s)';
   try {
-    const res = await fetch('/api/scrape?q=' + encodeURIComponent(query));
+    const res = await fetch(
+      '/api/scrape?q=' + encodeURIComponent(query) +
+        (locVal ? '&loc=' + encodeURIComponent(locVal) : '')
+    );
     const rows = await res.json();
     if (!rows.length) {
       status.textContent = 'No matching items found.';
@@ -218,8 +227,29 @@ const server = http.createServer(async (req, res) => {
 
   if (u.pathname === '/api/scrape') {
     const query = u.searchParams.get('q') ?? '';
+    const loc = u.searchParams.get('loc') ?? ''; // "lat,lng" → discover via Places
+    const radius = Number(u.searchParams.get('radius')) || 5000;
     try {
-      const rows = await handleScrape(query);
+      let urls: string[] | undefined;
+      if (loc.trim()) {
+        if (!GOOGLE_KEY) throw new Error('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY not set');
+        const [lat, lng] = loc.split(',').map((n) => Number(n.trim()));
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          throw new Error(`bad loc "${loc}" — expected "lat,lng"`);
+        }
+        const found = await discoverNurseries(lat, lng, GOOGLE_KEY, { radiusM: radius });
+        console.log(
+          `📍 DISCOVER ${lat},${lng} r=${radius}m → ${found.length} nurseries w/ website: ` +
+            found.map((f) => f.website).join(', ')
+        );
+        if (!found.length) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify([]));
+          return;
+        }
+        urls = found.map((f) => f.website);
+      }
+      const rows = await handleScrape(query, urls);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(rows));
     } catch (err: any) {

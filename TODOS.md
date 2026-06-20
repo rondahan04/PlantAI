@@ -2,6 +2,21 @@
 
 ## Phase 2 (after demo validation)
 
+### In-app live nursery discovery (Places → scrape)
+**What:** Move the Places `discoverNurseries()` flow into the app so it uses the device's real GPS (`expo-location`, already wired in DiagnosisScreen) to find + show nearby nurseries with live inventory.
+
+**Why:** "Nurseries near the user" is the real product goal. The dashboard test mode (shipped) proves the discover→scrape pipeline works server-side.
+
+**Blocked by — must reduce scrape latency first:** the current pipeline is ~30-60s/site (Firecrawl/Tavily + two-pass GPT-5.5). Live in-app that's unusable. Options to explore: (a) cache discovered+scraped results in a backend/EAS API route the app calls (keeps keys server-side — `EXPO_PUBLIC_*` keys ship in the app bundle otherwise), (b) scrape async + stream/poll, (c) cheaper/faster extraction for the live path.
+
+**How to start:**
+1. Decide the backend surface (EAS hosting API route vs. refresh `nurseries.json` on a cron) — keys must NOT ship in the app bundle.
+2. Reuse `scraper/places.ts` `discoverNurseries()` server-side.
+3. Wire `NurseriesScreen` to the device GPS + the backend endpoint.
+
+**Depends on:** scrape-latency reduction; backend/API-route decision.
+
+
 ### Firecrawl scraping automation
 **What:** Scheduled scraper using `@mendable/firecrawl-js` that updates `assets/nurseries.json` weekly from nursery websites.
 
