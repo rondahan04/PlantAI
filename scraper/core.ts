@@ -610,6 +610,63 @@ export async function extractAndVerifyPlants(opts: {
   return { plants: verified, report, engines: { extractor: 'gpt-5.5', verifier: 'gpt-5.5' } };
 }
 
+// --- availability inference (informational / no-shop sites) -----------------
+//
+// When the structured pipeline returns 0 items, that result is overloaded: the
+// shop may genuinely lack the plant, its search may have failed, OR the site is
+// purely informational with no online store at all. For that last case the
+// homepage text still carries signal ("we grow herbs and Mediterranean
+// perennials") that a human would read as "they probably stock sage". This call
+// turns that text into an explicit 0–100 likelihood so the UI can show
+// "~75% likely" instead of a bare, ambiguous "nothing found".
+//
+// Pair it with the SITE HOMEPAGE, not the (often empty/broken) search page.
+
+export interface AvailabilityEstimate {
+  confidence: number; // 0–100: likelihood the nursery carries the queried plant
+  reasoning: string; // one-line justification, or why no estimate was possible
+}
+
+const clampConfidence = (n: unknown): number => {
+  const v = Math.round(Number(n));
+  if (!Number.isFinite(v)) return 0;
+  return Math.max(0, Math.min(100, v));
+};
+
+/* Estimate, from a nursery's website text, how likely it stocks `query`.
+ * Used only as a fallback when structured extraction found nothing. Never
+ * throws — returns a 0-confidence estimate on empty input or any LLM failure. */
+export async function inferAvailabilityLLM(
+  siteText: string,
+  query: string,
+  site: string,
+  openaiKey: string,
+  classify: ClassifyFn = callOpenAIJson
+): Promise<AvailabilityEstimate> {
+  if (!siteText.trim()) {
+    return { confidence: 0, reasoning: 'no reachable site content' };
+  }
+  const excerpt = siteText.slice(0, 12000); // homepage/about text is plenty
+  const prompt = `You estimate whether a plant nursery (${site}) likely sells a given plant, from its website text (mostly Hebrew). A structured product search already found nothing — the site may have no online shop, or its search failed, so judge from the general text.
+The user wants: "${query}" (match English or Hebrew, including translations / related plant types).
+Consider: does the nursery deal in this plant's category (herbs, perennials, houseplants, succulents, trees, flowers)? Is it a general nursery that would plausibly carry a common plant? Does the text explicitly mention it?
+Return ONLY JSON: { "confidence": <0-100>, "reasoning": "<short, one sentence>" }
+Scale: 0 = clearly does not sell this type; 50 = general nursery, could plausibly have it; 85+ = the text strongly implies or names it.
+Website text:\n${excerpt}`;
+  try {
+    // 1500: gpt-5.5 spends completion tokens on hidden reasoning first, so a
+    // tight cap (200/500) returns empty content → JSON.parse fails → false
+    // "unavailable". 1500 reliably clears reasoning + the tiny JSON output.
+    const out = await classify(prompt, openaiKey, 1500);
+    return {
+      confidence: clampConfidence(out.confidence),
+      reasoning: String(out.reasoning ?? '').slice(0, 200) || 'no reasoning given',
+    };
+  } catch {
+    return { confidence: 0, reasoning: 'availability estimate unavailable' };
+  }
+}
+
 // --- search orchestration --------------------------------------------------
 
 export interface SearchResult {

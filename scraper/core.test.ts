@@ -17,6 +17,7 @@ import {
   classifyPlatformLLM,
   resolveScrape,
   tavilyExtract,
+  inferAvailabilityLLM,
 } from './core.ts';
 import type { ScrapeFn, ClassifyFn } from './core.ts';
 
@@ -349,4 +350,50 @@ test('tavilyExtract: failed_results → throws', async () => {
 
 test('tavilyExtract: non-2xx → throws', async () => {
   await assert.rejects(() => tavilyExtract('https://x.co.il', 'k', {}, fakeFetch(429, {})), /Tavily 429/);
+});
+
+// --- inferAvailabilityLLM: availability estimate for no-shop sites ---
+
+const fakeClassify =
+  (out: any): ClassifyFn =>
+  async () =>
+    out;
+
+test('inferAvailabilityLLM: empty site text → 0, no LLM call', async () => {
+  let called = false;
+  const classify: ClassifyFn = async () => {
+    called = true;
+    return {};
+  };
+  const est = await inferAvailabilityLLM('   ', 'מרווה', 'x.co.il', 'k', classify);
+  assert.equal(est.confidence, 0);
+  assert.equal(called, false);
+  assert.match(est.reasoning, /no reachable/);
+});
+
+test('inferAvailabilityLLM: parses confidence + reasoning', async () => {
+  const est = await inferAvailabilityLLM(
+    'אנחנו מגדלים עשבי תיבול ורב-שנתיים',
+    'מרווה',
+    'x.co.il',
+    'k',
+    fakeClassify({ confidence: 75, reasoning: 'sells herbs & perennials' })
+  );
+  assert.equal(est.confidence, 75);
+  assert.equal(est.reasoning, 'sells herbs & perennials');
+});
+
+test('inferAvailabilityLLM: clamps out-of-range / non-numeric confidence', async () => {
+  assert.equal((await inferAvailabilityLLM('text', 'q', 's', 'k', fakeClassify({ confidence: 140 }))).confidence, 100);
+  assert.equal((await inferAvailabilityLLM('text', 'q', 's', 'k', fakeClassify({ confidence: -5 }))).confidence, 0);
+  assert.equal((await inferAvailabilityLLM('text', 'q', 's', 'k', fakeClassify({ confidence: 'lots' }))).confidence, 0);
+});
+
+test('inferAvailabilityLLM: never throws when the LLM call fails', async () => {
+  const classify: ClassifyFn = async () => {
+    throw new Error('LLM down');
+  };
+  const est = await inferAvailabilityLLM('text', 'q', 's', 'k', classify);
+  assert.equal(est.confidence, 0);
+  assert.match(est.reasoning, /unavailable/);
 });

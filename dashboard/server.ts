@@ -19,6 +19,8 @@ import {
   loadEnv,
   createSearcher,
   extractAndVerifyPlants,
+  inferAvailabilityLLM,
+  scrapeUrl,
 } from '../scraper/core.ts';
 import { discoverNurseries } from '../scraper/places.ts';
 
@@ -66,6 +68,7 @@ interface Row {
   price: string;
   availability: string;
   error?: boolean;
+  estimate?: boolean; // row is an availability guess (no exact listing scraped)
 }
 
 function readUrls(): string[] {
@@ -96,12 +99,36 @@ async function handleScrape(query: string, urls: string[] = readUrls()): Promise
           `   [${site}] ✅ ${plants.length} item(s) [${engines.extractor}→${engines.verifier}] ` +
             `valid=${report.is_valid} conf=${report.confidence_score} in ${Date.now() - ts}ms`
         );
-        return plants.map((p) => ({
-          site,
-          name: p.name,
-          price: p.price,
-          availability: p.availability,
-        }));
+        if (plants.length > 0) {
+          return plants.map((p) => ({
+            site,
+            name: p.name,
+            price: p.price,
+            availability: p.availability,
+          }));
+        }
+
+        // 0 structured items is ambiguous (no shop / search failed / blocked).
+        // Read the HOMEPAGE (not the empty search page) and let the LLM estimate
+        // how likely this nursery carries the plant, so the user gets a signal.
+        const origin = new URL(url).origin;
+        let homeMd = '';
+        try {
+          homeMd = await scrapeUrl(origin, FIRECRAWL_KEY!, { tavilyKey: TAVILY_KEY });
+        } catch {
+          /* both providers failed → no signal; inferAvailabilityLLM('') → ~0% unreachable */
+        }
+        const est = await inferAvailabilityLLM(homeMd, query, site, OPENAI_KEY!);
+        console.log(`   [${site}] ~${est.confidence}% likely — ${est.reasoning}`);
+        return [
+          {
+            site,
+            name: `${query} (estimated)`,
+            price: '—',
+            availability: `~${est.confidence}% · ${est.reasoning}`,
+            estimate: true,
+          },
+        ];
       } catch (err: any) {
         console.log(`   [${site}] ❌ ${err.message} (${Date.now() - ts}ms)`);
         return [{ site, name: `ERROR: ${err.message}`, price: '—', availability: '—', error: true }];
