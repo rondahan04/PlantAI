@@ -21,6 +21,7 @@ const light = {
   primary: '#15803D', // nature green
   primaryPressed: '#116932',
   onPrimary: '#FFFFFF',
+  primaryWash: '#E7F6EC', // tonal primary surface (active toggles, price tags)
   secondary: '#059669',
   accent: '#D97706', // sun — reserve for the single primary CTA / highlights
   onAccent: '#FFFFFF',
@@ -38,8 +39,16 @@ const light = {
 
   success: '#15803D',
   warning: '#D97706',
+  warningWash: '#FEF3E7', // tonal warning surface (pickup-only pill)
   danger: '#DC2626',
   onDanger: '#FFFFFF',
+
+  // Plant condition scale — badge/dot/bar accents (>=3:1 on light surfaces).
+  conditionHealthy: '#15803D',
+  conditionMild: '#0F766E',
+  conditionModerate: '#B45309',
+  conditionSevere: '#C2410C',
+  conditionCritical: '#DC2626',
 
   scrim: 'rgba(15, 23, 42, 0.5)',
 } as const;
@@ -48,6 +57,7 @@ const dark = {
   primary: '#34D399', // lighter tonal variant for dark surfaces
   primaryPressed: '#2BBA86',
   onPrimary: '#04231A',
+  primaryWash: '#16382A', // deep green tint — primary text reads on it
   secondary: '#6EE7B7',
   accent: '#FBBF24',
   onAccent: '#231603',
@@ -65,8 +75,16 @@ const dark = {
 
   success: '#34D399',
   warning: '#FBBF24',
+  warningWash: '#3A2C12', // deep amber tint
   danger: '#F87171',
   onDanger: '#1A0606',
+
+  // Plant condition scale — lighter tonal variants for dark surfaces.
+  conditionHealthy: '#34D399',
+  conditionMild: '#2DD4BF',
+  conditionModerate: '#FBBF24',
+  conditionSevere: '#FB923C',
+  conditionCritical: '#F87171',
 
   scrim: 'rgba(0, 0, 0, 0.6)',
 } as const;
@@ -94,15 +112,18 @@ export const radius = {
   pill: 999,
 } as const;
 
-/* Type scale (Lora display / Raleway text once fonts are loaded). */
+/* Type scale — Lora (display/headings) + Raleway (text). fontFamily names must
+ * match the keys registered in useFonts() in App.tsx. Note: with static custom
+ * fonts iOS binds weight to the family, so an inline fontWeight override does
+ * not change weight — switch fontFamily for a heavier/lighter cut. */
 export const type = {
-  display: { fontSize: 32, lineHeight: 38, fontWeight: '800' as const, letterSpacing: -0.8 },
-  title: { fontSize: 22, lineHeight: 28, fontWeight: '700' as const, letterSpacing: -0.4 },
-  heading: { fontSize: 18, lineHeight: 24, fontWeight: '700' as const, letterSpacing: -0.3 },
-  body: { fontSize: 16, lineHeight: 24, fontWeight: '400' as const },
-  bodyStrong: { fontSize: 16, lineHeight: 24, fontWeight: '600' as const },
-  label: { fontSize: 14, lineHeight: 20, fontWeight: '500' as const },
-  caption: { fontSize: 12, lineHeight: 16, fontWeight: '500' as const },
+  display: { fontFamily: 'Lora_700Bold', fontSize: 32, lineHeight: 38, fontWeight: '700' as const, letterSpacing: -0.8 },
+  title: { fontFamily: 'Lora_700Bold', fontSize: 22, lineHeight: 28, fontWeight: '700' as const, letterSpacing: -0.4 },
+  heading: { fontFamily: 'Lora_700Bold', fontSize: 18, lineHeight: 24, fontWeight: '700' as const, letterSpacing: -0.3 },
+  body: { fontFamily: 'Raleway_400Regular', fontSize: 16, lineHeight: 24, fontWeight: '400' as const },
+  bodyStrong: { fontFamily: 'Raleway_600SemiBold', fontSize: 16, lineHeight: 24, fontWeight: '600' as const },
+  label: { fontFamily: 'Raleway_500Medium', fontSize: 14, lineHeight: 20, fontWeight: '500' as const },
+  caption: { fontFamily: 'Raleway_500Medium', fontSize: 12, lineHeight: 16, fontWeight: '500' as const },
 } as const;
 
 /* Elevation scale — consistent shadow tokens for cards/sheets/CTAs. */

@@ -4,6 +4,8 @@
   "main": "index.ts",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
+    "@expo-google-fonts/lora": "^0.4.2",
+    "@expo-google-fonts/raleway": "^0.4.2",
     "@expo/vector-icons": "^15.0.2",
     "@react-navigation/bottom-tabs": "^7.18.0",
     "@react-navigation/native": "^7.3.1",
@@ -15,6 +17,7 @@
     "expo-image-picker": "^56.0.17",
     "expo-linear-gradient": "^56.0.4",
     "expo-location": "^56.0.17",
+    "expo-splash-screen": "~56.0.10",
     "expo-status-bar": "~56.0.4",
     "react": "19.2.3",
     "react-native": "0.85.3",

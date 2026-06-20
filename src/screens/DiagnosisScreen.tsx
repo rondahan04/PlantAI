@@ -29,14 +29,15 @@ type Props = {
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
-// Condition scale: icon + accent color (used for badge/dot/bar, never as
-// low-contrast body text). Colors meet >=3:1 against light surfaces.
-const CONDITION_CONFIG: Record<string, { color: string; icon: IconName }> = {
-  healthy: { color: '#15803D', icon: 'checkmark-circle' },
-  mild: { color: '#0F766E', icon: 'alert-circle-outline' },
-  moderate: { color: '#B45309', icon: 'warning-outline' },
-  severe: { color: '#C2410C', icon: 'warning' },
-  critical: { color: '#DC2626', icon: 'skull-outline' },
+// Condition scale icons (used for badge/dot/bar, never as low-contrast body
+// text). Accent colors come from theme tokens (t.color.condition*) so they
+// stay readable in both light and dark.
+const CONDITION_ICON: Record<string, IconName> = {
+  healthy: 'checkmark-circle',
+  mild: 'alert-circle-outline',
+  moderate: 'warning-outline',
+  severe: 'warning',
+  critical: 'skull-outline',
 };
 
 export default function DiagnosisScreen({ navigation, route }: Props) {
@@ -55,7 +56,17 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
     ]).start();
   }, []);
 
-  const condition = CONDITION_CONFIG[diagnosis.condition] || CONDITION_CONFIG.moderate;
+  const conditionColor: Record<string, string> = {
+    healthy: t.color.conditionHealthy,
+    mild: t.color.conditionMild,
+    moderate: t.color.conditionModerate,
+    severe: t.color.conditionSevere,
+    critical: t.color.conditionCritical,
+  };
+  const condition = {
+    icon: CONDITION_ICON[diagnosis.condition] || CONDITION_ICON.moderate,
+    color: conditionColor[diagnosis.condition] || conditionColor.moderate,
+  };
 
   const handleFindReplacement = async () => {
     setFindingNurseries(true);
@@ -241,7 +252,7 @@ function makeStyles(t: Theme) {
     },
     conditionBadgeText: { ...t.type.label, fontWeight: '700' },
     plantInfo: { paddingTop: t.space.lg, paddingBottom: t.space.sm },
-    plantName: { ...t.type.title, fontSize: 26, lineHeight: 32, color: t.color.foreground, marginBottom: t.space.sm },
+    plantName: { ...t.type.title, fontSize: 26, lineHeight: 32, color: t.color.foreground, marginBottom: t.space.sm, writingDirection: 'auto' },
     confidenceRow: { flexDirection: 'row', alignItems: 'center', gap: t.space.md },
     confidenceBar: { flex: 1, height: 6, backgroundColor: t.color.surfaceMuted, borderRadius: t.radius.pill, overflow: 'hidden' },
     confidenceFill: { height: '100%', borderRadius: t.radius.pill },
@@ -255,13 +266,13 @@ function makeStyles(t: Theme) {
       borderColor: t.color.border,
       ...t.elevation.card,
     },
-    descText: { ...t.type.body, fontSize: 14, lineHeight: 21, color: t.color.textSecondary },
+    descText: { ...t.type.body, fontSize: 14, lineHeight: 21, color: t.color.textSecondary, writingDirection: 'auto' },
     section: { marginTop: t.space.xl },
     sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: t.space.sm, marginBottom: t.space.md },
     sectionTitle: { ...t.type.heading, fontSize: 16, color: t.color.foreground },
     issueRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: t.space.sm, gap: t.space.md },
     issueDot: { width: 8, height: 8, borderRadius: 4, marginTop: 7 },
-    issueText: { flex: 1, ...t.type.body, fontSize: 14, lineHeight: 20, color: t.color.textSecondary },
+    issueText: { flex: 1, ...t.type.body, fontSize: 14, lineHeight: 20, color: t.color.textSecondary, writingDirection: 'auto' },
     treatmentCard: {
       backgroundColor: t.color.surface,
       borderRadius: t.radius.md,
@@ -281,8 +292,8 @@ function makeStyles(t: Theme) {
       marginBottom: t.space.sm,
     },
     urgentText: { ...t.type.caption, fontSize: 10, fontWeight: '800', color: t.color.onDanger, letterSpacing: 1 },
-    treatmentTitle: { ...t.type.bodyStrong, fontSize: 15, color: t.color.foreground, marginBottom: t.space.xs },
-    treatmentDesc: { ...t.type.label, fontWeight: '400', fontSize: 13, lineHeight: 19, color: t.color.textSecondary },
+    treatmentTitle: { ...t.type.bodyStrong, fontSize: 15, color: t.color.foreground, marginBottom: t.space.xs, writingDirection: 'auto' },
+    treatmentDesc: { ...t.type.label, fontWeight: '400', fontSize: 13, lineHeight: 19, color: t.color.textSecondary, writingDirection: 'auto' },
     replaceCard: {
       marginTop: t.space.xl,
       backgroundColor: t.color.surfaceMuted,
@@ -306,7 +317,7 @@ function makeStyles(t: Theme) {
       backgroundColor: t.color.surface,
       minHeight: 44,
     },
-    toggleBtnActive: { borderColor: t.color.primary, backgroundColor: '#E7F6EC' },
+    toggleBtnActive: { borderColor: t.color.primary, backgroundColor: t.color.primaryWash },
     toggleBtnText: { ...t.type.caption, color: t.color.textMuted, textAlign: 'center' },
     toggleBtnTextActive: { color: t.color.primary, fontWeight: '700' },
     findBtn: {

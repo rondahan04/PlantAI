@@ -176,7 +176,7 @@ export default function NurseriesScreen({ navigation, route }: Props) {
           <Ionicons name="chevron-back" size={22} color={t.color.primary} />
         </Pressable>
         <View style={s.headerCenter}>
-          <Text style={s.headerTitle} numberOfLines={1}>{plantName}</Text>
+          <Text style={s.headerTitle} numberOfLines={2}>{plantName}</Text>
           <Text style={s.headerSub}>{nurseries.length} nurseries nearby</Text>
         </View>
         <Pressable
@@ -234,7 +234,7 @@ export default function NurseriesScreen({ navigation, route }: Props) {
               coordinate={{ latitude: nursery.latitude, longitude: nursery.longitude }}
               title={nursery.name}
               description={`${nursery.distance} · ${nursery.plantPrice}${nursery.hasPlant ? ' · In stock' : ''}`}
-              pinColor={nursery.hasPlant ? t.color.primary : '#888'}
+              pinColor={nursery.hasPlant ? t.color.primary : t.color.textMuted}
               onCalloutPress={() => handleDirections(nursery)}
             />
           ))}
@@ -270,7 +270,7 @@ function makeStyles(t: Theme) {
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: t.space.xl, paddingVertical: t.space.md },
     backBtn: { width: 44, height: 44, alignItems: 'flex-start', justifyContent: 'center' },
     headerCenter: { flex: 1, alignItems: 'center' },
-    headerTitle: { ...t.type.heading, color: t.color.foreground },
+    headerTitle: { ...t.type.heading, color: t.color.foreground, textAlign: 'center', writingDirection: 'auto' },
     headerSub: { ...t.type.caption, color: t.color.textMuted, marginTop: 1 },
     viewToggleBtn: {
       width: 44,
@@ -305,7 +305,7 @@ function makeStyles(t: Theme) {
     modeBtnText: { ...t.type.label, color: t.color.textMuted },
     modeBtnTextActive: { color: t.color.primary, fontWeight: '700' },
     modeCount: { backgroundColor: t.color.surfaceMuted, borderRadius: t.radius.pill, paddingHorizontal: t.space.sm, paddingVertical: 2 },
-    modeCountActive: { backgroundColor: '#E7F6EC' },
+    modeCountActive: { backgroundColor: t.color.primaryWash },
     modeCountText: { ...t.type.caption, fontSize: 11, fontWeight: '700', color: t.color.textMuted },
     modeCountTextActive: { color: t.color.primary },
     list: { paddingHorizontal: t.space.xl, paddingBottom: t.space['2xl'], gap: t.space.lg },
@@ -338,14 +338,14 @@ function makeStyles(t: Theme) {
     cardContent: { padding: t.space.lg },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: t.space.sm },
     cardTitleWrap: { flex: 1, marginRight: t.space.md },
-    cardName: { ...t.type.bodyStrong, fontSize: 16, fontWeight: '700', color: t.color.foreground, marginBottom: t.space.xs },
+    cardName: { ...t.type.bodyStrong, fontSize: 16, fontWeight: '700', color: t.color.foreground, marginBottom: t.space.xs, writingDirection: 'auto' },
     starRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginBottom: 2 },
     ratingNum: { ...t.type.caption, color: t.color.textSecondary, marginLeft: t.space.xs, fontWeight: '600' },
     reviewCount: { ...t.type.caption, fontSize: 11, color: t.color.textMuted },
-    priceTag: { backgroundColor: '#E7F6EC', borderRadius: t.radius.md, paddingHorizontal: t.space.md, paddingVertical: t.space.xs },
+    priceTag: { backgroundColor: t.color.primaryWash, borderRadius: t.radius.md, paddingHorizontal: t.space.md, paddingVertical: t.space.xs },
     priceText: { ...t.type.bodyStrong, fontSize: 16, fontWeight: '800', color: t.color.primary },
     metaRow: { flexDirection: 'row', alignItems: 'center', gap: t.space.xs, marginBottom: t.space.xs },
-    metaText: { ...t.type.label, fontWeight: '400', fontSize: 13, color: t.color.textSecondary },
+    metaText: { ...t.type.label, fontWeight: '400', fontSize: 13, color: t.color.textSecondary, flex: 1, writingDirection: 'auto' },
     infoPill: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -356,7 +356,7 @@ function makeStyles(t: Theme) {
       paddingVertical: t.space.sm,
       marginVertical: t.space.md,
     },
-    infoPillWarn: { backgroundColor: '#FEF3E7' },
+    infoPillWarn: { backgroundColor: t.color.warningWash },
     infoPillText: { ...t.type.label, fontWeight: '500', fontSize: 13, color: t.color.primary, flex: 1 },
     actionRow: { flexDirection: 'row', gap: t.space.sm },
     actionSecondary: {

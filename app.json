@@ -5,9 +5,9 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "splash": {
-      "backgroundColor": "#0A1628"
+      "backgroundColor": "#F0FDF4"
     },
     "ios": {
       "supportsTablet": true,
@@ -45,6 +45,15 @@
         "expo-image-picker",
         {
           "photosPermission": "PlantAI needs photo library access to analyze plant photos."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#F0FDF4",
+          "dark": {
+            "backgroundColor": "#0B1410"
+          }
         }
       ]
     ]
