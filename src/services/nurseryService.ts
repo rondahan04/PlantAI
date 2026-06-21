@@ -61,11 +61,8 @@ function toNursery(r: NurseryResultJSON): Nursery {
   };
 }
 
-/*
- * Discover + scrape nurseries near a point for a given plant.
- * @throws Error on network failure, non-2xx, or 90s timeout.
- */
-export async function fetchNearbyNurseries(
+/* The actual network call. */
+async function requestNurseries(
   plantName: string,
   userLat: number,
   userLng: number
@@ -86,4 +83,60 @@ export async function fetchNearbyNurseries(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/*
+ * In-flight/result cache so the scrape can be PREFETCHED while the user is still
+ * on the diagnosis screen. By the time they open the nurseries screen the same
+ * promise is already in flight (or resolved), so the visible loading time is
+ * minimal. Keyed by plant + rounded coordinates; entries expire after TTL.
+ */
+const CACHE_TTL_MS = 5 * 60 * 1000;
+interface CacheEntry {
+  at: number;
+  promise: Promise<Nursery[]>;
+}
+const cache = new Map<string, CacheEntry>();
+
+const cacheKey = (plant: string, lat: number, lng: number) =>
+  `${plant.trim().toLowerCase()}|${lat.toFixed(3)}|${lng.toFixed(3)}`;
+
+/*
+ * Discover + scrape nurseries near a point for a given plant. Returns a cached
+ * in-flight/resolved promise when one exists (set `force` to bypass it, e.g. on
+ * a user-triggered retry).
+ * @throws Error on network failure, non-2xx, or 90s timeout.
+ */
+export function fetchNearbyNurseries(
+  plantName: string,
+  userLat: number,
+  userLng: number,
+  opts: { force?: boolean } = {}
+): Promise<Nursery[]> {
+  const key = cacheKey(plantName, userLat, userLng);
+  const hit = cache.get(key);
+  if (!opts.force && hit && Date.now() - hit.at < CACHE_TTL_MS) {
+    return hit.promise;
+  }
+  const promise = requestNurseries(plantName, userLat, userLng);
+  // Evict on failure so a later call (retry) starts fresh instead of re-throwing
+  // the same rejected promise.
+  promise.catch(() => {
+    if (cache.get(key)?.promise === promise) cache.delete(key);
+  });
+  cache.set(key, { at: Date.now(), promise });
+  return promise;
+}
+
+/*
+ * Fire-and-forget warm-up: start the scrape early (e.g. on the diagnosis screen)
+ * so the result is ready when the user opens the nurseries screen. Errors are
+ * swallowed here — fetchNearbyNurseries surfaces them when the screen awaits.
+ */
+export function prefetchNearbyNurseries(
+  plantName: string,
+  userLat: number,
+  userLng: number
+): void {
+  fetchNearbyNurseries(plantName, userLat, userLng).catch(() => {});
 }

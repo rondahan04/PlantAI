@@ -16,10 +16,26 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, DeliveryMode } from '../types';
 import { Theme, useTheme } from '../theme';
+import { prefetchNearbyNurseries } from '../services/nurseryService';
 
 // Tel Aviv center — used as fallback when location permission is denied
 const FALLBACK_LAT = 32.0853;
 const FALLBACK_LNG = 34.7818;
+
+// Resolve the device location, falling back to Tel Aviv center when permission
+// is denied or GPS is unavailable.
+async function resolveCoords(): Promise<{ lat: number; lng: number }> {
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status === 'granted') {
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      return { lat: loc.coords.latitude, lng: loc.coords.longitude };
+    }
+  } catch {
+    // fall through to fallback
+  }
+  return { lat: FALLBACK_LAT, lng: FALLBACK_LNG };
+}
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Diagnosis'>;
@@ -45,6 +61,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
   const { imageUri, diagnosis } = route.params;
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('delivery');
   const [findingNurseries, setFindingNurseries] = useState(false);
+  const coordsRef = useRef<{ lat: number; lng: number } | null>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
 
@@ -53,6 +70,22 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
       Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
       Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
     ]).start();
+  }, []);
+
+  // Resolve the user's location and PREFETCH the nursery scrape as soon as the
+  // diagnosis is shown, so the (30-60s) scrape is already in flight by the time
+  // the user taps "Find" — the nurseries screen then loads with minimal wait.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const coords = await resolveCoords();
+      if (cancelled) return;
+      coordsRef.current = coords;
+      prefetchNearbyNurseries(diagnosis.plantName, coords.lat, coords.lng);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const conditionColor: Record<string, string> = {
@@ -68,27 +101,22 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
   };
 
   const handleFindReplacement = async () => {
-    setFindingNurseries(true);
-    let lat = FALLBACK_LAT;
-    let lng = FALLBACK_LNG;
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        lat = loc.coords.latitude;
-        lng = loc.coords.longitude;
-      }
-    } catch {
-      // Permission denied or GPS unavailable — Tel Aviv fallback used
-    } finally {
+    // Coordinates are usually already resolved by the mount effect (and the
+    // scrape prefetched). If the user taps before that finishes, resolve now.
+    let coords = coordsRef.current;
+    if (!coords) {
+      setFindingNurseries(true);
+      coords = await resolveCoords();
+      coordsRef.current = coords;
+      prefetchNearbyNurseries(diagnosis.plantName, coords.lat, coords.lng);
       setFindingNurseries(false);
     }
-    // NurseriesScreen fetches live data itself (the scrape takes ~30-60s and
-    // needs its own loading state), so we only pass the query params here.
+    // NurseriesScreen awaits the same (prefetched) request, so its loading time
+    // is minimal. We only pass the query params here.
     navigation.navigate('Nurseries', {
       plantName: diagnosis.plantName,
-      lat,
-      lng,
+      lat: coords.lat,
+      lng: coords.lng,
       mode: deliveryMode,
     });
   };

@@ -179,11 +179,13 @@ export default function NurseriesScreen({ navigation, route }: Props) {
   const [errorMsg, setErrorMsg] = useState('');
   const headerFade = useRef(new Animated.Value(0)).current;
 
-  const load = useCallback(async () => {
+  // Initial load reuses the promise prefetched on the diagnosis screen (force=false
+  // → cache hit → minimal wait). Retry forces a fresh scrape past the cache.
+  const load = useCallback(async (force = false) => {
     setStatus('loading');
     setErrorMsg('');
     try {
-      const data = await fetchNearbyNurseries(plantName, lat, lng);
+      const data = await fetchNearbyNurseries(plantName, lat, lng, { force });
       setNurseries(data);
       setStatus('ready');
     } catch (err: any) {
@@ -285,7 +287,7 @@ export default function NurseriesScreen({ navigation, route }: Props) {
           <Ionicons name="cloud-offline-outline" size={40} color={t.color.textMuted} />
           <Text style={s.stateTitle}>Couldn’t reach the nursery service</Text>
           <Text style={s.stateText}>{errorMsg}</Text>
-          <Pressable style={s.retryBtn} onPress={load} accessibilityRole="button">
+          <Pressable style={s.retryBtn} onPress={() => load(true)} accessibilityRole="button">
             <Ionicons name="refresh-outline" size={18} color={t.color.onPrimary} />
             <Text style={s.retryText}>Try again</Text>
           </Pressable>
