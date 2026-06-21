@@ -1,5 +1,26 @@
 # PlantAI — TODOs
 
+## Active: Real Nursery Data (replace mock NurseriesScreen with live scrape)
+
+**Spec:** `docs/superpowers/specs/2026-06-21-real-nursery-data-design.md`
+Backend API service; keys server-side; real Places identity + scraped price/stock;
+10km discovery radius → fallback to `nurseries_scraping_testing`; toggle reframed
+(Pick Up = local, Deliver = ship-to-home). Future backend host: AWS.
+
+- [ ] **Plan 1 — Backend Nursery API:** `docs/superpowers/plans/2026-06-21-nursery-backend-api.md`
+  - `places.ts` rich field mask + `resolvePhotoUrl`; `scraper/pipeline.ts` `runNurserySearch`
+    (DI seam, 10km, empty-discovery + ship-to-home fallbacks); `server/index.ts`
+    (`GET /api/nurseries`); refactor dashboard onto the shared pipeline; Dockerfile.
+- [ ] **Plan 2 — App Integration:** *(to be written)*
+  - `Nursery` type changes; `fetchNearbyNurseries()` HTTP call; `NurseriesScreen`
+    self-fetch + loading/empty/error states; `DiagnosisScreen` trim;
+    `EXPO_PUBLIC_API_BASE_URL`.
+
+**Root cause this replaces:** app shows static `assets/nurseries.json` via
+`loadNearbyNurseries()` — never scrapes (hence the 11889km distances + stock photos).
+
+---
+
 ## Phase 2 (after demo validation)
 
 ### In-app live nursery discovery (Places → scrape)
