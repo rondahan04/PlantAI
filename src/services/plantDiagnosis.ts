@@ -1,3 +1,4 @@
+import { File } from 'expo-file-system';
 import { PlantDiagnosis, Treatment } from '../types';
 
 const PLANTNET_URL = 'https://my-api.plantnet.org/v2/identify/all';
@@ -26,12 +27,12 @@ async function identifyWithPlantNet(
   imageUri: string,
   apiKey: string
 ): Promise<PlantNetResult> {
+  // Expo's global fetch is the winter (WinterCG) implementation, which only
+  // accepts string/Blob/File FormData parts — NOT React Native's {uri,name,type}
+  // shape (that throws "Unsupported FormDataPart implementation"). expo-file-system's
+  // File implements Blob, so it appends correctly and streams the real bytes.
   const formData = new FormData();
-  formData.append('images', {
-    uri: imageUri,
-    name: 'plant.jpg',
-    type: 'image/jpeg',
-  } as any);
+  formData.append('images', new File(imageUri));
   formData.append('organs', 'auto');
 
   const response = await fetch(
