@@ -1,4 +1,5 @@
 import { File } from 'expo-file-system';
+import { readAsStringAsync } from 'expo-file-system/legacy';
 import { PlantDiagnosis, Treatment } from '../types';
 
 const PLANTNET_URL = 'https://my-api.plantnet.org/v2/identify/all';
@@ -69,11 +70,21 @@ interface HealthAssessment {
   canBeSaved: boolean;
 }
 
+/*
+ * Photo-based health assessment. PlantNet has already identified the species;
+ * we trust that name and send the user's actual photo to GPT-5.5 (vision) so it
+ * diagnoses THIS plant — visible disease, pests, deficiencies — rather than
+ * giving generic by-name care tips. The image is inlined as a base64 data URL
+ * (a local file:// URI can't be a public URL OpenAI could fetch).
+ */
 async function assessHealthWithOpenAI(
+  imageUri: string,
   commonName: string,
   scientificName: string,
   apiKey: string
 ): Promise<HealthAssessment> {
+  const base64 = await readAsStringAsync(imageUri, { encoding: 'base64' });
+
   const response = await fetch(OPENAI_URL, {
     method: 'POST',
     headers: {
@@ -85,7 +96,10 @@ async function assessHealthWithOpenAI(
       messages: [
         {
           role: 'user',
-          content: `You are a plant health expert. For ${commonName} (${scientificName}), return a JSON health assessment in this exact shape:
+          content: [
+            {
+              type: 'text',
+              text: `You are a plant pathologist. The plant in this photo has been identified as ${commonName} (${scientificName}) — trust that identification and do NOT re-identify the species. Examine the photo and diagnose the health of THIS specific plant: look for disease, pests, nutrient deficiency, over/under-watering, or damage visible in the image. Base every issue on what you can actually see. If the plant looks healthy, say so. Return a JSON health assessment in this exact shape:
 {
   "condition": "healthy",
   "conditionLabel": "Healthy",
@@ -96,12 +110,17 @@ async function assessHealthWithOpenAI(
   "description": "string (max 180 chars)",
   "canBeSaved": true
 }
-condition must be one of: healthy, mild, moderate, severe, critical.
-List 2-3 common care tips as treatments. Return ONLY valid JSON.`,
+condition must be one of: healthy, mild, moderate, severe, critical, reflecting what you see in the photo. List each visible problem in "issues". Provide 2-3 treatments targeting those problems (or general care tips if healthy). Return ONLY valid JSON.`,
+            },
+            {
+              type: 'image_url',
+              image_url: { url: `data:image/jpeg;base64,${base64}` },
+            },
+          ],
         },
       ],
       response_format: { type: 'json_object' },
-      max_completion_tokens: 500,
+      max_completion_tokens: 800,
     }),
   });
 
@@ -125,7 +144,7 @@ export async function diagnosePlant(
     imageUri,
     plantNetKey
   );
-  const health = await assessHealthWithOpenAI(commonName, scientificName, openAiKey);
+  const health = await assessHealthWithOpenAI(imageUri, commonName, scientificName, openAiKey);
 
   return {
     plantName: commonName,
