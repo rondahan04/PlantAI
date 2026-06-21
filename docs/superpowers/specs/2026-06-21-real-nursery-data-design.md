@@ -36,8 +36,10 @@ DiagnosisScreen → GPS → navigate Nurseries { plantName, lat, lng, mode }
 NurseriesScreen → fetch GET {API_BASE}/api/nurseries?plant=&lat=&lng=
         ↓  backend, keys server-side
   runNurserySearch({ plantName, lat, lng })
-    1. discoverNurseries() — Places Text Search, WIDE field mask
+    1. discoverNurseries() — Places Text Search, radius = 10km, WIDE field mask
        (+ rating, userRatingCount, regularOpeningHours, nationalPhoneNumber, photos)
+       → if 0 nurseries with a website are found within 10km, fall back to the
+         curated URL list in `nurseries_scraping_testing` (offline seed set)
     2. per website → fetchSearchMarkdown (Firecrawl/Tavily) → extractAndVerifyPlants
        → price + in_stock for the queried plant
     3. national ship-to-home fallback when no local stock (existing logic)
@@ -53,10 +55,12 @@ NurseriesScreen → fetch GET {API_BASE}/api/nurseries?plant=&lat=&lng=
 ### 1. `scraper/pipeline.ts` (new)
 Extract the orchestration currently inline in `dashboard/server.ts` into a
 reusable `runNurserySearch({ plantName, lat, lng, radius? })` that returns
-**nursery-grouped** results (not flat product rows). Both `dashboard/server.ts`
-and the new API server import it — no duplicated logic. Encapsulates: Places
-discovery, per-site scrape, ship-to-home fallback, dedup, mode classification,
-result assembly.
+**nursery-grouped** results (not flat product rows). `radius` defaults to
+**10000m (10km)**. Both `dashboard/server.ts` and the new API server import it —
+no duplicated logic. Encapsulates: Places discovery, **empty-discovery fallback
+to the `nurseries_scraping_testing` URL list** (when Places finds 0 sites within
+the radius), per-site scrape, ship-to-home fallback (no stock), dedup, mode
+classification, result assembly.
 
 ### 2. `server/index.ts` (new)
 Minimal Node `http` server (same style as the existing dashboard):
