@@ -18,20 +18,20 @@ export interface Treatment {
 export interface Nursery {
   id: string;
   name: string;
-  distance: string;
-  distanceKm: number;
-  rating: number;
-  reviewCount: number;
+  website: string;
   address: string;
-  hasPlant: boolean;
-  plantPrice: string;
-  deliveryAvailable: boolean;
-  deliveryTime: string;
-  deliveryFee: string;
-  pickupAvailable: boolean;
-  hours: string;
-  phone: string;
-  image: string;
+  distance: string; // formatted client-side from distanceKm ('' if unknown)
+  distanceKm: number; // Infinity when coordinates are unknown (fallback list)
+  hasPlant: boolean; // a real in-stock product was scraped
+  inStockKnown: boolean; // exact listing (vs an LLM estimate)
+  plantPrice: string; // '₪XX' or '—'
+  availabilityNote?: string; // estimate text when inStockKnown is false
+  shipsToHome: boolean; // national ship-to-home option (vs local store)
+  rating?: number;
+  reviewCount?: number;
+  hours?: string;
+  phone?: string;
+  image?: string;
   latitude: number;
   longitude: number;
 }
@@ -47,7 +47,8 @@ export type RootStackParamList = {
   };
   Nurseries: {
     plantName: string;
-    nurseries: Nursery[];
+    lat: number;
+    lng: number;
     mode: DeliveryMode;
   };
 };

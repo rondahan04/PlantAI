@@ -15,7 +15,6 @@ import * as Location from 'expo-location';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, DeliveryMode } from '../types';
-import { loadNearbyNurseries } from '../services/nurseryService';
 import { Theme, useTheme } from '../theme';
 
 // Tel Aviv center — used as fallback when location permission is denied
@@ -84,8 +83,14 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
     } finally {
       setFindingNurseries(false);
     }
-    const nurseries = loadNearbyNurseries(diagnosis.plantName, lat, lng);
-    navigation.navigate('Nurseries', { plantName: diagnosis.plantName, nurseries, mode: deliveryMode });
+    // NurseriesScreen fetches live data itself (the scrape takes ~30-60s and
+    // needs its own loading state), so we only pass the query params here.
+    navigation.navigate('Nurseries', {
+      plantName: diagnosis.plantName,
+      lat,
+      lng,
+      mode: deliveryMode,
+    });
   };
 
   return (

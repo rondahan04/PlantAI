@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Image, Animated, Linking, Alert } from 'react-native';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, Animated, Linking, Alert, ActivityIndicator } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, Nursery, DeliveryMode } from '../types';
 import { Theme, useTheme } from '../theme';
+import { fetchNearbyNurseries } from '../services/nurseryService';
 
 type Styles = ReturnType<typeof makeStyles>;
 
@@ -14,6 +15,14 @@ type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Nurseries'>;
   route: RouteProp<RootStackParamList, 'Nurseries'>;
 };
+
+type Status = 'loading' | 'ready' | 'error';
+
+// A nursery is "deliverable" if it ships to home or has a confirmed in-stock
+// listing; "pickupable" if it has a real local location (finite distance).
+const isDeliverable = (n: Nursery) => n.shipsToHome || n.inStockKnown;
+const isPickupable = (n: Nursery) => Number.isFinite(n.distanceKm);
+const hasCoords = (n: Nursery) => n.latitude !== 0 && n.longitude !== 0;
 
 function StarRating({ rating, t, s }: { rating: number; t: Theme; s: Styles }) {
   return (
@@ -50,26 +59,33 @@ function NurseryCard({
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Staggered entrance (~80ms per card).
     Animated.parallel([
       Animated.timing(slideAnim, { toValue: 0, duration: 350, delay: index * 80, useNativeDriver: true }),
       Animated.timing(fadeAnim, { toValue: 1, duration: 350, delay: index * 80, useNativeDriver: true }),
     ]).start();
   }, []);
 
-  const isAvailable = mode === 'delivery' ? nursery.deliveryAvailable : nursery.pickupAvailable;
+  const isAvailable = mode === 'delivery' ? isDeliverable(nursery) : isPickupable(nursery);
 
   return (
     <Animated.View style={[s.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
       <View style={s.cardImageWrap}>
-        <Image source={{ uri: nursery.image }} style={s.cardImage} />
-        <View style={s.distanceBadge}>
-          <Ionicons name="location-outline" size={12} color={t.color.foreground} />
-          <Text style={s.distanceText}>{nursery.distance}</Text>
-        </View>
-        {index === 0 && (
+        {nursery.image ? (
+          <Image source={{ uri: nursery.image }} style={s.cardImage} />
+        ) : (
+          <View style={[s.cardImage, s.imagePlaceholder]}>
+            <Ionicons name="leaf-outline" size={36} color={t.color.primary} />
+          </View>
+        )}
+        {!!nursery.distance && (
+          <View style={s.distanceBadge}>
+            <Ionicons name="location-outline" size={12} color={t.color.foreground} />
+            <Text style={s.distanceText}>{nursery.distance}</Text>
+          </View>
+        )}
+        {index === 0 && nursery.hasPlant && (
           <View style={s.closestBadge}>
-            <Text style={s.closestText}>Closest</Text>
+            <Text style={s.closestText}>In stock</Text>
           </View>
         )}
       </View>
@@ -77,52 +93,64 @@ function NurseryCard({
       <View style={s.cardContent}>
         <View style={s.cardHeader}>
           <View style={s.cardTitleWrap}>
-            <Text style={s.cardName}>{nursery.name}</Text>
-            <StarRating rating={nursery.rating} t={t} s={s} />
-            <Text style={s.reviewCount}>({nursery.reviewCount} reviews)</Text>
+            <Text style={s.cardName} numberOfLines={2}>{nursery.name}</Text>
+            {typeof nursery.rating === 'number' && (
+              <>
+                <StarRating rating={nursery.rating} t={t} s={s} />
+                {typeof nursery.reviewCount === 'number' && (
+                  <Text style={s.reviewCount}>({nursery.reviewCount} reviews)</Text>
+                )}
+              </>
+            )}
           </View>
-          <View style={s.priceTag}>
-            <Text style={s.priceText}>{nursery.plantPrice}</Text>
-          </View>
+          {nursery.inStockKnown ? (
+            <View style={s.priceTag}>
+              <Text style={s.priceText}>{nursery.plantPrice}</Text>
+            </View>
+          ) : null}
         </View>
 
-        <View style={s.metaRow}>
-          <Ionicons name="home-outline" size={13} color={t.color.textMuted} />
-          <Text style={s.metaText}>{nursery.address}</Text>
-        </View>
-        <View style={s.metaRow}>
-          <Ionicons name="time-outline" size={13} color={t.color.textMuted} />
-          <Text style={s.metaText}>{nursery.hours}</Text>
-        </View>
+        {!!nursery.address && (
+          <View style={s.metaRow}>
+            <Ionicons name="home-outline" size={13} color={t.color.textMuted} />
+            <Text style={s.metaText} numberOfLines={1}>{nursery.address}</Text>
+          </View>
+        )}
+        {!!nursery.hours && (
+          <View style={s.metaRow}>
+            <Ionicons name="time-outline" size={13} color={t.color.textMuted} />
+            <Text style={s.metaText} numberOfLines={1}>{nursery.hours}</Text>
+          </View>
+        )}
 
-        {mode === 'delivery' ? (
-          nursery.deliveryAvailable ? (
-            <View style={s.infoPill}>
-              <Ionicons name="rocket-outline" size={14} color={t.color.primary} />
-              <Text style={s.infoPillText}>Delivery in {nursery.deliveryTime} · {nursery.deliveryFee} fee</Text>
-            </View>
-          ) : (
-            <View style={[s.infoPill, s.infoPillWarn]}>
-              <Ionicons name="warning-outline" size={14} color={t.color.warning} />
-              <Text style={[s.infoPillText, { color: t.color.warning }]}>No delivery — pickup only</Text>
-            </View>
-          )
-        ) : (
+        {/* Availability: exact stock vs LLM estimate */}
+        {nursery.inStockKnown ? (
           <View style={s.infoPill}>
-            <Ionicons name="storefront-outline" size={14} color={t.color.primary} />
-            <Text style={s.infoPillText}>Ready for pickup today</Text>
+            <Ionicons name="checkmark-circle-outline" size={14} color={t.color.primary} />
+            <Text style={s.infoPillText}>In stock now{nursery.shipsToHome ? ' · ships to home' : ' · local pickup'}</Text>
+          </View>
+        ) : (
+          <View style={[s.infoPill, s.infoPillWarn]}>
+            <Ionicons name="help-circle-outline" size={14} color={t.color.warning} />
+            <Text style={[s.infoPillText, { color: t.color.warning }]} numberOfLines={2}>
+              {nursery.availabilityNote ?? 'Availability unknown — call to confirm'}
+            </Text>
           </View>
         )}
 
         <View style={s.actionRow}>
-          <Pressable style={s.actionSecondary} onPress={onCall} accessibilityRole="button" accessibilityLabel="Call nursery">
-            <Ionicons name="call-outline" size={16} color={t.color.foreground} />
-            <Text style={s.actionSecondaryText}>Call</Text>
-          </Pressable>
-          <Pressable style={s.actionSecondary} onPress={onDirections} accessibilityRole="button" accessibilityLabel="Directions">
-            <Ionicons name="navigate-outline" size={16} color={t.color.foreground} />
-            <Text style={s.actionSecondaryText}>Directions</Text>
-          </Pressable>
+          {!!nursery.phone && (
+            <Pressable style={s.actionSecondary} onPress={onCall} accessibilityRole="button" accessibilityLabel="Call nursery">
+              <Ionicons name="call-outline" size={16} color={t.color.foreground} />
+              <Text style={s.actionSecondaryText}>Call</Text>
+            </Pressable>
+          )}
+          {hasCoords(nursery) && (
+            <Pressable style={s.actionSecondary} onPress={onDirections} accessibilityRole="button" accessibilityLabel="Directions">
+              <Ionicons name="navigate-outline" size={16} color={t.color.foreground} />
+              <Text style={s.actionSecondaryText}>Directions</Text>
+            </Pressable>
+          )}
           <Pressable
             style={({ pressed }) => [s.actionPrimary, !isAvailable && s.actionPrimaryDisabled, pressed && isAvailable && s.btnPressed]}
             onPress={isAvailable ? onOrder : undefined}
@@ -131,7 +159,7 @@ function NurseryCard({
             accessibilityState={{ disabled: !isAvailable }}
           >
             <Text style={s.actionPrimaryText}>
-              {mode === 'delivery' ? (isAvailable ? 'Order' : 'Pickup Only') : 'Reserve'}
+              {mode === 'delivery' ? (isAvailable ? 'Order' : 'Unavailable') : 'Visit Store'}
             </Text>
           </Pressable>
         </View>
@@ -143,28 +171,47 @@ function NurseryCard({
 export default function NurseriesScreen({ navigation, route }: Props) {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
-  const { plantName, nurseries, mode: initialMode } = route.params;
+  const { plantName, lat, lng, mode: initialMode } = route.params;
   const [mode, setMode] = useState<DeliveryMode>(initialMode);
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  const [status, setStatus] = useState<Status>('loading');
+  const [nurseries, setNurseries] = useState<Nursery[]>([]);
+  const [errorMsg, setErrorMsg] = useState('');
   const headerFade = useRef(new Animated.Value(0)).current;
+
+  const load = useCallback(async () => {
+    setStatus('loading');
+    setErrorMsg('');
+    try {
+      const data = await fetchNearbyNurseries(plantName, lat, lng);
+      setNurseries(data);
+      setStatus('ready');
+    } catch (err: any) {
+      setErrorMsg(err?.name === 'AbortError' ? 'The search timed out. Try again.' : (err?.message ?? 'Something went wrong'));
+      setStatus('error');
+    }
+  }, [plantName, lat, lng]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   useEffect(() => {
     Animated.timing(headerFade, { toValue: 1, duration: 400, useNativeDriver: true }).start();
   }, []);
 
-  const deliveryCount = nurseries.filter((n) => n.deliveryAvailable).length;
-  const pickupCount = nurseries.filter((n) => n.pickupAvailable).length;
+  const deliveryCount = nurseries.filter(isDeliverable).length;
+  const pickupCount = nurseries.filter(isPickupable).length;
+  const mapNurseries = nurseries.filter(hasCoords);
 
   const handleOrder = (nursery: Nursery) => {
-    Alert.alert(
-      mode === 'delivery' ? 'Order placed' : 'Reserved',
-      mode === 'delivery'
-        ? `Your ${plantName} from ${nursery.name} is on its way! Expected in ${nursery.deliveryTime}.`
-        : `Your ${plantName} is reserved at ${nursery.name}. It'll be ready when you arrive!`,
-      [{ text: 'Great', style: 'default' }]
-    );
+    if (nursery.website) {
+      Linking.openURL(nursery.website);
+      return;
+    }
+    Alert.alert(nursery.name, 'No website available for this nursery.');
   };
-  const handleCall = (nursery: Nursery) => Linking.openURL(`tel:${nursery.phone}`);
+  const handleCall = (nursery: Nursery) => nursery.phone && Linking.openURL(`tel:${nursery.phone}`);
   const handleDirections = (nursery: Nursery) =>
     Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${nursery.latitude},${nursery.longitude}`);
 
@@ -177,11 +224,14 @@ export default function NurseriesScreen({ navigation, route }: Props) {
         </Pressable>
         <View style={s.headerCenter}>
           <Text style={s.headerTitle} numberOfLines={2}>{plantName}</Text>
-          <Text style={s.headerSub}>{nurseries.length} nurseries nearby</Text>
+          <Text style={s.headerSub}>
+            {status === 'ready' ? `${nurseries.length} nurseries nearby` : status === 'loading' ? 'Searching…' : 'Search failed'}
+          </Text>
         </View>
         <Pressable
           style={s.viewToggleBtn}
           onPress={() => setViewMode(viewMode === 'list' ? 'map' : 'list')}
+          disabled={status !== 'ready' || mapNurseries.length === 0}
           accessibilityRole="button"
           accessibilityLabel={viewMode === 'list' ? 'Show map' : 'Show list'}
         >
@@ -189,76 +239,116 @@ export default function NurseriesScreen({ navigation, route }: Props) {
         </Pressable>
       </Animated.View>
 
-      {/* Mode toggle */}
-      <Animated.View style={[s.modeToggle, { opacity: headerFade }]}>
-        {(['delivery', 'pickup'] as DeliveryMode[]).map((m) => {
-          const active = mode === m;
-          const count = m === 'delivery' ? deliveryCount : pickupCount;
-          return (
-            <Pressable
-              key={m}
-              style={[s.modeBtn, active && s.modeBtnActive]}
-              onPress={() => setMode(m)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-            >
-              <Ionicons
-                name={m === 'delivery' ? 'rocket-outline' : 'storefront-outline'}
-                size={16}
-                color={active ? t.color.primary : t.color.textMuted}
-              />
-              <Text style={[s.modeBtnText, active && s.modeBtnTextActive]}>
-                {m === 'delivery' ? 'Deliver Today' : 'Pick Up'}
-              </Text>
-              <View style={[s.modeCount, active && s.modeCountActive]}>
-                <Text style={[s.modeCountText, active && s.modeCountTextActive]}>{count}</Text>
-              </View>
-            </Pressable>
-          );
-        })}
-      </Animated.View>
+      {/* Mode toggle (only when results exist) */}
+      {status === 'ready' && nurseries.length > 0 && (
+        <Animated.View style={[s.modeToggle, { opacity: headerFade }]}>
+          {(['delivery', 'pickup'] as DeliveryMode[]).map((m) => {
+            const active = mode === m;
+            const count = m === 'delivery' ? deliveryCount : pickupCount;
+            return (
+              <Pressable
+                key={m}
+                style={[s.modeBtn, active && s.modeBtnActive]}
+                onPress={() => setMode(m)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+              >
+                <Ionicons
+                  name={m === 'delivery' ? 'rocket-outline' : 'storefront-outline'}
+                  size={16}
+                  color={active ? t.color.primary : t.color.textMuted}
+                />
+                <Text style={[s.modeBtnText, active && s.modeBtnTextActive]}>
+                  {m === 'delivery' ? 'Deliver Today' : 'Pick Up'}
+                </Text>
+                <View style={[s.modeCount, active && s.modeCountActive]}>
+                  <Text style={[s.modeCountText, active && s.modeCountTextActive]}>{count}</Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </Animated.View>
+      )}
 
-      {viewMode === 'map' ? (
-        <MapView
-          style={s.map}
-          initialRegion={{
-            latitude: nurseries[0]?.latitude ?? 32.0853,
-            longitude: nurseries[0]?.longitude ?? 34.7818,
-            latitudeDelta: 0.12,
-            longitudeDelta: 0.12,
-          }}
-        >
-          {nurseries.map((nursery) => (
-            <Marker
-              key={nursery.id}
-              coordinate={{ latitude: nursery.latitude, longitude: nursery.longitude }}
-              title={nursery.name}
-              description={`${nursery.distance} · ${nursery.plantPrice}${nursery.hasPlant ? ' · In stock' : ''}`}
-              pinColor={nursery.hasPlant ? t.color.primary : t.color.textMuted}
-              onCalloutPress={() => handleDirections(nursery)}
-            />
-          ))}
-        </MapView>
-      ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.list}>
-          {nurseries.map((nursery, i) => (
-            <NurseryCard
-              key={nursery.id}
-              nursery={nursery}
-              mode={mode}
-              index={i}
-              t={t}
-              s={s}
-              onOrder={() => handleOrder(nursery)}
-              onCall={() => handleCall(nursery)}
-              onDirections={() => handleDirections(nursery)}
-            />
-          ))}
-          <Pressable style={s.scanMoreBtn} onPress={() => navigation.navigate('Home')} accessibilityRole="button">
-            <Ionicons name="camera-outline" size={18} color={t.color.primary} />
-            <Text style={s.scanMoreText}>Diagnose Another Plant</Text>
+      {/* Loading */}
+      {status === 'loading' && (
+        <View style={s.centerFill}>
+          <ActivityIndicator size="large" color={t.color.primary} />
+          <Text style={s.stateTitle}>Searching nearby nurseries</Text>
+          <Text style={s.stateText}>Discovering shops within 10km and checking live stock for {plantName}. This can take 30–60 seconds.</Text>
+        </View>
+      )}
+
+      {/* Error */}
+      {status === 'error' && (
+        <View style={s.centerFill}>
+          <Ionicons name="cloud-offline-outline" size={40} color={t.color.textMuted} />
+          <Text style={s.stateTitle}>Couldn’t reach the nursery service</Text>
+          <Text style={s.stateText}>{errorMsg}</Text>
+          <Pressable style={s.retryBtn} onPress={load} accessibilityRole="button">
+            <Ionicons name="refresh-outline" size={18} color={t.color.onPrimary} />
+            <Text style={s.retryText}>Try again</Text>
           </Pressable>
-        </ScrollView>
+        </View>
+      )}
+
+      {/* Empty */}
+      {status === 'ready' && nurseries.length === 0 && (
+        <View style={s.centerFill}>
+          <Ionicons name="leaf-outline" size={40} color={t.color.textMuted} />
+          <Text style={s.stateTitle}>No nurseries found nearby</Text>
+          <Text style={s.stateText}>We couldn’t find nurseries near you stocking {plantName}. Try again later.</Text>
+          <Pressable style={s.retryBtn} onPress={() => navigation.navigate('Home')} accessibilityRole="button">
+            <Ionicons name="camera-outline" size={18} color={t.color.onPrimary} />
+            <Text style={s.retryText}>Diagnose Another Plant</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {/* Results */}
+      {status === 'ready' && nurseries.length > 0 && (
+        viewMode === 'map' ? (
+          <MapView
+            style={s.map}
+            initialRegion={{
+              latitude: mapNurseries[0]?.latitude ?? lat,
+              longitude: mapNurseries[0]?.longitude ?? lng,
+              latitudeDelta: 0.12,
+              longitudeDelta: 0.12,
+            }}
+          >
+            {mapNurseries.map((nursery) => (
+              <Marker
+                key={nursery.id}
+                coordinate={{ latitude: nursery.latitude, longitude: nursery.longitude }}
+                title={nursery.name}
+                description={`${nursery.distance}${nursery.inStockKnown ? ` · ${nursery.plantPrice} · in stock` : ''}`}
+                pinColor={nursery.hasPlant ? t.color.primary : t.color.textMuted}
+                onCalloutPress={() => handleDirections(nursery)}
+              />
+            ))}
+          </MapView>
+        ) : (
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.list}>
+            {nurseries.map((nursery, i) => (
+              <NurseryCard
+                key={nursery.id}
+                nursery={nursery}
+                mode={mode}
+                index={i}
+                t={t}
+                s={s}
+                onOrder={() => handleOrder(nursery)}
+                onCall={() => handleCall(nursery)}
+                onDirections={() => handleDirections(nursery)}
+              />
+            ))}
+            <Pressable style={s.scanMoreBtn} onPress={() => navigation.navigate('Home')} accessibilityRole="button">
+              <Ionicons name="camera-outline" size={18} color={t.color.primary} />
+              <Text style={s.scanMoreText}>Diagnose Another Plant</Text>
+            </Pressable>
+          </ScrollView>
+        )
       )}
     </SafeAreaView>
   );
@@ -309,6 +399,21 @@ function makeStyles(t: Theme) {
     modeCountText: { ...t.type.caption, fontSize: 11, fontWeight: '700', color: t.color.textMuted },
     modeCountTextActive: { color: t.color.primary },
     list: { paddingHorizontal: t.space.xl, paddingBottom: t.space['2xl'], gap: t.space.lg },
+    centerFill: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: t.space['2xl'], gap: t.space.md },
+    stateTitle: { ...t.type.bodyStrong, fontSize: 17, fontWeight: '700', color: t.color.foreground, textAlign: 'center', marginTop: t.space.sm },
+    stateText: { ...t.type.label, fontWeight: '400', fontSize: 14, color: t.color.textSecondary, textAlign: 'center', lineHeight: 20 },
+    retryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: t.space.sm,
+      marginTop: t.space.md,
+      paddingHorizontal: t.space.xl,
+      paddingVertical: t.space.md,
+      borderRadius: t.radius.md,
+      backgroundColor: t.color.primary,
+      minHeight: 44,
+    },
+    retryText: { ...t.type.label, fontWeight: '700', fontSize: 14, color: t.color.onPrimary },
     card: {
       borderRadius: t.radius.xl,
       overflow: 'hidden',
@@ -319,6 +424,7 @@ function makeStyles(t: Theme) {
     },
     cardImageWrap: { height: 160, position: 'relative' },
     cardImage: { width: '100%', height: '100%' },
+    imagePlaceholder: { backgroundColor: t.color.primaryWash, alignItems: 'center', justifyContent: 'center' },
     distanceBadge: {
       position: 'absolute',
       bottom: t.space.sm,
