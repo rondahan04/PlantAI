@@ -129,7 +129,7 @@ export default function CameraScreen({ navigation }: Props) {
             <ActivityIndicator color={t.color.primary} size="large" style={{ marginVertical: t.space.lg }} />
             <Text style={s.analyzeTitle}>Analyzing your plant</Text>
             <Text style={s.analyzeDesc}>
-              Claude AI is examining the symptoms,{'\n'}identifying the species and condition...
+              We're examining the symptoms,{'\n'}identifying the species and condition...
             </Text>
           </View>
         </SafeAreaView>

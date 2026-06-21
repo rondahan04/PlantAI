@@ -113,7 +113,7 @@ export default function HomeScreen({ navigation }: Props) {
         </Animated.View>
 
         <Animated.View style={{ opacity: fadeAnim }}>
-          <Text style={s.bottomNote}>Powered by Claude AI · Works with 1000+ plant species</Text>
+          <Text style={s.bottomNote}>We diagnose 1000+ plant species · fast and accurate</Text>
         </Animated.View>
       </ScrollView>
     </SafeAreaView>
