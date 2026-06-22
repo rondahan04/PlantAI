@@ -19,10 +19,10 @@ import { Theme, useTheme } from '../theme';
 import { prefetchNearbyNurseries } from '../services/nurseryService';
 
 // Tel Aviv center — used as fallback when location permission is denied
-const FALLBACK_LAT = 32.0853;
-const FALLBACK_LNG = 34.7818;
+const FALLBACK_LAT = 32.1624;
+const FALLBACK_LNG = 34.8443;
 
-// Resolve the device location, falling back to Tel Aviv center when permission
+// Resolve the device location, falling back to Herzliya center when permission
 // is denied or GPS is unavailable.
 async function resolveCoords(): Promise<{ lat: number; lng: number }> {
   try {
