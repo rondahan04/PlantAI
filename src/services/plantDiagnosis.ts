@@ -1,13 +1,25 @@
-import { File } from 'expo-file-system';
 import { readAsStringAsync } from 'expo-file-system/legacy';
-import { PlantDiagnosis, Treatment } from '../types';
-
-const PLANTNET_URL = 'https://my-api.plantnet.org/v2/identify/all';
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
+import { PlantDiagnosis } from '../types';
+import { apiFetch, apiHeaders, readApiError } from '../lib/api';
 
 /*
- * Thrown when PlantNet returns 404 (no plant recognized) or returns no results.
- * CameraScreen catches this to show a user-friendly "try again" prompt.
+ * Diagnosis client (TODOS A3).
+ *
+ * The PlantNet and OpenAI calls used to live in this file, which meant both
+ * keys were compiled into the app bundle and shipped to everyone who ever
+ * received a build. They now live in server/diagnose.ts. This file uploads the
+ * photo and reads back a PlantDiagnosis.
+ *
+ * The error types below are unchanged on purpose: CameraScreen's
+ * `describeFailure` is the single place that decides failure copy, and moving
+ * the network work must not reopen the three-error-dialects problem (E9).
+ */
+
+const TIMEOUT_MS = 60_000;
+
+/*
+ * The identifier recognized no plant. This is about the photo, not about us,
+ * and retrying the same photo will not help.
  */
 export class NotAPlantError extends Error {
   constructor() {
@@ -17,8 +29,19 @@ export class NotAPlantError extends Error {
 }
 
 /*
- * Thrown when this build has no keys for the diagnosis pipeline. Nothing is
- * wrong with the user's photo and retrying will not help — the build is wrong.
+ * The photo is in a format the identifier cannot read. Retrying the same file
+ * will never work, so the app says so rather than blaming the service.
+ */
+export class UnsupportedImageError extends Error {
+  constructor() {
+    super('UNSUPPORTED_IMAGE');
+    this.name = 'UnsupportedImageError';
+  }
+}
+
+/*
+ * This build cannot reach a diagnosis backend at all — no API base URL. Nothing
+ * is wrong with the user's photo and retrying will not help; the build is wrong.
  */
 export class DiagnosisUnavailableError extends Error {
   constructor() {
@@ -28,218 +51,71 @@ export class DiagnosisUnavailableError extends Error {
 }
 
 /*
- * Thrown when a provider call fails or answers in a shape we can't use.
+ * The backend failed, timed out, or answered in a shape we can't use.
  *
- * `detail` is for the log only and must NEVER be shown to the user: provider
- * bodies have echoed request payloads and account state (a live 429 read
- * "You have no credits remaining. Add credits to continue..." — the user's
- * plant has nothing to do with our billing). `message` stays a stable code.
+ * `detail` is for the log ONLY and must NEVER be shown to the user. The server
+ * already strips provider text before answering (H3), so `detail` here is our
+ * own status code — but the rule stands at this layer too, because it is the
+ * rule that stopped "You have no credits remaining" from being shown to a
+ * person whose plant was dying.
  */
-export type DiagnosisProvider = 'plantnet' | 'openai';
-
 export class DiagnosisServiceError extends Error {
-  readonly provider: DiagnosisProvider;
   readonly detail: string;
 
-  constructor(provider: DiagnosisProvider, detail: string) {
+  constructor(detail: string) {
     super('DIAGNOSIS_SERVICE_ERROR');
     this.name = 'DiagnosisServiceError';
-    this.provider = provider;
     this.detail = detail;
-    console.warn(`[diagnosis] ${provider} failed: ${detail}`);
+    console.warn(`[diagnosis] ${detail}`);
   }
 }
 
-// ─── PlantNet ─────────────────────────────────────────────────────────────────
-
-interface PlantNetResult {
-  scientificName: string;
-  commonName: string;
-  confidence: number;
-}
-
-async function identifyWithPlantNet(
-  imageUri: string,
-  apiKey: string
-): Promise<PlantNetResult> {
-  // Expo's global fetch is the winter (WinterCG) implementation, which only
-  // accepts string/Blob/File FormData parts — NOT React Native's {uri,name,type}
-  // shape (that throws "Unsupported FormDataPart implementation"). expo-file-system's
-  // File implements Blob, so it appends correctly and streams the real bytes.
-  const formData = new FormData();
-  formData.append('images', new File(imageUri));
-  formData.append('organs', 'auto');
-
-  const response = await fetch(
-    `${PLANTNET_URL}?api-key=${apiKey}&nb-results=1&lang=en`,
-    { method: 'POST', body: formData }
+function isDiagnosis(value: unknown): value is PlantDiagnosis {
+  if (typeof value !== 'object' || value === null) return false;
+  const d = value as Record<string, unknown>;
+  return (
+    typeof d.plantName === 'string' &&
+    typeof d.condition === 'string' &&
+    typeof d.conditionLabel === 'string' &&
+    Array.isArray(d.issues) &&
+    Array.isArray(d.treatments) &&
+    typeof d.canBeSaved === 'boolean' &&
+    typeof d.confidence === 'number' &&
+    typeof d.description === 'string'
   );
-
-  if (response.status === 404) throw new NotAPlantError();
-
-  if (!response.ok) {
-    const errText = await response.text().catch(() => '');
-    throw new DiagnosisServiceError('plantnet', `${response.status} ${errText.slice(0, 300)}`);
-  }
-
-  const data = await response.json();
-  const top = data.results?.[0];
-  if (!top) throw new NotAPlantError();
-
-  return {
-    scientificName: top.species.scientificName ?? '',
-    commonName: top.species.commonNames?.[0] ?? top.species.scientificName,
-    confidence: Math.round(top.score * 100),
-  };
 }
 
-// ─── OpenAI health assessment ─────────────────────────────────────────────────
+export async function diagnosePlant(imageUri: string): Promise<PlantDiagnosis> {
+  if (!process.env.EXPO_PUBLIC_API_BASE_URL) throw new DiagnosisUnavailableError();
 
-interface HealthAssessment {
-  condition: PlantDiagnosis['condition'];
-  conditionLabel: string;
-  issues: string[];
-  treatments: Treatment[];
-  description: string;
-  canBeSaved: boolean;
-}
+  const imageBase64 = await readAsStringAsync(imageUri, { encoding: 'base64' });
 
-/*
- * Photo-based health assessment. PlantNet has already identified the species;
- * we trust that name and send the user's actual photo to GPT-5.5 (vision) so it
- * diagnoses THIS plant — visible disease, pests, deficiencies — rather than
- * giving generic by-name care tips. The image is inlined as a base64 data URL
- * (a local file:// URI can't be a public URL OpenAI could fetch).
- */
-async function assessHealthWithOpenAI(
-  imageUri: string,
-  commonName: string,
-  scientificName: string,
-  apiKey: string
-): Promise<HealthAssessment> {
-  const base64 = await readAsStringAsync(imageUri, { encoding: 'base64' });
-
-  const response = await fetch(OPENAI_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-5.5',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `You are a plant pathologist. The plant in this photo has been identified as ${commonName} (${scientificName}) — trust that identification and do NOT re-identify the species. Examine the photo and diagnose the health of THIS specific plant: look for disease, pests, nutrient deficiency, over/under-watering, or damage visible in the image. Base every issue on what you can actually see. If the plant looks healthy, say so. Return a JSON health assessment in this exact shape:
-{
-  "condition": "healthy",
-  "conditionLabel": "Healthy",
-  "issues": [],
-  "treatments": [
-    { "title": "string", "description": "string (max 100 chars)", "urgent": false }
-  ],
-  "description": "string (max 180 chars)",
-  "canBeSaved": true
-}
-condition must be one of: healthy, mild, moderate, severe, critical, reflecting what you see in the photo. List each visible problem in "issues". Provide 2-3 treatments targeting those problems (or general care tips if healthy). Return ONLY valid JSON.`,
-            },
-            {
-              type: 'image_url',
-              image_url: { url: `data:image/jpeg;base64,${base64}` },
-            },
-          ],
-        },
-      ],
-      response_format: { type: 'json_object' },
-      max_completion_tokens: 800,
-    }),
-  });
-
-  if (!response.ok) {
-    const errText = await response.text().catch(() => '');
-    throw new DiagnosisServiceError('openai', `${response.status} ${errText.slice(0, 300)}`);
-  }
-
-  // Three separate failure modes used to live on one unguarded line: empty
-  // `choices` threw a TypeError, a refusal threw a SyntaxError, and valid JSON
-  // of the wrong shape rendered a blank screen with no error anywhere. Validate
-  // the shape, not just the parse.
-  const data = await response.json();
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content !== 'string') {
-    throw new DiagnosisServiceError('openai', `no message content: ${JSON.stringify(data).slice(0, 300)}`);
-  }
-
-  let parsed: unknown;
+  let res: Response;
   try {
-    parsed = JSON.parse(content);
-  } catch {
-    throw new DiagnosisServiceError('openai', `content was not JSON: ${content.slice(0, 300)}`);
+    res = await apiFetch('/api/diagnose', {
+      method: 'POST',
+      headers: apiHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ imageBase64 }),
+      timeoutMs: TIMEOUT_MS,
+    });
+  } catch (err: unknown) {
+    // AbortError (our timeout) and a genuine network failure are the same thing
+    // to the user: the service did not answer.
+    throw new DiagnosisServiceError(err instanceof Error ? err.message : String(err));
   }
 
-  if (!isHealthAssessment(parsed)) {
-    throw new DiagnosisServiceError('openai', `assessment failed validation: ${content.slice(0, 300)}`);
+  if (!res.ok) {
+    const { error } = await readApiError(res);
+    if (error === 'not_a_plant') throw new NotAPlantError();
+    if (error === 'unsupported_image') throw new UnsupportedImageError();
+    throw new DiagnosisServiceError(`${res.status} ${error}`);
   }
 
-  return parsed;
-}
-
-const CONDITIONS: readonly string[] = ['healthy', 'mild', 'moderate', 'severe', 'critical'];
-
-function isTreatment(value: unknown): value is Treatment {
-  if (typeof value !== 'object' || value === null) return false;
-  const t = value as Record<string, unknown>;
-  return (
-    typeof t.title === 'string' &&
-    typeof t.description === 'string' &&
-    typeof t.urgent === 'boolean'
-  );
-}
-
-function isHealthAssessment(value: unknown): value is HealthAssessment {
-  if (typeof value !== 'object' || value === null) return false;
-  const a = value as Record<string, unknown>;
-  return (
-    typeof a.condition === 'string' &&
-    CONDITIONS.includes(a.condition) &&
-    typeof a.conditionLabel === 'string' &&
-    Array.isArray(a.issues) &&
-    a.issues.every((i) => typeof i === 'string') &&
-    Array.isArray(a.treatments) &&
-    a.treatments.every(isTreatment) &&
-    typeof a.description === 'string' &&
-    typeof a.canBeSaved === 'boolean'
-  );
-}
-
-// ─── Public API ───────────────────────────────────────────────────────────────
-
-export async function diagnosePlant(
-  imageUri: string,
-  plantNetKey: string,
-  openAiKey: string
-): Promise<PlantDiagnosis> {
-  if (!plantNetKey || !openAiKey) throw new DiagnosisUnavailableError();
-
-  const { scientificName, commonName, confidence } = await identifyWithPlantNet(
-    imageUri,
-    plantNetKey
-  );
-  const health = await assessHealthWithOpenAI(imageUri, commonName, scientificName, openAiKey);
-
-  return {
-    plantName: commonName,
-    condition: health.condition,
-    conditionLabel: health.conditionLabel,
-    issues: health.issues,
-    treatments: health.treatments,
-    canBeSaved: health.canBeSaved,
-    confidence,
-    description: health.description,
-  };
+  // Valid JSON of the wrong shape used to render a blank screen with no error
+  // anywhere. Validate the shape, not just the parse.
+  const data = await res.json().catch(() => null);
+  if (!isDiagnosis(data)) throw new DiagnosisServiceError('response failed shape validation');
+  return data;
 }
 
 /*

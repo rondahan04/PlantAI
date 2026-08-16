@@ -23,13 +23,28 @@ export type Platform = 'shopify' | 'woo' | 'wix' | 'unknown';
 
 // --- env -------------------------------------------------------------------
 
-/* Load a .env file into process.env (no dotenv dependency). */
+/*
+ * Load a .env file into process.env (no dotenv dependency).
+ *
+ * A REAL ENVIRONMENT VARIABLE ALWAYS WINS. This used to overwrite, which meant
+ * `GATE_MODE=enforce node server/index.ts` silently ran in log mode because
+ * .env said log — the flag you set to protect the API was the one thing that
+ * could not take effect. It also matches dotenv's own default and how every
+ * host works: the file is the fallback for local dev, the environment is the
+ * truth in production.
+ *
+ * Comment lines are skipped rather than parsed, because prose containing an '='
+ * would otherwise be read as a key/value pair.
+ */
 export function loadEnv(envPath: string): void {
   if (!fs.existsSync(envPath)) return;
   for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
-    const [key, ...rest] = line.split('=');
-    if (key && rest.length) {
-      process.env[key.trim()] = rest.join('=').trim().replace(/^"|"$/g, '');
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const [key, ...rest] = trimmed.split('=');
+    const name = key?.trim();
+    if (name && rest.length && process.env[name] === undefined) {
+      process.env[name] = rest.join('=').trim().replace(/^"|"$/g, '');
     }
   }
 }

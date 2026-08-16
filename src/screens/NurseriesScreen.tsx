@@ -30,16 +30,18 @@ const GENERIC_FAILURE: NurseryFailure = {
 };
 
 /*
- * Maps a thrown error to what the user reads. The timeout case is the common
- * one today — the scrape regularly outruns the client's 90s abort — so it says
- * so plainly rather than implying the service is down.
+ * Maps a thrown error to what the user reads. Since E12 the search runs as a
+ * server-side job the app polls, so a timeout here means the scrape genuinely
+ * ran past ten minutes rather than that we hung up early on work that was still
+ * going. Retrying is still the right suggestion — the second run reuses the
+ * platform detection the first one learned.
  */
 function describeFailure(err: unknown): NurseryFailure {
   const name = err instanceof Error ? err.name : '';
   if (name === 'AbortError' || name === 'TimeoutError') {
     return {
       title: 'The search took too long',
-      body: 'Checking live stock across nearby nurseries can outrun our time limit. Trying again often works.',
+      body: 'Checking live stock across nearby nurseries can run past our limit. Trying again often works.',
     };
   }
   return GENERIC_FAILURE;

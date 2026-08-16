@@ -38,66 +38,76 @@ Reviewed by `/plan-ceo-review` and `/plan-eng-review` on 2026-08-11.
 | Milestone | Contents | Done means |
 |-----------|----------|------------|
 | **M1** | P0 + A1-A4, T28, T30 | Someone other than Ron can use the app; no keys leaked; bill is bounded |
+| ↳ **M1 status, 2026-08-16** | A1 ✅ A3 ✅ A5 ✅ E12 ✅ H3 ✅ H7 ✅ O1 ✅ · A2 code ✅ / deploy pending · A4 pending · **P0 key rotation pending** | All code written, typechecked, 80 tests green, both endpoints verified live. **Everything remaining needs a console login, not a keystroke in this repo.** |
 | **M2** | B1.1-B1.4, T23, T24, T26, E10 | Plants persist across launches; both data-loss gaps closed and tested |
 | **M3** | E1, E9, E4, E5, hygiene, observability | The polish pass |
 
 ### A — Ship the loop (nothing below matters until this lands) — M1
 
-- [ ] **A1. Gate `/api/nurseries` before it goes public.** ← ships *with* the deploy, not after
-  **Why:** the endpoint has no auth, no rate limit, and `Access-Control-Allow-Origin: *`
-  (`server/index.ts:73`). Every call spends money: 1 Places Enterprise search + N
-  Firecrawl scrapes + N OpenAI passes. Public + unbounded = an open faucet.
-  **How:** shared-secret header the app sends; per-IP rate limit; hard daily request
-  cap returning 503 past the ceiling. **Decision D3 (CEO) → option A.**
-  ⚠️ **The shared secret is a speed bump, not authentication** (eng review D3). It has
-  to reach the app via `EXPO_PUBLIC_*`, which is the exact mechanism that leaked the
-  OpenAI key — anyone with the bundle can extract it. **The hard daily cap is what
-  actually bounds your bill.** Write that down in the code comment so a future you
-  doesn't build something on top of this assuming the endpoint is authenticated.
-  **Deploy order:** ship the gate in **log-only mode** first, let A4's `eas update`
-  propagate, *then* flip to enforcing. Enforcing first locks you out of your own API.
-  **Effort:** S (human ~3h / CC ~25m). **Blocks:** A2.
+- [x] **A1. Gate `/api/nurseries` before it goes public.** — code done 2026-08-16, `server/gate.ts`.
+  Shared-secret header (`x-plantai-key`), per-IP sliding-window burst limit, hard
+  daily cap returning 503. **Decision D3 (CEO) → option A.** Also closed here:
+  `Access-Control-Allow-Origin: *` is gone — the header is emitted only when
+  `CORS_ORIGIN` is set, and the native app never needed it.
+  ⚠️ **The shared secret is a speed bump, not authentication** (eng review D3) — it
+  reaches the app via `EXPO_PUBLIC_API_SECRET`, the exact mechanism that leaked the
+  OpenAI key. **The hard daily cap is what actually bounds the bill.** That is
+  written in caps at the top of `server/gate.ts`.
+  **Ordering built in:** the cap is checked *before* the secret, so a valid key
+  cannot bust the bill; `GATE_MODE` defaults to `log` and any value other than
+  exactly `enforce` stays log, so a typo fails safe. Polling is exempt from both
+  the cap and the burst limit — 160 polls on one job would otherwise rate-limit the
+  client out of the result it paid for.
+  **Verified:** 14 tests in `server/gate.test.ts` + live (401 on missing/wrong
+  secret, 429 past the burst limit, 10 consecutive polls unaffected).
+  🔴 **Still open, and it is yours:** flip to enforcing only *after* A4's
+  `eas update` propagates — `fly secrets set GATE_MODE=enforce`.
+  **Also fixed here (O1):** `/health` now reports `{allowed, rejected, wouldReject,
+  cap, remaining}` for the day — the thing that tells you the cap is working.
 
-- [ ] **A2. `Dockerfile` + deploy the backend.**
-  **Why:** `EXPO_PUBLIC_API_BASE_URL` is a LAN IP — the app only works on Ron's Mac.
-  This gates every other item having a user.
-  🔴 **Hard requirement, verify before writing the Dockerfile:** the host must allow
-  request durations **over 90s**. `src/services/nurseryService.ts:13` sets
-  `TIMEOUT_MS = 90000`, but Fly / Railway / Render / Cloud Run default to a 30-60s cap
-  and return a generic 502. Result: the user waits 30s, gets a failure, and a scrape
-  that was nearly done is discarded. Fly.io and Cloud Run both allow longer timeouts
-  if you configure them explicitly. **Eng review D9 → option A.**
-  🔴 **Design review measured this and 90s is not enough either** (F1, 2026-08-15):
-  a real request logged `✔ 12 nurseries in 480187ms` — **eight minutes**. The client
-  aborted at 90s and showed a failure screen; the scrape then succeeded 5.5 minutes
-  later into nothing. There is no host timeout setting that rescues this. **E12's
-  async-job rewrite is a prerequisite for the nursery feature working at all, not a
-  later optimization.**
-  🔴 **Also (F6):** `.env:8` is `http://10.0.0.10:4000` while the dev machine is on
-  `10.0.0.6`. The app already breaks on your own Mac every time DHCP moves the IP,
-  and the UI reports it as "Couldn't reach the nursery service" — indistinguishable
-  from a real outage. Deploying fixes this permanently; until then it will keep
-  costing you 90 seconds per debugging session.
-  **Effort:** S. **Depends on:** A1.
+- [~] **A2. `Dockerfile` + deploy the backend.** — files written 2026-08-16, **deploy is yours.**
+  ✅ `Dockerfile` (node:26-alpine, non-root, no npm install — the server and scraper
+  import only node: builtins, so there is nothing to install), `.dockerignore` (keeps
+  `.env`, `src/`, and the 138 MB demo video out of the build context), `fly.toml`.
+  ✅ **The 90s host-timeout requirement is retired**, not satisfied: E12 landed, so no
+  single request runs longer than ~15s. **Eng review D9 → option B, early.**
+  ⚠️ **`auto_stop_machines = false` and `min_machines_running = 1` are load-bearing.**
+  Scrape jobs live in process memory with nobody polling them for stretches; a
+  machine suspended between polls loses every in-flight job and the money already
+  spent on it. This is the most expensive line in `fly.toml` to get wrong.
+  ✅ **F6 fixed:** `.env` now points at `10.0.0.6` (verified via `ipconfig getifaddr
+  en0`) and carries a comment saying it breaks on every DHCP move. Deploying retires
+  the value entirely.
+  🔴 **Yours to run:** `fly launch --no-deploy --copy-config --name plantai-api`,
+  `fly secrets set …` (all provider keys under their PLAIN names + `API_SHARED_SECRET`),
+  `fly deploy`. The commands are in the `fly.toml` header. **Depends on:** A1 ✅.
 
-- [ ] **A3. `POST /api/diagnose` — move PlantNet + OpenAI server-side.**
-  **Why:** removes all AI keys from the app bundle (closes the root cause of the P0 above).
-  **How:** mirror the `PipelineDeps` pattern from `scraper/pipeline.ts` —
-  `DiagnosisDeps { identify, classifyDisease, assessPhoto }` so provider swaps are
-  one-line.
-  ✅ **D6 already landed client-side in `b09a3d7`** (with A5): the unguarded
-  `JSON.parse(data.choices[0].message.content)` is now shape-validated via
-  `isHealthAssessment()`, and `DiagnosisServiceError` / `DiagnosisUnavailableError`
-  give named, logged failures. **Port these to the server rather than rewriting them** —
-  the validator and error types move as-is.
+- [x] **A3. `POST /api/diagnose` — move PlantNet + OpenAI server-side.** — done 2026-08-16.
+  `server/diagnose.ts` holds `DiagnosisDeps { identify, assessHealth }`, mirroring
+  `PipelineDeps`. **No provider key is read by app code any more** — `CameraScreen`'s
+  `PLANTNET_KEY` / `OPENAI_KEY` constants are deleted, so Expo no longer inlines
+  either into the bundle. `src/lib/api.ts` is the single place that knows the base
+  URL and the header.
+  ✅ D6 validator and error types **ported** from `b09a3d7`, not rewritten.
+  ✅ **Verified live end-to-end**, real photo → `Mini monstera (47%) moderate in
+  7741ms`, no key in the request from the app.
+  🔵 **Found while testing, worth knowing:** PlantNet checks the *bytes*, not the
+  filename, and `photos_for_testing/*.jpeg` are actually **WebP files with a .jpeg
+  extension**. The app never hit this because `expo-image-picker` re-encodes to real
+  JPEG on the way out. The server now sniffs the magic number and answers 415
+  `unsupported_image` with its own copy ("We can't read that image") rather than
+  reporting a file problem as "the plant service did not answer" — which is the
+  dishonest-error pattern E9 exists to remove.
   **Note:** this makes the server a single point of failure for diagnosis, which
-  currently works client-side whenever the phone has internet. Accepted trade — see A5.
-  **Effort:** M. **Depends on:** A2.
+  used to work client-side whenever the phone had internet. Accepted trade — see A5.
 
-- [ ] **A4. Repoint `EXPO_PUBLIC_API_BASE_URL` + `eas update`.**
+- [ ] **A4. Repoint `EXPO_PUBLIC_API_BASE_URL` + `eas update`.** ← **yours, and it is the gate on A1's enforce flip**
   **Why:** distribution. Absorbs the old "EAS Expo Go publish" item below.
   **Note:** existing Expo Go builds point at the LAN IP and will break. Expected.
-  **Effort:** S. **Depends on:** A2, A3.
+  **Now also carries `EXPO_PUBLIC_API_SECRET`** — until this update reaches installed
+  apps, `GATE_MODE` must stay `log`. Order: `fly deploy` → repoint → `eas update` →
+  `fly secrets set GATE_MODE=enforce`.
+  **Effort:** S. **Depends on:** A2 (deploy), A3 ✅.
 
 - [x] **A5. Delete `getMockDiagnosis` from the production bundle.** — done `b09a3d7`, 2026-08-16.
   Shipped ahead of A3, which F3 proved was safe. Also landed: named error types
@@ -220,7 +230,15 @@ Reviewed by `/plan-ceo-review` and `/plan-eng-review` on 2026-08-11.
   **Build this before E9** — it supplies the probabilities E9 displays.
   **Effort:** S. **Depends on:** A3.
 
-- [ ] **E9. Confidence honesty + real empty/error states.**
+- [x] **E9. Confidence honesty + real empty/error states.** — shipped `c7b6986`, 2026-08-16.
+  (This box was still unchecked while the work was already on `main`.) A3 kept the
+  contract it established: `describeFailure` in `CameraScreen` remains the single
+  place that decides failure copy, and the new server errors (`unsupported_image`,
+  backend-down) were added as branches there rather than as new dialects. The F9
+  repro still reproduces — the same photo came back as **Mini monstera at 47%** in
+  the A3 verification run — so the honest-confidence rendering has a live case to
+  keep proving itself against.
+  Original scope, kept for the record:
   **Why:** a confidently wrong diagnosis is worse than no diagnosis — it is the moment
   a user stops trusting the app, and trust is the whole premise of letting it manage
   their plants. Currently low PlantNet confidence renders identically to high.
@@ -263,10 +281,13 @@ Reviewed by `/plan-ceo-review` and `/plan-eng-review` on 2026-08-11.
   **Effort:** S.
 
 - [ ] **E10. Tests — storage layer first. — M2**
-  🔴 **Prerequisite, one line, do it first:** `package.json` runs
-  `node --test scraper/*.test.ts`. **That glob cannot see `src/`.** Every test you
-  write for the app would be silently skipped while `npm test` still reports green.
-  Widen it to cover `src/` and `server/` before writing a single test.
+  ✅ **Prerequisite half-done 2026-08-16:** the glob is now
+  `node --test scraper/*.test.ts server/*.test.ts` and 24 new server tests run under
+  it (80 total, all passing). 🔴 **`src/` is still not covered** — add it to the glob
+  before writing the first `PlantStore` test, or it will be silently skipped while
+  `npm test` reports green. Note `src/` tests need a runner that can handle JSX and
+  React Native imports, which `node --test` alone cannot; the storage layer is
+  deliberately plain TS behind `StorageDeps` so it does not need one.
   **Why:** zero app-side coverage today (codegraph: "no covering tests found").
   Storage is the one layer where a silent bug destroys user data rather than annoying
   someone, and a user who loses their plant history does not come back. `scraper/`
@@ -286,30 +307,40 @@ Reviewed by `/plan-ceo-review` and `/plan-eng-review` on 2026-08-11.
   directly, while `server/index.ts:28` uses a prefix-stripping `env()` helper. Three
   call sites, two conventions — **this inconsistency is why the Plant.id key sat
   unnoticed for two months.** Lift `env()` into `scraper/core.ts`. **Effort:** S.
+  ✅ **Partly addressed 2026-08-16, and it was hiding a live bug.** `loadEnv()` wrote
+  `process.env[key]` **unconditionally**, so the .env file overwrote real environment
+  variables. `GATE_MODE=enforce node server/index.ts` silently ran in log mode
+  because .env said `log` — the flag you set to protect the API was the one thing
+  that could not take effect. Found by testing the gate, not by reading the code.
+  `loadEnv` now skips a key that is already set (matching dotenv's default and how
+  every host behaves) and skips comment lines, which were being parsed as key/value
+  pairs whenever the prose contained an `=`. Production was never affected — there is
+  no .env in the container image — but every local test of the gate was.
 - [ ] **H2. Rename `nurseries_scraping_testing`** → `nurseries-fallback.txt`. The name
   says "testing"; it is load-bearing production config read at `server/index.ts:62`.
-- [ ] **H3. Stop returning raw `err.message` to clients** (`server/index.ts:105`).
-  Provider errors sometimes echo the request including auth headers. Generic message
-  out, detail to the log. **Effort:** S.
-  🔴 **The same leak exists client-side** (F4): `plantDiagnosis.ts:129` and `:48`
-  interpolate `errText.slice(0, 120)` straight into the message the user sees. Fix
-  both call sites in one pass — named error types out, provider detail to the log.
+- [x] **H3. Stop returning raw `err.message` to clients.** — done 2026-08-16.
+  `server/index.ts` now routes every failure through one `fail()` helper: a stable
+  code plus neutral prose to the client, the provider detail to the log with a
+  request id. Client-side (F4) the raw-interpolation call sites are gone with A3 —
+  the app reads the server's `error` code and maps it to its own copy.
+  Covered by a test: a job's serialized state must not contain provider text.
 - [x] **H4. `getMockDiagnosis`** — decided: delete from the production bundle. Now
   tracked as **A5** in M1, since it's coupled to A3 rather than a standalone cleanup.
 - [ ] **H5. Route table in `server/index.ts`.** Hand-rolled `if` chains are fine at two
   endpoints, a smell at four. Not worth a framework. **Depends on:** A3.
-- [ ] **H7. Evict the nursery cache `Map` by size, not only TTL.**
-  `src/services/nurseryService.ts:99` expires entries on read but never removes them
-  proactively, so a long session with many distinct searches grows it unbounded.
-  Small, but real. **Effort:** S.
+- [x] **H7. Evict the nursery cache `Map` by size, not only TTL.** — done 2026-08-16
+  while rewriting that file for E12. Expired entries are swept and the map is capped
+  at 20, oldest-first (Map preserves insertion order).
 - [ ] **H6. Accessibility on `NurseriesScreen`.** Star rating (`NurseriesScreen.tsx:27`)
   conveys rating visually only — needs `accessibilityLabel`. New list rows need ≥44pt
   touch targets.
 
 ### Observability (thin, but the billing one is not optional)
 
-- [ ] **O1. Request counter + spend visibility.** Ships with A1 — it is the only thing
-  that tells you the daily cap is doing its job. **Effort:** S.
+- [x] **O1. Request counter + spend visibility.** — shipped with A1, 2026-08-16.
+  `GET /health` returns `{gate: {day, allowed, rejected, wouldReject, cap, remaining},
+  jobs}`. `wouldReject` is the one to watch while `GATE_MODE=log`: it is the count of
+  requests enforcing *would* have blocked, which is how you know it is safe to flip.
 - [ ] **O2. Structured JSON logs with a request id.** Today: `console.log` with emoji
   (`server/index.ts:96,99,103`). A bug reported three weeks post-ship is currently
   unreconstructable. **Effort:** S.
@@ -339,19 +370,26 @@ Reviewed by `/plan-ceo-review` and `/plan-eng-review` on 2026-08-11.
   instead of silently returning zero plants. **This is a live silent-failure gap** and
   the review flagged it as load-bearing for detecting A1 abuse. Deferred only because
   there is no production traffic yet — promote it the day A2 ships.
-- **E12. Cut scrape latency below 10s** (L) — 🔴 **NO LONGER DEFERRABLE.** Measured
-  end-to-end on 2026-08-15: `✔ 12 nurseries in 480187ms` — **eight minutes**, against
-  a 90s client abort (`nurseryService.ts:13`). The `c6b0404` prefetch does not mask a
-  wait five times longer than the timeout. **The nursery feature cannot succeed
-  through the UI today under any host configuration**, which means A1's gating and
-  A2's deploy are protecting an endpoint no user can currently reach.
-  Options: parallel fan-out, cheaper extraction model, precomputed index.
-  **Blocks everything in Phase 2 below, and now blocks the nursery half of M1.**
-  **Eng review adds the real fix here:** convert the scrape to an **async job + poll**
-  (POST starts a job and returns an id; the app polls). That makes the pipeline immune
-  to *any* HTTP request timeout, survives the app backgrounding, and unblocks live
-  in-app discovery. It's most of E12 already. A2's ">90s host timeout" requirement is
-  the stopgap until this lands. **Eng review D9 → option A now, B later.**
+- **E12. ✅ Async job + poll — DONE 2026-08-16.** Was: "cut scrape latency below 10s".
+  The latency was never the fixable part; the **request/response shape** was. Measured
+  480,187 ms against a 90,000 ms client abort meant the client hung up and the scrape
+  then succeeded into nothing, having spent real money.
+  **Shipped:** `POST /api/nurseries` → 202 `{jobId}`; `GET /api/nurseries/job/:id`
+  polls. `server/jobs.ts` holds the store; `src/services/nurseryService.ts` polls at
+  1.5s backing off to 5s, tolerates 4 failed polls (a lost poll must not throw away
+  an eight-minute scrape), and gives up at 10 min. **Exported signatures unchanged,
+  so `NurseriesScreen` and `DiagnosisScreen` needed no edits.**
+  **Dedupe:** an identical in-flight or recently-finished request joins the existing
+  job rather than buying a second scrape — server-side by key, client-side by cache.
+  A *failed* job is deliberately not cached, so a retry can actually work.
+  **Verified live:** `POST → 202 → poll → done, 8 nurseries in 80,907 ms`, one with
+  real stock (We Love Plants, ₪185). Plus 10 tests in `server/jobs.test.ts`.
+  **Eng review D9 → option B, taken now instead of later.**
+  ⚠️ **Jobs are in process memory.** A restart loses in-flight work — correct at one
+  machine, and why `fly.toml` forbids autostop. Redis is a change to `jobs.ts` alone.
+  **Still worth doing later, separately:** the underlying 80-480s scrape time itself
+  (parallel fan-out, cheaper extraction model, precomputed index). It no longer
+  *blocks* anything — it is now a quality problem, not a correctness one.
 
 ### Deferred by the eng review (2026-08-11)
 
@@ -432,6 +470,13 @@ captured by driving the simulator directly. Board:
 | F7 | `DiagnosisScreen` bottom already carries 3 competing actions plus 2 red URGENT badges | B1.3 |
 | F8 | Home is entirely first-run content — the B1.4 navigation conflict is real | B1.4 |
 | F9 | A 48%-confidence result renders identically to an 87% one, and the species was wrong (2026-08-16, post-A5) | E9 (promoted, now gates B1.4) |
+
+**Status of the findings after the M1 pass (2026-08-16).** F1 ✅ resolved by E12 —
+the scrape now runs as a job and completed live in 80.9s with 8 nurseries. F2/F3 ✅
+closed by A5. F4 ✅ closed by H3 + A3 on both sides. F5 ✅ closed by E9 (`c7b6986`);
+A3's new failure modes were added as `describeFailure` branches, not new dialects.
+F6 ✅ `.env` repointed to `10.0.0.6`, and retired entirely once A2 deploys.
+F7, F8 and F9 remain open — all three are design decisions in M2/M3, not M1 work.
 
 **Rated.** B1.4 design completeness: **2/10** at entry. Unchanged at exit by
 decision — the two design decisions that would raise it were deliberately deferred,

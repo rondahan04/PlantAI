@@ -17,6 +17,7 @@ import {
   diagnosePlant,
   DiagnosisUnavailableError,
   NotAPlantError,
+  UnsupportedImageError,
 } from '../services/plantDiagnosis';
 import { Theme, useTheme } from '../theme';
 import StatusView from '../components/StatusView';
@@ -24,9 +25,6 @@ import StatusView from '../components/StatusView';
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Camera'>;
 };
-
-const PLANTNET_KEY = process.env.EXPO_PUBLIC_PLANTNET_API_KEY || '';
-const OPENAI_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -52,11 +50,20 @@ function describeFailure(err: unknown, uri: string): Failure {
     };
   }
 
+  if (err instanceof UnsupportedImageError) {
+    return {
+      icon: 'image-outline',
+      title: "We can't read that image",
+      body: 'That file is in a format we cannot open. A photo taken with the camera, or a JPEG or PNG from your library, will work.',
+      retryUri: null,
+    };
+  }
+
   if (err instanceof DiagnosisUnavailableError) {
     return {
       icon: 'construct-outline',
       title: 'Diagnosis is unavailable',
-      body: 'This build is missing the plant identification service. Nothing is wrong with your photo or your plant.',
+      body: 'This build is not pointed at a plant identification service. Nothing is wrong with your photo or your plant.',
       retryUri: null,
     };
   }
@@ -93,7 +100,7 @@ export default function CameraScreen({ navigation }: Props) {
       setAnalyzing(true);
       setFailure(null);
       try {
-        const diagnosis = await diagnosePlant(uri, PLANTNET_KEY, OPENAI_KEY);
+        const diagnosis = await diagnosePlant(uri);
         navigation.replace('Diagnosis', { imageUri: uri, diagnosis });
       } catch (err: unknown) {
         setAnalyzing(false);

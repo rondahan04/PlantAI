@@ -38,7 +38,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "server": "node server/index.ts",
-    "test": "node --test scraper/*.test.ts"
+    "test": "node --test scraper/*.test.ts server/*.test.ts"
   },
   "private": true
 }

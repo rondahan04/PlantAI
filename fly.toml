@@ -1,0 +1,60 @@
+# Fly.io deployment for the PlantAI API server (TODOS A2).
+#
+# Set up once:
+#   fly launch --no-deploy --copy-config --name plantai-api
+#   fly secrets set \
+#     FIRECRAWL_API_KEY=... OPENAI_API_KEY=... GOOGLE_MAPS_API_KEY=... \
+#     PLANTNET_API_KEY=... TAVILY_API_KEY=... API_SHARED_SECRET=...
+#   fly deploy
+#
+# Then, and only then, flip the gate on:
+#   fly secrets set GATE_MODE=enforce
+# Enforcing before the app ships with the matching secret locks you out of your
+# own API. See server/gate.ts.
+
+app = "plantai-api"
+primary_region = "cdg"   # Paris — closest Fly region to Israel with full capacity
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "4000"
+  # Log-only until an `eas update` carrying EXPO_PUBLIC_API_SECRET has reached
+  # installed apps. Promote to "enforce" with `fly secrets set`, which overrides
+  # this, so the flip needs no redeploy and can be reverted in one command.
+  GATE_MODE = "log"
+  DAILY_REQUEST_CAP = "200"
+  RATE_LIMIT_PER_MIN = "6"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+
+  # ⚠️ DO NOT ENABLE AUTOSTOP. Nursery scrapes run as in-process jobs that take
+  # up to eight minutes with nobody polling them for stretches of that. A
+  # machine suspended between polls loses every in-flight job and the money
+  # already spent on it. This is the single most expensive line in this file to
+  # get wrong.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  # One machine, and a long scrape holds a slot for minutes. Keep the ceiling
+  # low so the daily cap — not the process — is what limits spend.
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 20
+    hard_limit = 40
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    protocol = "http"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
