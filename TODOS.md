@@ -89,11 +89,11 @@ Reviewed by `/plan-ceo-review` and `/plan-eng-review` on 2026-08-11.
   **How:** mirror the `PipelineDeps` pattern from `scraper/pipeline.ts` —
   `DiagnosisDeps { identify, classifyDisease, assessPhoto }` so provider swaps are
   one-line.
-  **Fix while rewriting** (eng review D6): `src/services/plantDiagnosis.ts:133` is
-  `JSON.parse(data.choices[0].message.content)` with no guard. Three failure modes on
-  one line — empty `choices` throws `TypeError`, a refusal throws `SyntaxError`, and
-  valid-JSON-of-the-wrong-shape renders a blank screen with **no error anywhere**.
-  Validate the shape, not just the parse. Named errors, logged with context.
+  ✅ **D6 already landed client-side in `b09a3d7`** (with A5): the unguarded
+  `JSON.parse(data.choices[0].message.content)` is now shape-validated via
+  `isHealthAssessment()`, and `DiagnosisServiceError` / `DiagnosisUnavailableError`
+  give named, logged failures. **Port these to the server rather than rewriting them** —
+  the validator and error types move as-is.
   **Note:** this makes the server a single point of failure for diagnosis, which
   currently works client-side whenever the phone has internet. Accepted trade — see A5.
   **Effort:** M. **Depends on:** A2.
@@ -103,23 +103,18 @@ Reviewed by `/plan-ceo-review` and `/plan-eng-review` on 2026-08-11.
   **Note:** existing Expo Go builds point at the LAN IP and will break. Expected.
   **Effort:** S. **Depends on:** A2, A3.
 
-- [ ] **A5. Delete `getMockDiagnosis` from the production bundle.**
-  **Why:** `src/services/plantDiagnosis.ts:163` returns a hardcoded Monstera root-rot
-  diagnosis and is wired as a `CameraScreen` fallback. Once A3 makes the server a hard
-  dependency, an outage means the app confidently shows **fabricated medical advice
-  about a real person's plant as if it were real**. That is the worst thing this app
-  could do to someone, and it is currently one outage away.
-  **How:** remove it; server unreachable → honest message + retry button.
-  **Eng review D5 → option A.** Supersedes the old H4. **Effort:** S. **With:** A3.
-  ✅ **Confirmed on screen** (F2, F3, 2026-08-15). Screenshot in the design board:
-  the mock renders a full root-rot diagnosis at **"87% confidence"** with an urgent
-  three-step treatment plan and zero visual difference from a real result. The
-  fabricated-advice risk is not hypothetical-after-A3; it renders today whenever the
-  keys are absent.
-  **Good news for sequencing:** `CameraScreen.tsx:41` only reaches the mock when keys
-  are *missing* — a key that exists but *fails* goes to the catch at line 48. So no
-  error path depends on the mock, and A5 can be done **now**, ahead of A3, with no
-  risk. Do it while the OpenAI account is unfunded.
+- [x] **A5. Delete `getMockDiagnosis` from the production bundle.** — done `b09a3d7`, 2026-08-16.
+  Shipped ahead of A3, which F3 proved was safe. Also landed: named error types
+  (`DiagnosisUnavailableError`, `DiagnosisServiceError`) so provider text never reaches
+  the UI, a real retry that re-runs the same photo, and the D6 response-shape guard
+  (`isHealthAssessment`) since deleting the fallback exposed it. Verified on device.
+  **Why it mattered:** the mock returned a hardcoded Monstera root-rot diagnosis wired
+  as a `CameraScreen` fallback. F2 confirmed on screen that it rendered at **"87%
+  confidence"** with an urgent three-step treatment plan and zero visual difference
+  from a real result — fabricated medical advice about a real person's plant.
+  **Eng review D5 → option A.** Supersedes the old H4.
+  **Follow-up left open:** the honest failure state is currently an `Alert` with a
+  retry action, not an in-screen state. Upgrading it is E9's job, not A5's.
 
 ### B1 — Plant library + history (the retention hook) — M2
 
@@ -248,6 +243,15 @@ Reviewed by `/plan-ceo-review` and `/plan-eng-review` on 2026-08-11.
   placement app-wide, not only diagnosis confidence.** The standard to write to
   already exists in the app: the nursery loading copy ("Discovering shops within 10km
   and checking live stock for Monstera deliciosa. This can take 30–60 seconds.").
+  🔴 **Now has a reproducible test case, not a hypothesis** (F9, 2026-08-16). First
+  real diagnosis after A5 landed: a photo of a **Monstera deliciosa** came back as
+  **"Mini monstera"** (Rhaphidophora tetrasperma — a different plant) at **48%
+  confidence**, rendered in the same 32px Lora title and the same orange bar as the
+  87% mock. Nothing on screen says "we are not sure." The user then gets a treatment
+  plan for the wrong species, and nursery results for the wrong species.
+  **Repro:** `photos_for_testing/sickmonstera.jpeg` → Gallery → diagnose.
+  **This now gates B1.4** — a library of confidently mislabelled plants is worse than
+  no library, because the mislabel persists and compounds.
   **Effort:** S → M. **Depends on:** E1.
 
 - [ ] **E4. Hebrew / RTL localization.**
@@ -410,7 +414,7 @@ Action (weekly cron → scrape → PR). **Depends on:** real user reactions firs
 |-----|-------|------|--------|----------|
 | 1 | `/plan-ceo-review` | 2026-08-11 | clean | scope set, M1/M2/M3 |
 | 2 | `/plan-eng-review` | 2026-08-11 | clean | 11 issues, D3-D9 |
-| 3 | `/plan-design-review` | 2026-08-15 | issues_found | 8 findings (F1-F8), 2 decisions deferred |
+| 3 | `/plan-design-review` | 2026-08-15..16 | issues_found | 9 findings (F1-F9), 2 decisions deferred, A5 shipped |
 
 **Run 3 method.** Scope was set by Ron to the running build rather than to proposed
 designs. Mockup generation via the gstack designer failed (`OpenAI organization
@@ -431,6 +435,7 @@ captured by driving the simulator directly. Board:
 | F6 | `.env:8` points at a stale LAN IP; app breaks on the dev machine and reports it as a service outage | A2 |
 | F7 | `DiagnosisScreen` bottom already carries 3 competing actions plus 2 red URGENT badges | B1.3 |
 | F8 | Home is entirely first-run content — the B1.4 navigation conflict is real | B1.4 |
+| F9 | A 48%-confidence result renders identically to an 87% one, and the species was wrong (2026-08-16, post-A5) | E9 (promoted, now gates B1.4) |
 
 **Rated.** B1.4 design completeness: **2/10** at entry. Unchanged at exit by
 decision — the two design decisions that would raise it were deliberately deferred,
