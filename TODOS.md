@@ -9,14 +9,10 @@
 
 ## 🔴 P0 — Do these before anything else
 
-- [ ] **Fund or replace the OpenAI account — diagnosis is dead right now.**
-  **Evidence (live run, 2026-08-15):** picking a photo returns
-  `OpenAI error: 429. {"error": {"message": "You have no credits remaining...`
-  Every diagnosis fails, and it fails into the ugliest screen in the app (see F4).
-  This also blocks the nursery pipeline's extraction step.
-  **Note:** this is an account balance, not necessarily a compromised key — but it
-  does not change the rotation item below, which stands on its own.
-  **Effort:** minutes.
+- [x] **Fund the OpenAI account** — resolved 2026-08-16, verified live.
+  On 2026-08-15 every diagnosis returned `429 "You have no credits remaining"`. A real
+  photo now returns a real diagnosis on device. Does not affect the rotation item
+  below, which stands on its own.
 
 - [ ] **Rotate `EXPO_PUBLIC_OPENAI_API_KEY`.**
   **Why:** the key is compiled into the app bundle (`src/screens/CameraScreen.tsx:25`)
