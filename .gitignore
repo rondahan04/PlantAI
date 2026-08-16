@@ -43,12 +43,30 @@ yarn-error.*
 *.mov
 *.mp4
 
-# local env files
-.env*.local
-.env
+# local env files. Ignore EVERY .env variant and allow the example back in —
+# `.env*.local` plus a bare `.env` left `.env.production` and `.env.staging`
+# tracked, which are the two most likely to hold live keys.
+.env*
+!.env.example
 
 # typescript
 *.tsbuildinfo
+
+# editors
+.vscode/
+.idea/
+*.swp
+
+# test/coverage output
+coverage/
+.nyc_output/
+
+# archives — the assignment was submitted as a zip containing a live .env, and
+# nothing in this repo should ever be a build artifact you committed by accident
+*.zip
+*.tar
+*.tar.gz
+*.tgz
 
 # generated native folders
 /ios
