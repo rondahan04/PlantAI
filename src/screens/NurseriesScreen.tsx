@@ -8,6 +8,7 @@ import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, Nursery, DeliveryMode } from '../types';
 import { Theme, useTheme } from '../theme';
 import { fetchNearbyNurseries } from '../services/nurseryService';
+import StatusView from '../components/StatusView';
 
 type Styles = ReturnType<typeof makeStyles>;
 
@@ -17,6 +18,32 @@ type Props = {
 };
 
 type Status = 'loading' | 'ready' | 'error';
+
+interface NurseryFailure {
+  title: string;
+  body: string;
+}
+
+const GENERIC_FAILURE: NurseryFailure = {
+  title: "We couldn't reach the nursery service",
+  body: 'The search did not come back. Nothing is wrong with your plant or your location.',
+};
+
+/*
+ * Maps a thrown error to what the user reads. The timeout case is the common
+ * one today — the scrape regularly outruns the client's 90s abort — so it says
+ * so plainly rather than implying the service is down.
+ */
+function describeFailure(err: unknown): NurseryFailure {
+  const name = err instanceof Error ? err.name : '';
+  if (name === 'AbortError' || name === 'TimeoutError') {
+    return {
+      title: 'The search took too long',
+      body: 'Checking live stock across nearby nurseries can outrun our time limit. Trying again often works.',
+    };
+  }
+  return GENERIC_FAILURE;
+}
 
 // A nursery is "deliverable" if it ships to home or has a confirmed in-stock
 // listing; "pickupable" if it has a real local location (finite distance).
@@ -176,20 +203,22 @@ export default function NurseriesScreen({ navigation, route }: Props) {
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [status, setStatus] = useState<Status>('loading');
   const [nurseries, setNurseries] = useState<Nursery[]>([]);
-  const [errorMsg, setErrorMsg] = useState('');
+  const [failure, setFailure] = useState<NurseryFailure>(GENERIC_FAILURE);
   const headerFade = useRef(new Animated.Value(0)).current;
 
   // Initial load reuses the promise prefetched on the diagnosis screen (force=false
   // → cache hit → minimal wait). Retry forces a fresh scrape past the cache.
   const load = useCallback(async (force = false) => {
     setStatus('loading');
-    setErrorMsg('');
     try {
       const data = await fetchNearbyNurseries(plantName, lat, lng, { force });
       setNurseries(data);
       setStatus('ready');
-    } catch (err: any) {
-      setErrorMsg(err?.name === 'AbortError' ? 'The search timed out. Try again.' : (err?.message ?? 'Something went wrong'));
+    } catch (err: unknown) {
+      // Never render err.message: it has surfaced raw fetch internals
+      // ("fetch failed: The request timed out.") and provider bodies at users.
+      console.warn('[nurseries] search failed', err);
+      setFailure(describeFailure(err));
       setStatus('error');
     }
   }, [plantName, lat, lng]);
@@ -283,28 +312,25 @@ export default function NurseriesScreen({ navigation, route }: Props) {
 
       {/* Error */}
       {status === 'error' && (
-        <View style={s.centerFill}>
-          <Ionicons name="cloud-offline-outline" size={40} color={t.color.textMuted} />
-          <Text style={s.stateTitle}>Couldn’t reach the nursery service</Text>
-          <Text style={s.stateText}>{errorMsg}</Text>
-          <Pressable style={s.retryBtn} onPress={() => load(true)} accessibilityRole="button">
-            <Ionicons name="refresh-outline" size={18} color={t.color.onPrimary} />
-            <Text style={s.retryText}>Try again</Text>
-          </Pressable>
-        </View>
+        <StatusView
+          icon="cloud-offline-outline"
+          title={failure.title}
+          body={failure.body}
+          tone="error"
+          primaryAction={{ label: 'Try again', icon: 'refresh-outline', onPress: () => load(true) }}
+          secondaryAction={{ label: 'Back to home', onPress: () => navigation.navigate('Home') }}
+        />
       )}
 
       {/* Empty */}
       {status === 'ready' && nurseries.length === 0 && (
-        <View style={s.centerFill}>
-          <Ionicons name="leaf-outline" size={40} color={t.color.textMuted} />
-          <Text style={s.stateTitle}>No nurseries found nearby</Text>
-          <Text style={s.stateText}>We couldn’t find nurseries near you stocking {plantName}. Try again later.</Text>
-          <Pressable style={s.retryBtn} onPress={() => navigation.navigate('Home')} accessibilityRole="button">
-            <Ionicons name="camera-outline" size={18} color={t.color.onPrimary} />
-            <Text style={s.retryText}>Diagnose Another Plant</Text>
-          </Pressable>
-        </View>
+        <StatusView
+          icon="leaf-outline"
+          title="No nurseries found nearby"
+          body={`No shop within 10km came back with ${plantName} in stock. Stock changes often, so it is worth another look later.`}
+          primaryAction={{ label: 'Search again', icon: 'refresh-outline', onPress: () => load(true) }}
+          secondaryAction={{ label: 'Diagnose another plant', onPress: () => navigation.navigate('Home') }}
+        />
       )}
 
       {/* Results */}

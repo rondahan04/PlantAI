@@ -17,6 +17,7 @@ import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, DeliveryMode } from '../types';
 import { Theme, useTheme } from '../theme';
 import { prefetchNearbyNurseries } from '../services/nurseryService';
+import { identityConfidence } from '../lib/confidence';
 
 // Tel Aviv center — used as fallback when location permission is denied
 const FALLBACK_LAT = 32.1624;
@@ -100,6 +101,8 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
     color: conditionColor[diagnosis.condition] || conditionColor.moderate,
   };
 
+  const identity = identityConfidence(diagnosis.confidence, diagnosis.plantName);
+
   const handleFindReplacement = async () => {
     // Coordinates are usually already resolved by the mount effect (and the
     // scrape prefetched). If the user taps before that finishes, resolve now.
@@ -144,16 +147,54 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
           </View>
         </Animated.View>
 
-        {/* Plant Name + Confidence */}
+        {/* Plant name + species-match confidence.
+            The bar is NOT tinted with condition.color: that conflated "how sure
+            are we what this plant is" with "how sick is it". */}
         <Animated.View style={[s.plantInfo, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-          <Text style={s.plantName}>{diagnosis.plantName}</Text>
+          {!!identity.namePrefix && <Text style={s.namePrefix}>{identity.namePrefix}</Text>}
+          <Text
+            style={s.plantName}
+            accessibilityLabel={
+              identity.needsCaveat
+                ? `${identity.namePrefix} ${diagnosis.plantName}. ${identity.label}. ${identity.noteTitle}.`
+                : `${diagnosis.plantName}. ${identity.label}.`
+            }
+          >
+            {diagnosis.plantName}
+          </Text>
           <View style={s.confidenceRow}>
             <View style={s.confidenceBar}>
-              <View style={[s.confidenceFill, { width: `${diagnosis.confidence}%`, backgroundColor: condition.color }]} />
+              <View
+                style={[
+                  s.confidenceFill,
+                  { width: `${diagnosis.confidence}%`, backgroundColor: t.color.textSecondary },
+                ]}
+              />
             </View>
-            <Text style={s.confidenceText}>{diagnosis.confidence}% confidence</Text>
+            <Text style={s.confidenceText}>{identity.label}</Text>
           </View>
         </Animated.View>
+
+        {/* Uncertainty caveat — a card, not a color, so it cannot be scanned past
+            and does not depend on color vision. */}
+        {identity.needsCaveat && (
+          <Animated.View style={[s.caveatCard, { opacity: fadeAnim }]}>
+            <View style={s.caveatHeader}>
+              <Ionicons name="help-circle-outline" size={20} color={t.color.warning} />
+              <Text style={s.caveatTitle}>{identity.noteTitle}</Text>
+            </View>
+            <Text style={s.caveatBody}>{identity.noteBody}</Text>
+            <Pressable
+              style={({ pressed }) => [s.caveatBtn, pressed && s.caveatBtnPressed]}
+              onPress={() => navigation.replace('Camera')}
+              accessibilityRole="button"
+              accessibilityLabel="Not your plant? Retake the photo"
+            >
+              <Ionicons name="camera-outline" size={18} color={t.color.foreground} />
+              <Text style={s.caveatBtnText}>Not your plant? Retake photo</Text>
+            </Pressable>
+          </Animated.View>
+        )}
 
         {/* Description */}
         <Animated.View style={[s.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
@@ -286,6 +327,30 @@ function makeStyles(t: Theme) {
     conditionBadgeText: { ...t.type.label, fontWeight: '700' },
     plantInfo: { paddingTop: t.space.lg, paddingBottom: t.space.sm },
     plantName: { ...t.type.title, fontSize: 26, lineHeight: 32, color: t.color.foreground, marginBottom: t.space.sm, writingDirection: 'auto' },
+    namePrefix: { ...t.type.label, color: t.color.textMuted, marginBottom: 2 },
+    caveatCard: {
+      backgroundColor: t.color.warningWash,
+      borderRadius: t.radius.lg,
+      padding: t.space.lg,
+      marginTop: t.space.lg,
+    },
+    caveatHeader: { flexDirection: 'row', alignItems: 'center', gap: t.space.sm, marginBottom: t.space.sm },
+    caveatTitle: { ...t.type.bodyStrong, color: t.color.foreground, flex: 1 },
+    caveatBody: { ...t.type.label, color: t.color.textSecondary, fontWeight: '400', marginBottom: t.space.lg },
+    caveatBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: t.space.sm,
+      minHeight: 44,
+      borderRadius: t.radius.md,
+      borderWidth: 1,
+      borderColor: t.color.border,
+      backgroundColor: t.color.surface,
+    },
+    caveatBtnPressed: { backgroundColor: t.color.surfaceMuted },
+    caveatBtnText: { ...t.type.label, color: t.color.foreground },
+
     confidenceRow: { flexDirection: 'row', alignItems: 'center', gap: t.space.md },
     confidenceBar: { flex: 1, height: 6, backgroundColor: t.color.surfaceMuted, borderRadius: t.radius.pill, overflow: 'hidden' },
     confidenceFill: { height: '100%', borderRadius: t.radius.pill },

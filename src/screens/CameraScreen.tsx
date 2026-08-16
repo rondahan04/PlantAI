@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  Alert,
   ActivityIndicator,
   Image,
 } from 'react-native';
@@ -20,6 +19,7 @@ import {
   NotAPlantError,
 } from '../services/plantDiagnosis';
 import { Theme, useTheme } from '../theme';
+import StatusView from '../components/StatusView';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Camera'>;
@@ -28,6 +28,47 @@ type Props = {
 const PLANTNET_KEY = process.env.EXPO_PUBLIC_PLANTNET_API_KEY || '';
 const OPENAI_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY || '';
 
+type IconName = keyof typeof Ionicons.glyphMap;
+
+/*
+ * What the user is shown when something fails. `retryUri` is set only when
+ * retrying could plausibly work — offering "try again" for a build with no API
+ * keys would be a lie.
+ */
+interface Failure {
+  icon: IconName;
+  title: string;
+  body: string;
+  retryUri: string | null;
+}
+
+function describeFailure(err: unknown, uri: string): Failure {
+  if (err instanceof NotAPlantError) {
+    return {
+      icon: 'leaf-outline',
+      title: "We couldn't find a plant in that photo",
+      body: 'Point the camera at leaves, stems, or flowers, close enough to fill most of the frame.',
+      retryUri: null,
+    };
+  }
+
+  if (err instanceof DiagnosisUnavailableError) {
+    return {
+      icon: 'construct-outline',
+      title: 'Diagnosis is unavailable',
+      body: 'This build is missing the plant identification service. Nothing is wrong with your photo or your plant.',
+      retryUri: null,
+    };
+  }
+
+  return {
+    icon: 'cloud-offline-outline',
+    title: "We couldn't finish the diagnosis",
+    body: 'The plant service did not answer. Your photo is fine — this one is on us.',
+    retryUri: uri,
+  };
+}
+
 export default function CameraScreen({ navigation }: Props) {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
@@ -35,51 +76,28 @@ export default function CameraScreen({ navigation }: Props) {
   const [facing, setFacing] = useState<CameraType>('back');
   const [analyzing, setAnalyzing] = useState(false);
   const [capturedUri, setCapturedUri] = useState<string | null>(null);
+  const [failure, setFailure] = useState<Failure | null>(null);
   const cameraRef = useRef<CameraView>(null);
 
   /*
-   * Every failure here is reported in plain language, and provider text never
-   * reaches this layer — DiagnosisServiceError logs its detail and carries only
-   * a stable code. There is no fabricated fallback: if we cannot diagnose the
-   * plant we say so (TODOS A5).
+   * Failures render as an in-screen StatusView, never an OS alert and never an
+   * exception string — DiagnosisServiceError logs its provider detail and hands
+   * this layer only a stable code. There is no fabricated fallback: if we cannot
+   * diagnose the plant we say so (TODOS A5, E9).
+   *
+   * describeFailure is the only place that decides failure copy, so the three
+   * error dialects this screen used to speak cannot come back.
    */
-  // Explicitly typed: the retry action references analyzeImage from inside its
-  // own initializer, which TS cannot infer through.
-  const analyzeImage: (uri: string) => Promise<void> = useCallback(
+  const analyzeImage = useCallback(
     async (uri: string) => {
       setAnalyzing(true);
+      setFailure(null);
       try {
         const diagnosis = await diagnosePlant(uri, PLANTNET_KEY, OPENAI_KEY);
         navigation.replace('Diagnosis', { imageUri: uri, diagnosis });
       } catch (err: unknown) {
-        setCapturedUri(null);
         setAnalyzing(false);
-
-        if (err instanceof NotAPlantError) {
-          Alert.alert(
-            'That is not a plant',
-            'Point the camera at leaves, stems, or flowers and try again.'
-          );
-          return;
-        }
-
-        if (err instanceof DiagnosisUnavailableError) {
-          // Not retryable — the build is missing its keys, not the user's fault.
-          Alert.alert(
-            'Diagnosis is unavailable',
-            'This build is missing the plant identification service. Nothing is wrong with your photo.'
-          );
-          return;
-        }
-
-        Alert.alert(
-          "Couldn't finish the diagnosis",
-          'The plant service did not answer. Your photo is fine — this one is on us.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Try again', onPress: () => void analyzeImage(uri) },
-          ]
-        );
+        setFailure(describeFailure(err, uri));
       }
     },
     [navigation]
@@ -93,15 +111,25 @@ export default function CameraScreen({ navigation }: Props) {
         setCapturedUri(photo.uri);
         await analyzeImage(photo.uri);
       }
-    } catch (err: any) {
-      Alert.alert('Camera Error', err.message || 'Failed to take picture');
+    } catch {
+      setFailure({
+        icon: 'camera-outline',
+        title: "The camera didn't capture that",
+        body: 'Something interrupted the shot. Try again, or pick an existing photo instead.',
+        retryUri: null,
+      });
     }
   }, [analyzing, analyzeImage]);
 
   const pickFromGallery = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow access to your photos to use this feature.');
+      setFailure({
+        icon: 'images-outline',
+        title: 'PlantAI needs access to your photos',
+        body: 'Allow photo access in Settings to pick a picture you already took.',
+        retryUri: null,
+      });
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
@@ -139,6 +167,45 @@ export default function CameraScreen({ navigation }: Props) {
         <Pressable style={s.galleryAlt} onPress={pickFromGallery} accessibilityRole="button">
           <Text style={s.galleryAltText}>Or pick from gallery instead</Text>
         </Pressable>
+      </SafeAreaView>
+    );
+  }
+
+  // Failure takes over the whole screen rather than sitting on top of the live
+  // camera feed: the user has nothing to aim at until they choose what to do.
+  if (failure) {
+    const dismiss = () => {
+      setFailure(null);
+      setCapturedUri(null);
+    };
+    return (
+      <SafeAreaView style={s.failureWrap} edges={['top', 'bottom']}>
+        <View style={s.failureTopBar}>
+          <Pressable
+            style={s.failureClose}
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+          >
+            <Ionicons name="close" size={24} color={t.color.foreground} />
+          </Pressable>
+        </View>
+        <StatusView
+          icon={failure.icon}
+          title={failure.title}
+          body={failure.body}
+          tone="error"
+          primaryAction={
+            failure.retryUri
+              ? { label: 'Try again', icon: 'refresh', onPress: () => void analyzeImage(failure.retryUri!) }
+              : { label: 'Take another photo', icon: 'camera', onPress: dismiss }
+          }
+          secondaryAction={
+            failure.retryUri
+              ? { label: 'Take another photo', onPress: dismiss }
+              : { label: 'Back to home', onPress: () => navigation.navigate('Home') }
+          }
+        />
       </SafeAreaView>
     );
   }
@@ -270,6 +337,10 @@ function makeStyles(t: Theme) {
     spacer: { width: 56 },
 
     // Permission screen (biophilic light)
+    failureWrap: { flex: 1, backgroundColor: t.color.background },
+    failureTopBar: { flexDirection: 'row', paddingHorizontal: t.space.lg, paddingTop: t.space.sm },
+    failureClose: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+
     permissionWrap: {
       flex: 1,
       alignItems: 'center',
