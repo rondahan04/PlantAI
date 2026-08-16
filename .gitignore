@@ -34,6 +34,15 @@ yarn-error.*
 # Claude Code project config (local only)
 .claude/
 
+# CodeGraph index — rebuilt from source, machine-local
+.codegraph/
+
+# Screen recordings and demo captures. "PlantAI POC.mov" is 138 MB; GitHub
+# rejects pushes over 100 MB, and a video in git history cannot be removed
+# without rewriting every commit after it.
+*.mov
+*.mp4
+
 # local env files
 .env*.local
 .env
