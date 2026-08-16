@@ -4,7 +4,7 @@
     "name": "Green Thumb Garden Center",
     "address": "45 Ibn Gvirol Street, Tel Aviv",
     "website": "https://www.greenthumb.co.il",
-    "lat": 32.0890,
+    "lat": 32.089,
     "lng": 34.7812,
     "deliveryAvailable": true,
     "deliveryFee": "₪25",
@@ -16,11 +16,58 @@
     "reviewCount": 312,
     "image": "https://picsum.photos/seed/GreenThumbTLV/400/300",
     "plants": [
-      { "name": "Monstera deliciosa", "aliases": ["Swiss Cheese Plant", "Monstera", "Split-leaf Philodendron"], "price": "₪180", "inStock": true },
-      { "name": "Ficus lyrata", "aliases": ["Fiddle Leaf Fig", "Ficus", "Lyre-leaf fig"], "price": "₪240", "inStock": true },
-      { "name": "Epipremnum aureum", "aliases": ["Pothos", "Devil's Ivy", "Golden Pothos", "Money Plant"], "price": "₪55", "inStock": true },
-      { "name": "Sansevieria trifasciata", "aliases": ["Snake Plant", "Mother-in-Law's Tongue", "Sansevieria", "Saint George's Sword"], "price": "₪85", "inStock": true },
-      { "name": "Spathiphyllum", "aliases": ["Peace Lily", "White Sail Plant", "Spathiphyllum wallisii"], "price": "₪95", "inStock": true }
+      {
+        "name": "Monstera deliciosa",
+        "aliases": [
+          "Swiss Cheese Plant",
+          "Monstera",
+          "Split-leaf Philodendron"
+        ],
+        "price": "₪180",
+        "inStock": true
+      },
+      {
+        "name": "Ficus lyrata",
+        "aliases": [
+          "Fiddle Leaf Fig",
+          "Ficus",
+          "Lyre-leaf fig"
+        ],
+        "price": "₪240",
+        "inStock": true
+      },
+      {
+        "name": "Epipremnum aureum",
+        "aliases": [
+          "Pothos",
+          "Devil's Ivy",
+          "Golden Pothos",
+          "Money Plant"
+        ],
+        "price": "₪55",
+        "inStock": true
+      },
+      {
+        "name": "Sansevieria trifasciata",
+        "aliases": [
+          "Snake Plant",
+          "Mother-in-Law's Tongue",
+          "Sansevieria",
+          "Saint George's Sword"
+        ],
+        "price": "₪85",
+        "inStock": true
+      },
+      {
+        "name": "Spathiphyllum",
+        "aliases": [
+          "Peace Lily",
+          "White Sail Plant",
+          "Spathiphyllum wallisii"
+        ],
+        "price": "₪95",
+        "inStock": true
+      }
     ]
   },
   {
@@ -29,7 +76,7 @@
     "address": "12 Einstein Street, Ramat Aviv",
     "website": "https://www.bloomgarden.co.il",
     "lat": 32.1054,
-    "lng": 34.7970,
+    "lng": 34.797,
     "deliveryAvailable": true,
     "deliveryFee": "₪30",
     "deliveryTime": "3–5 hrs",
@@ -40,10 +87,30 @@
     "reviewCount": 187,
     "image": "https://picsum.photos/seed/BloomRamatAviv/400/300",
     "plants": [
-      { "name": "Monstera deliciosa", "aliases": ["Swiss Cheese Plant", "Monstera", "Split-leaf Philodendron"], "price": "₪195", "inStock": true },
-      { "name": "Zamioculcas zamiifolia", "aliases": ["ZZ Plant", "Zanzibar Gem", "Eternity Plant"], "price": "₪120", "inStock": true },
-      { "name": "Ficus elastica", "aliases": ["Rubber Plant", "Rubber Tree", "Rubber Fig", "Indian Rubber Tree"], "price": "₪145", "inStock": true },
-      { "name": "Philodendron", "aliases": ["Heartleaf Philodendron", "Philodendron scandens", "Sweetheart Plant"], "price": "₪75", "inStock": true }
+      {
+        "name": "תמר מג׳הול",
+        "aliases": [],
+        "price": "₪1,146.00",
+        "inStock": true
+      },
+      {
+        "name": "פייג׳ואה",
+        "aliases": [],
+        "price": "₪1,191.00",
+        "inStock": true
+      },
+      {
+        "name": "קמון לימוני (לואיזה) – לא עץ",
+        "aliases": [],
+        "price": "₪827.00",
+        "inStock": true
+      },
+      {
+        "name": "סלסיפי/ספודילה",
+        "aliases": [],
+        "price": "₪1,088.00",
+        "inStock": true
+      }
     ]
   },
   {
@@ -63,11 +130,58 @@
     "reviewCount": 241,
     "image": "https://picsum.photos/seed/UrbanRootsFlorentin/400/300",
     "plants": [
-      { "name": "Monstera deliciosa", "aliases": ["Swiss Cheese Plant", "Monstera", "Split-leaf Philodendron"], "price": "₪165", "inStock": true },
-      { "name": "Epipremnum aureum", "aliases": ["Pothos", "Devil's Ivy", "Golden Pothos", "Money Plant"], "price": "₪48", "inStock": true },
-      { "name": "Aloe vera", "aliases": ["Aloe", "True Aloe", "Barbados Aloe", "Burn Plant"], "price": "₪65", "inStock": true },
-      { "name": "Chlorophytum comosum", "aliases": ["Spider Plant", "Ribbon Plant", "Airplane Plant"], "price": "₪45", "inStock": true },
-      { "name": "Spathiphyllum", "aliases": ["Peace Lily", "White Sail Plant", "Spathiphyllum wallisii"], "price": "₪88", "inStock": true }
+      {
+        "name": "Monstera deliciosa",
+        "aliases": [
+          "Swiss Cheese Plant",
+          "Monstera",
+          "Split-leaf Philodendron"
+        ],
+        "price": "₪165",
+        "inStock": true
+      },
+      {
+        "name": "Epipremnum aureum",
+        "aliases": [
+          "Pothos",
+          "Devil's Ivy",
+          "Golden Pothos",
+          "Money Plant"
+        ],
+        "price": "₪48",
+        "inStock": true
+      },
+      {
+        "name": "Aloe vera",
+        "aliases": [
+          "Aloe",
+          "True Aloe",
+          "Barbados Aloe",
+          "Burn Plant"
+        ],
+        "price": "₪65",
+        "inStock": true
+      },
+      {
+        "name": "Chlorophytum comosum",
+        "aliases": [
+          "Spider Plant",
+          "Ribbon Plant",
+          "Airplane Plant"
+        ],
+        "price": "₪45",
+        "inStock": true
+      },
+      {
+        "name": "Spathiphyllum",
+        "aliases": [
+          "Peace Lily",
+          "White Sail Plant",
+          "Spathiphyllum wallisii"
+        ],
+        "price": "₪88",
+        "inStock": true
+      }
     ]
   },
   {
@@ -87,10 +201,48 @@
     "reviewCount": 156,
     "image": "https://picsum.photos/seed/PlantStudioRothschild/400/300",
     "plants": [
-      { "name": "Ficus lyrata", "aliases": ["Fiddle Leaf Fig", "Ficus", "Lyre-leaf fig"], "price": "₪260", "inStock": true },
-      { "name": "Zamioculcas zamiifolia", "aliases": ["ZZ Plant", "Zanzibar Gem", "Eternity Plant"], "price": "₪130", "inStock": true },
-      { "name": "Sansevieria trifasciata", "aliases": ["Snake Plant", "Mother-in-Law's Tongue", "Sansevieria", "Saint George's Sword"], "price": "₪90", "inStock": true },
-      { "name": "Calathea", "aliases": ["Prayer Plant", "Peacock Plant", "Cathedral Windows", "Zebra Plant"], "price": "₪110", "inStock": false }
+      {
+        "name": "Ficus lyrata",
+        "aliases": [
+          "Fiddle Leaf Fig",
+          "Ficus",
+          "Lyre-leaf fig"
+        ],
+        "price": "₪260",
+        "inStock": true
+      },
+      {
+        "name": "Zamioculcas zamiifolia",
+        "aliases": [
+          "ZZ Plant",
+          "Zanzibar Gem",
+          "Eternity Plant"
+        ],
+        "price": "₪130",
+        "inStock": true
+      },
+      {
+        "name": "Sansevieria trifasciata",
+        "aliases": [
+          "Snake Plant",
+          "Mother-in-Law's Tongue",
+          "Sansevieria",
+          "Saint George's Sword"
+        ],
+        "price": "₪90",
+        "inStock": true
+      },
+      {
+        "name": "Calathea",
+        "aliases": [
+          "Prayer Plant",
+          "Peacock Plant",
+          "Cathedral Windows",
+          "Zebra Plant"
+        ],
+        "price": "₪110",
+        "inStock": false
+      }
     ]
   },
   {
@@ -99,7 +251,7 @@
     "address": "32 Katznelson Street, Givataim",
     "website": "https://www.givataimgardens.co.il",
     "lat": 32.0735,
-    "lng": 34.8110,
+    "lng": 34.811,
     "deliveryAvailable": false,
     "deliveryFee": "—",
     "deliveryTime": "—",
@@ -110,10 +262,48 @@
     "reviewCount": 98,
     "image": "https://picsum.photos/seed/GivataimGardens/400/300",
     "plants": [
-      { "name": "Monstera deliciosa", "aliases": ["Swiss Cheese Plant", "Monstera", "Split-leaf Philodendron"], "price": "₪155", "inStock": true },
-      { "name": "Ficus elastica", "aliases": ["Rubber Plant", "Rubber Tree", "Rubber Fig", "Indian Rubber Tree"], "price": "₪135", "inStock": true },
-      { "name": "Aloe vera", "aliases": ["Aloe", "True Aloe", "Barbados Aloe", "Burn Plant"], "price": "₪55", "inStock": true },
-      { "name": "Philodendron", "aliases": ["Heartleaf Philodendron", "Philodendron scandens", "Sweetheart Plant"], "price": "₪70", "inStock": true }
+      {
+        "name": "Monstera deliciosa",
+        "aliases": [
+          "Swiss Cheese Plant",
+          "Monstera",
+          "Split-leaf Philodendron"
+        ],
+        "price": "₪155",
+        "inStock": true
+      },
+      {
+        "name": "Ficus elastica",
+        "aliases": [
+          "Rubber Plant",
+          "Rubber Tree",
+          "Rubber Fig",
+          "Indian Rubber Tree"
+        ],
+        "price": "₪135",
+        "inStock": true
+      },
+      {
+        "name": "Aloe vera",
+        "aliases": [
+          "Aloe",
+          "True Aloe",
+          "Barbados Aloe",
+          "Burn Plant"
+        ],
+        "price": "₪55",
+        "inStock": true
+      },
+      {
+        "name": "Philodendron",
+        "aliases": [
+          "Heartleaf Philodendron",
+          "Philodendron scandens",
+          "Sweetheart Plant"
+        ],
+        "price": "₪70",
+        "inStock": true
+      }
     ]
   },
   {
@@ -121,7 +311,7 @@
     "name": "Jaffa Plant Market",
     "address": "8 Yefet Street, Jaffa",
     "website": "https://www.jaffaplants.co.il",
-    "lat": 32.0530,
+    "lat": 32.053,
     "lng": 34.7518,
     "deliveryAvailable": true,
     "deliveryFee": "₪25",
@@ -133,10 +323,47 @@
     "reviewCount": 74,
     "image": "https://picsum.photos/seed/JaffaPlantMarket/400/300",
     "plants": [
-      { "name": "Spathiphyllum", "aliases": ["Peace Lily", "White Sail Plant", "Spathiphyllum wallisii"], "price": "₪79", "inStock": true },
-      { "name": "Epipremnum aureum", "aliases": ["Pothos", "Devil's Ivy", "Golden Pothos", "Money Plant"], "price": "₪42", "inStock": true },
-      { "name": "Cactus", "aliases": ["Desert Cactus", "Cacti", "Succulent Cactus"], "price": "₪35", "inStock": true },
-      { "name": "Chlorophytum comosum", "aliases": ["Spider Plant", "Ribbon Plant", "Airplane Plant"], "price": "₪40", "inStock": true }
+      {
+        "name": "Spathiphyllum",
+        "aliases": [
+          "Peace Lily",
+          "White Sail Plant",
+          "Spathiphyllum wallisii"
+        ],
+        "price": "₪79",
+        "inStock": true
+      },
+      {
+        "name": "Epipremnum aureum",
+        "aliases": [
+          "Pothos",
+          "Devil's Ivy",
+          "Golden Pothos",
+          "Money Plant"
+        ],
+        "price": "₪42",
+        "inStock": true
+      },
+      {
+        "name": "Cactus",
+        "aliases": [
+          "Desert Cactus",
+          "Cacti",
+          "Succulent Cactus"
+        ],
+        "price": "₪35",
+        "inStock": true
+      },
+      {
+        "name": "Chlorophytum comosum",
+        "aliases": [
+          "Spider Plant",
+          "Ribbon Plant",
+          "Airplane Plant"
+        ],
+        "price": "₪40",
+        "inStock": true
+      }
     ]
   },
   {
@@ -156,10 +383,47 @@
     "reviewCount": 143,
     "image": "https://picsum.photos/seed/TheGreenHouseRS/400/300",
     "plants": [
-      { "name": "Monstera deliciosa", "aliases": ["Swiss Cheese Plant", "Monstera", "Split-leaf Philodendron"], "price": "₪175", "inStock": true },
-      { "name": "Ficus lyrata", "aliases": ["Fiddle Leaf Fig", "Ficus", "Lyre-leaf fig"], "price": "₪250", "inStock": true },
-      { "name": "Zamioculcas zamiifolia", "aliases": ["ZZ Plant", "Zanzibar Gem", "Eternity Plant"], "price": "₪115", "inStock": true },
-      { "name": "Sansevieria trifasciata", "aliases": ["Snake Plant", "Mother-in-Law's Tongue", "Sansevieria", "Saint George's Sword"], "price": "₪80", "inStock": true }
+      {
+        "name": "Monstera deliciosa",
+        "aliases": [
+          "Swiss Cheese Plant",
+          "Monstera",
+          "Split-leaf Philodendron"
+        ],
+        "price": "₪175",
+        "inStock": true
+      },
+      {
+        "name": "Ficus lyrata",
+        "aliases": [
+          "Fiddle Leaf Fig",
+          "Ficus",
+          "Lyre-leaf fig"
+        ],
+        "price": "₪250",
+        "inStock": true
+      },
+      {
+        "name": "Zamioculcas zamiifolia",
+        "aliases": [
+          "ZZ Plant",
+          "Zanzibar Gem",
+          "Eternity Plant"
+        ],
+        "price": "₪115",
+        "inStock": true
+      },
+      {
+        "name": "Sansevieria trifasciata",
+        "aliases": [
+          "Snake Plant",
+          "Mother-in-Law's Tongue",
+          "Sansevieria",
+          "Saint George's Sword"
+        ],
+        "price": "₪80",
+        "inStock": true
+      }
     ]
   },
   {
@@ -167,7 +431,7 @@
     "name": "Herzliya Nursery",
     "address": "5 HaAtzmaut Road, Herzliya",
     "website": "https://www.herzliyanursery.co.il",
-    "lat": 32.1660,
+    "lat": 32.166,
     "lng": 34.8357,
     "deliveryAvailable": true,
     "deliveryFee": "₪45",
@@ -179,10 +443,49 @@
     "reviewCount": 61,
     "image": "https://picsum.photos/seed/HerzliyaNursery/400/300",
     "plants": [
-      { "name": "Aloe vera", "aliases": ["Aloe", "True Aloe", "Barbados Aloe", "Burn Plant"], "price": "₪58", "inStock": true },
-      { "name": "Ficus elastica", "aliases": ["Rubber Plant", "Rubber Tree", "Rubber Fig", "Indian Rubber Tree"], "price": "₪140", "inStock": true },
-      { "name": "Epipremnum aureum", "aliases": ["Pothos", "Devil's Ivy", "Golden Pothos", "Money Plant"], "price": "₪50", "inStock": true },
-      { "name": "Cactus", "aliases": ["Desert Cactus", "Cacti", "Succulent Cactus"], "price": "₪28", "inStock": true }
+      {
+        "name": "Aloe vera",
+        "aliases": [
+          "Aloe",
+          "True Aloe",
+          "Barbados Aloe",
+          "Burn Plant"
+        ],
+        "price": "₪58",
+        "inStock": true
+      },
+      {
+        "name": "Ficus elastica",
+        "aliases": [
+          "Rubber Plant",
+          "Rubber Tree",
+          "Rubber Fig",
+          "Indian Rubber Tree"
+        ],
+        "price": "₪140",
+        "inStock": true
+      },
+      {
+        "name": "Epipremnum aureum",
+        "aliases": [
+          "Pothos",
+          "Devil's Ivy",
+          "Golden Pothos",
+          "Money Plant"
+        ],
+        "price": "₪50",
+        "inStock": true
+      },
+      {
+        "name": "Cactus",
+        "aliases": [
+          "Desert Cactus",
+          "Cacti",
+          "Succulent Cactus"
+        ],
+        "price": "₪28",
+        "inStock": true
+      }
     ]
   }
 ]
