@@ -14,7 +14,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
-import { diagnosePlant, getMockDiagnosis, NotAPlantError } from '../services/plantDiagnosis';
+import {
+  diagnosePlant,
+  DiagnosisUnavailableError,
+  NotAPlantError,
+} from '../services/plantDiagnosis';
 import { Theme, useTheme } from '../theme';
 
 type Props = {
@@ -33,26 +37,49 @@ export default function CameraScreen({ navigation }: Props) {
   const [capturedUri, setCapturedUri] = useState<string | null>(null);
   const cameraRef = useRef<CameraView>(null);
 
-  const analyzeImage = useCallback(
+  /*
+   * Every failure here is reported in plain language, and provider text never
+   * reaches this layer — DiagnosisServiceError logs its detail and carries only
+   * a stable code. There is no fabricated fallback: if we cannot diagnose the
+   * plant we say so (TODOS A5).
+   */
+  // Explicitly typed: the retry action references analyzeImage from inside its
+  // own initializer, which TS cannot infer through.
+  const analyzeImage: (uri: string) => Promise<void> = useCallback(
     async (uri: string) => {
       setAnalyzing(true);
       try {
-        let diagnosis;
-        if (PLANTNET_KEY && OPENAI_KEY) {
-          diagnosis = await diagnosePlant(uri, PLANTNET_KEY, OPENAI_KEY);
-        } else {
-          await new Promise((r) => setTimeout(r, 2000));
-          diagnosis = getMockDiagnosis();
-        }
+        const diagnosis = await diagnosePlant(uri, PLANTNET_KEY, OPENAI_KEY);
         navigation.replace('Diagnosis', { imageUri: uri, diagnosis });
-      } catch (err: any) {
-        if (err instanceof NotAPlantError) {
-          Alert.alert('That is not a plant', 'Point the camera at leaves, stems, or flowers and try again.');
-        } else {
-          Alert.alert('Analysis Failed', err.message || 'Could not analyze plant. Please try again.');
-        }
+      } catch (err: unknown) {
         setCapturedUri(null);
         setAnalyzing(false);
+
+        if (err instanceof NotAPlantError) {
+          Alert.alert(
+            'That is not a plant',
+            'Point the camera at leaves, stems, or flowers and try again.'
+          );
+          return;
+        }
+
+        if (err instanceof DiagnosisUnavailableError) {
+          // Not retryable — the build is missing its keys, not the user's fault.
+          Alert.alert(
+            'Diagnosis is unavailable',
+            'This build is missing the plant identification service. Nothing is wrong with your photo.'
+          );
+          return;
+        }
+
+        Alert.alert(
+          "Couldn't finish the diagnosis",
+          'The plant service did not answer. Your photo is fine — this one is on us.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Try again', onPress: () => void analyzeImage(uri) },
+          ]
+        );
       }
     },
     [navigation]

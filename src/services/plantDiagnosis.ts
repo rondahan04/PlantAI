@@ -16,6 +16,40 @@ export class NotAPlantError extends Error {
   }
 }
 
+/*
+ * Thrown when this build has no keys for the diagnosis pipeline. Nothing is
+ * wrong with the user's photo and retrying will not help — the build is wrong.
+ */
+export class DiagnosisUnavailableError extends Error {
+  constructor() {
+    super('DIAGNOSIS_UNAVAILABLE');
+    this.name = 'DiagnosisUnavailableError';
+  }
+}
+
+/*
+ * Thrown when a provider call fails or answers in a shape we can't use.
+ *
+ * `detail` is for the log only and must NEVER be shown to the user: provider
+ * bodies have echoed request payloads and account state (a live 429 read
+ * "You have no credits remaining. Add credits to continue..." — the user's
+ * plant has nothing to do with our billing). `message` stays a stable code.
+ */
+export type DiagnosisProvider = 'plantnet' | 'openai';
+
+export class DiagnosisServiceError extends Error {
+  readonly provider: DiagnosisProvider;
+  readonly detail: string;
+
+  constructor(provider: DiagnosisProvider, detail: string) {
+    super('DIAGNOSIS_SERVICE_ERROR');
+    this.name = 'DiagnosisServiceError';
+    this.provider = provider;
+    this.detail = detail;
+    console.warn(`[diagnosis] ${provider} failed: ${detail}`);
+  }
+}
+
 // ─── PlantNet ─────────────────────────────────────────────────────────────────
 
 interface PlantNetResult {
@@ -45,7 +79,7 @@ async function identifyWithPlantNet(
 
   if (!response.ok) {
     const errText = await response.text().catch(() => '');
-    throw new Error(`PlantNet error: ${response.status}. ${errText.slice(0, 120)}`);
+    throw new DiagnosisServiceError('plantnet', `${response.status} ${errText.slice(0, 300)}`);
   }
 
   const data = await response.json();
@@ -126,11 +160,59 @@ condition must be one of: healthy, mild, moderate, severe, critical, reflecting 
 
   if (!response.ok) {
     const errText = await response.text().catch(() => '');
-    throw new Error(`OpenAI error: ${response.status}. ${errText.slice(0, 120)}`);
+    throw new DiagnosisServiceError('openai', `${response.status} ${errText.slice(0, 300)}`);
   }
 
+  // Three separate failure modes used to live on one unguarded line: empty
+  // `choices` threw a TypeError, a refusal threw a SyntaxError, and valid JSON
+  // of the wrong shape rendered a blank screen with no error anywhere. Validate
+  // the shape, not just the parse.
   const data = await response.json();
-  return JSON.parse(data.choices[0].message.content) as HealthAssessment;
+  const content = data?.choices?.[0]?.message?.content;
+  if (typeof content !== 'string') {
+    throw new DiagnosisServiceError('openai', `no message content: ${JSON.stringify(data).slice(0, 300)}`);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    throw new DiagnosisServiceError('openai', `content was not JSON: ${content.slice(0, 300)}`);
+  }
+
+  if (!isHealthAssessment(parsed)) {
+    throw new DiagnosisServiceError('openai', `assessment failed validation: ${content.slice(0, 300)}`);
+  }
+
+  return parsed;
+}
+
+const CONDITIONS: readonly string[] = ['healthy', 'mild', 'moderate', 'severe', 'critical'];
+
+function isTreatment(value: unknown): value is Treatment {
+  if (typeof value !== 'object' || value === null) return false;
+  const t = value as Record<string, unknown>;
+  return (
+    typeof t.title === 'string' &&
+    typeof t.description === 'string' &&
+    typeof t.urgent === 'boolean'
+  );
+}
+
+function isHealthAssessment(value: unknown): value is HealthAssessment {
+  if (typeof value !== 'object' || value === null) return false;
+  const a = value as Record<string, unknown>;
+  return (
+    typeof a.condition === 'string' &&
+    CONDITIONS.includes(a.condition) &&
+    typeof a.conditionLabel === 'string' &&
+    Array.isArray(a.issues) &&
+    a.issues.every((i) => typeof i === 'string') &&
+    Array.isArray(a.treatments) &&
+    a.treatments.every(isTreatment) &&
+    typeof a.description === 'string' &&
+    typeof a.canBeSaved === 'boolean'
+  );
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -140,6 +222,8 @@ export async function diagnosePlant(
   plantNetKey: string,
   openAiKey: string
 ): Promise<PlantDiagnosis> {
+  if (!plantNetKey || !openAiKey) throw new DiagnosisUnavailableError();
+
   const { scientificName, commonName, confidence } = await identifyWithPlantNet(
     imageUri,
     plantNetKey
@@ -158,40 +242,14 @@ export async function diagnosePlant(
   };
 }
 
-// ─── Mock fallback (used when API keys are missing) ───────────────────────────
-
-export function getMockDiagnosis(): PlantDiagnosis {
-  return {
-    plantName: 'Monstera deliciosa',
-    condition: 'moderate',
-    conditionLabel: 'Root Rot Detected',
-    issues: [
-      'Yellowing leaves indicate overwatering',
-      'Root rot beginning in lower stems',
-      'Fungal infection spreading',
-    ],
-    treatments: [
-      {
-        title: 'Reduce Watering Immediately',
-        description:
-          'Allow soil to dry completely between waterings. Only water when top 2 inches of soil are dry.',
-        urgent: true,
-      },
-      {
-        title: 'Repot with Fresh Soil',
-        description:
-          'Remove from pot, trim rotted roots, and repot in well-draining soil mix.',
-        urgent: true,
-      },
-      {
-        title: 'Apply Fungicide',
-        description: 'Treat with copper-based fungicide every 2 weeks to prevent spread.',
-        urgent: false,
-      },
-    ],
-    canBeSaved: true,
-    confidence: 87,
-    description:
-      'Your Monstera is showing early signs of root rot caused by overwatering. The yellowing leaves and soft stems are classic indicators. With prompt treatment, this plant can be saved.',
-  };
-}
+/*
+ * There is deliberately no mock diagnosis here.
+ *
+ * `getMockDiagnosis()` used to return a hardcoded Monstera root-rot result and
+ * was wired as a CameraScreen fallback. It rendered at "87% confidence" with an
+ * urgent three-step treatment plan and was visually indistinguishable from a
+ * real diagnosis, which meant an outage showed a real person fabricated medical
+ * advice about their actual plant. Removed 2026-08-16 (TODOS A5).
+ *
+ * If diagnosis is unavailable, throw — never invent one.
+ */
