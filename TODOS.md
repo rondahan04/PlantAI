@@ -19,28 +19,25 @@ both the Android bundle (`app.config.js:9`) and server-side Places (`server/inde
 restricting it to the app breaks Places, and splitting needs an `android.package` that `app.json`
 doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Android + Places API.
 
-1. **[P0] Delete the old OpenAI key** on platform.openai.com. Rotation without revocation is
-   theatre — the burned key shipped in the assignment zip and every Expo Go build ever shared,
-   and it still works until you delete it. Check /usage for spend that isn't yours. 1 minute,
-   free, and nothing else on this list matters as much.
-2. **[M1] Deploy to Fly.** Everything below assumes a backend that exists when your laptop
-   doesn't. Strictly sequential:
-   1. 🚧 **Add a payment method:** https://fly.io/dashboard/personal/billing. `fly launch` fails
-      with `requested machine count exceeds organization limit` on an org with zero apps and
-      zero machines — Fly provisions nothing without a card. Adding one charges nothing by
-      itself; the configured `shared-cpu-1x`/512mb always-on machine is ~$2-4/mo.
-   2. `fly launch --no-deploy --copy-config --name plantai-api --org personal --region cdg --yes`
-      — the earlier failure was clean (no app created, `fly.toml` untouched), so just re-run it.
-   3. `./scripts/fly-secrets.sh` — pushes the 6 provider keys under their PLAIN names, `--stage`,
-      values never printed. `flyctl secrets list` to verify names.
-   4. `fly deploy --remote-only` — Docker Desktop stays off. ⚠️ Keep `auto_stop_machines = false`
-      and `min_machines_running = 1`. Jobs live in process memory; a suspended machine loses
-      in-flight jobs and the money already spent on them.
-   5. `curl https://plantai-api.fly.dev/health` → gate/jobs counters.
-   6. Point `EXPO_PUBLIC_API_BASE_URL` at the Fly URL, restart `expo start --clear`. Retires the
-      stale-URL failure mode (F6) for good. `EXPO_PUBLIC_API_SECRET` unchanged; `GATE_MODE` is
-      already `enforce` and `fly.toml` ships it as `log`, so `fly secrets set GATE_MODE=enforce`
-      to keep it enforced in production.
+1. ✅ **[P0] Old OpenAI key revoked 2026-08-17.** The leak is closed.
+2. **[M1] Deploy to Render.** Everything below assumes a backend that exists when your laptop
+   doesn't. **Fly is abandoned — it will not provision without a credit card** (`fly launch` →
+   `requested machine count exceeds organization limit` on an org with zero machines). Render's
+   free tier needs no card: 750 instance-hours/month, Dockerfile deploys, `render.yaml` Blueprint
+   committed. `fly.toml` and `scripts/fly-secrets.sh` are kept for the day a card exists.
+   1. Push the branch, then render.com → sign up with **GitHub** (no card).
+   2. **New → Blueprint** → pick `rondahan04/PlantAI` → it reads `render.yaml`.
+   3. Paste the 6 `sync: false` secrets when prompted — plain names, encrypted at rest, never in
+      git. `API_SHARED_SECRET` must equal `EXPO_PUBLIC_API_SECRET` in `.env` or every request 401s.
+   4. `curl https://plantai-api.onrender.com/health` → gate/jobs counters.
+   5. Point `EXPO_PUBLIC_API_BASE_URL` at the Render URL, restart `expo start --clear`. Retires
+      the stale-URL failure mode (F6) and the tunnel for good.
+   6. Free-tier spin-down: suspends after 15 min idle, ~1 min cold start. **Not a job-loss risk** —
+      the client polls every 1.5-5s for the whole scrape, so the service can only sleep when
+      nothing is in flight. Optional: free pinger (cron-job.org, no card) on `/health` every
+      10 min keeps it warm; `/health` is gate-exempt so it costs nothing against the daily cap.
+      750h/month ≈ 31 days, so one always-warm service fits and a second one would not.
+   7. Flip `render.yaml` `branch:` to `main` once M1 merges, or Render tracks a deleted branch.
 3. ✅ **[M2] Test discovery fixed 2026-08-17.** `"test": "node --test"` — bare recursive
    discovery, so anything matching `*.test.ts` anywhere outside `node_modules` runs. Replaces the
    explicit `scraper/*.test.ts server/*.test.ts` globs that silently skipped every future `src/`

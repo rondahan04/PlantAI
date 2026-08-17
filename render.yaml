@@ -1,0 +1,64 @@
+# Render Blueprint for the PlantAI API server.
+#
+# Chosen over Fly because Render's free tier needs no credit card. The tradeoff
+# is spin-down: a free service suspends after 15 minutes with no traffic and
+# takes ~1 minute to wake. That is survivable here — nursery scrapes run as
+# in-process jobs and the client polls every 1.5-5s for the whole job, so the
+# service can only sleep when nothing is in flight and there is nothing to
+# lose. Keep it warm anyway with a free pinger on /health every 10 min
+# (gate-exempt, so it costs nothing against DAILY_REQUEST_CAP).
+#
+# Set up once:
+#   1. render.com → sign up with GitHub (no card)
+#   2. New → Blueprint → pick rondahan04/PlantAI → it reads this file
+#   3. Paste the 6 secrets below when prompted (sync: false = never in git)
+#
+# 750 free instance-hours/workspace/month. One always-warm service is ~730h,
+# so a second free service would blow the budget and suspend both.
+services:
+  - type: web
+    name: plantai-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: frankfurt # closest Render region to Israel
+    # Deploying the feature branch, which is a strict superset of main (0
+    # behind, 14 ahead). Flip this to `main` after the M1 work merges, or
+    # Render keeps auto-deploying a branch you eventually delete.
+    branch: m1-ship-the-loop
+    healthCheckPath: /health
+
+    envVars:
+      # Render injects its own PORT and the server already prefers it
+      # (`Number(process.env.PORT) || 4000`), so it is deliberately not set here.
+
+      # Enforced from the first request. There are no installed builds that
+      # could be locked out, and an unauthenticated public billable endpoint
+      # hands strangers the daily cap.
+      - key: GATE_MODE
+        value: enforce
+      - key: DAILY_REQUEST_CAP
+        value: "200"
+      - key: RATE_LIMIT_PER_MIN
+        value: "6"
+
+      # Plain names. The EXPO_PUBLIC_ prefix these carry in .env exists only
+      # because dashboard/server.ts and scripts/scrape-nurseries.ts still read
+      # the prefixed names (TODOS H1). server/index.ts prefers the plain name
+      # and falls back to EXPO_PUBLIC_* for local dev only.
+      #
+      # sync: false → Render prompts for the value and stores it encrypted;
+      # it never lands in this file or in git.
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: PLANTNET_API_KEY
+        sync: false
+      - key: FIRECRAWL_API_KEY
+        sync: false
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      # Must match EXPO_PUBLIC_API_SECRET in .env, or every app request 401s.
+      - key: API_SHARED_SECRET
+        sync: false
