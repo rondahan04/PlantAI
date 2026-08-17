@@ -22,10 +22,7 @@ services:
     dockerfilePath: ./Dockerfile
     plan: free
     region: frankfurt # closest Render region to Israel
-    # Deploying the feature branch, which is a strict superset of main (0
-    # behind, 14 ahead). Flip this to `main` after the M1 work merges, or
-    # Render keeps auto-deploying a branch you eventually delete.
-    branch: m1-ship-the-loop
+    branch: main
     healthCheckPath: /health
 
     envVars:

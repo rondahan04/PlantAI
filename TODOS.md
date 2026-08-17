@@ -37,7 +37,9 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
       nothing is in flight. Optional: free pinger (cron-job.org, no card) on `/health` every
       10 min keeps it warm; `/health` is gate-exempt so it costs nothing against the daily cap.
       750h/month ≈ 31 days, so one always-warm service fits and a second one would not.
-   7. Flip `render.yaml` `branch:` to `main` once M1 merges, or Render tracks a deleted branch.
+   7. ✅ Tracks `main`. Render's Blueprint scan reads the repo's **default branch** — a
+      `render.yaml` living only on a feature branch is invisible to it, which is exactly how the
+      first attempt failed. M1 was fast-forward merged to `main` 2026-08-17 (80 tests, tsc clean).
 3. ✅ **[M2] Test discovery fixed 2026-08-17.** `"test": "node --test"` — bare recursive
    discovery, so anything matching `*.test.ts` anywhere outside `node_modules` runs. Replaces the
    explicit `scraper/*.test.ts server/*.test.ts` globs that silently skipped every future `src/`
