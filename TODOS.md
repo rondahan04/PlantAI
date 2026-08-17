@@ -2,66 +2,66 @@
 
 > Thesis: diagnosis acquire, marketplace transact, **only plant library retain.**
 > CEO plan: `~/.gstack/projects/rondahan04-PlantAI/ceo-plans/2026-08-11-retention-spine.md`
-> M1 code all written, typechecked, 80 tests green, both endpoints verified live.
+> M1 code all written, typechecked, 80 tests green. Full loop verified from the iOS simulator
+> over a public tunnel 2026-08-17 — diagnosis + nursery scrape. Fly deploy still blocked on billing.
 
 ---
 
 ## DO IN THIS ORDER
 
-### P0 — keys
+Ranked most → least important, 2026-08-17. Ranking rule: an unrevoked leaked key beats a broken
+product beats a missing feature beats a cleanup. Within a tie, cheap-and-unblocking wins. The
+milestone tag on each line preserves the old M1/M2/M3 grouping.
 
-1. ✅ **`EXPO_PUBLIC_OPENAI_API_KEY` rotated 2026-08-16.** New key in `.env`, verified end-to-end
-   against `/api/diagnose`. ⚠️ Old key must be **deleted** on platform.openai.com — rotation
-   without revocation is theatre. Also check platform.openai.com/usage for spend that isn't yours.
-2. ❌ **Won't do — Maps key restriction.** One key serves two callers: the Android bundle
-   (`app.config.js:9`) and server-side Places (`server/index.ts:54`). Restricting it to the app
-   breaks Places; splitting it needs an `android.package` that `app.json` doesn't have yet.
-   Revisit when a bundle ID exists. Cheap partial anytime: API-restrict the key to Maps SDK for
-   Android + Places API.
+**Already settled:** OpenAI key rotated 2026-08-16 and verified end to end. `fly auth login` done
+(`ron.dahan01@post.runi.ac.il`, org `personal`). Maps key restriction ❌ won't do — one key serves
+both the Android bundle (`app.config.js:9`) and server-side Places (`server/index.ts:54`), so
+restricting it to the app breaks Places, and splitting needs an `android.package` that `app.json`
+doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Android + Places API.
 
-### M1 — deploy (console only, no code left)
-
-> **No EAS in this project** — no `eas.json`, no `expo-updates`, no EAS CLI. The app runs from
-> `expo start` over the LAN, so there are no installed OTA builds. That deletes the old "ship an
-> `eas update` first" step and the log→enforce soak that existed to protect those builds.
-> `flyctl` v0.4.83 installed 2026-08-16 via brew.
-
-3. ✅ `fly auth login` — done, `ron.dahan01@post.runi.ac.il`, org `personal`.
-4. 🚧 **BLOCKED — add a payment method at https://fly.io/dashboard/personal/billing.**
-   `fly launch --no-deploy --copy-config --name plantai-api --org personal --region cdg --yes`
-   fails with `requested machine count exceeds organization limit` on an org with zero apps and
-   zero machines: Fly provisions nothing without a card. Adding one charges nothing by itself;
-   the configured `shared-cpu-1x`/512mb always-on machine is ~$2-4/mo. The failure was clean —
-   no app created, `fly.toml` untouched — so re-run the same command once the card is in.
-5. `./scripts/fly-secrets.sh` — pushes the 6 provider keys from `.env` under their PLAIN names,
-   `--stage`, values never printed. `flyctl secrets list` to verify names.
-6. `fly deploy --remote-only` — Docker Desktop stays off; Fly's builder does it. ⚠️ Keep
-   `auto_stop_machines = false` and `min_machines_running = 1`. Jobs live in process memory; a
-   suspended machine loses in-flight jobs and the money spent.
-7. `curl https://plantai-api.fly.dev/health` → expect the gate/jobs counters block.
-8. Repoint `EXPO_PUBLIC_API_BASE_URL` in `.env` to the Fly URL, restart `expo start`. Retires the
-   stale-LAN-IP failure mode (F6) for good. `EXPO_PUBLIC_API_SECRET` is unchanged.
-9. `fly secrets set GATE_MODE=enforce`. Safe as soon as 8 is done — nothing is installed that
-   could be locked out. Check `wouldReject` on `/health` first anyway; non-zero means the client
-   and server secrets disagree.
-
-**Stopgap in place while 4 is blocked — `cloudflared` quick tunnel (2026-08-16).**
-`cloudflared tunnel --url http://localhost:4000` fronts the local server on a public HTTPS URL;
-`.env` `EXPO_PUBLIC_API_BASE_URL` points at it and `GATE_MODE=enforce` is on, because a public
-billable endpoint with the gate in log mode is a stranger's daily cap. Verified through the
-tunnel: `/health` counters, 401 without `x-plantai-key`, 415 past the gate with it, and a real
-`Rhaphidophora tetrasperma` diagnosis end to end. Restart the tunnel → new URL → paste it into
-`.env`. Mac sleeps → everything is down. This does **not** close M1.
-
-### M2 — plant library (retention hook)
-
-10. **`PlantStore`.** `import Storage from 'expo-sqlite/kv-store'`. Blob `{ version: 1, plants: [...] }`.
-   DI seam `StorageDeps { getItem, setItem, removeItem }`, mirroring `PipelineDeps`.
+1. **[P0] Delete the old OpenAI key** on platform.openai.com. Rotation without revocation is
+   theatre — the burned key shipped in the assignment zip and every Expo Go build ever shared,
+   and it still works until you delete it. Check /usage for spend that isn't yours. 1 minute,
+   free, and nothing else on this list matters as much.
+2. **[M1] Deploy to Fly.** Everything below assumes a backend that exists when your laptop
+   doesn't. Strictly sequential:
+   1. 🚧 **Add a payment method:** https://fly.io/dashboard/personal/billing. `fly launch` fails
+      with `requested machine count exceeds organization limit` on an org with zero apps and
+      zero machines — Fly provisions nothing without a card. Adding one charges nothing by
+      itself; the configured `shared-cpu-1x`/512mb always-on machine is ~$2-4/mo.
+   2. `fly launch --no-deploy --copy-config --name plantai-api --org personal --region cdg --yes`
+      — the earlier failure was clean (no app created, `fly.toml` untouched), so just re-run it.
+   3. `./scripts/fly-secrets.sh` — pushes the 6 provider keys under their PLAIN names, `--stage`,
+      values never printed. `flyctl secrets list` to verify names.
+   4. `fly deploy --remote-only` — Docker Desktop stays off. ⚠️ Keep `auto_stop_machines = false`
+      and `min_machines_running = 1`. Jobs live in process memory; a suspended machine loses
+      in-flight jobs and the money already spent on them.
+   5. `curl https://plantai-api.fly.dev/health` → gate/jobs counters.
+   6. Point `EXPO_PUBLIC_API_BASE_URL` at the Fly URL, restart `expo start --clear`. Retires the
+      stale-URL failure mode (F6) for good. `EXPO_PUBLIC_API_SECRET` unchanged; `GATE_MODE` is
+      already `enforce` and `fly.toml` ships it as `log`, so `fly secrets set GATE_MODE=enforce`
+      to keep it enforced in production.
+3. **[M2] Add `src/` to the test glob.** One line in `package.json` — today it is
+   `node --test scraper/*.test.ts server/*.test.ts`, so every test written for the app source
+   silently doesn't run. Do this *before* writing M2 tests or they will "pass" by not existing.
+4. **[M2] Decide D8 and D7** (see OPEN DECISIONS). Free, and D8 gates item 8 — building MyPlants
+   before deciding where it lives means rebuilding it.
+5. **[M2] `PlantStore`.** `import Storage from 'expo-sqlite/kv-store'`. Blob
+   `{ version: 1, plants: [...] }`. DI seam `StorageDeps { getItem, setItem, removeItem }`,
+   mirroring `PipelineDeps`. This is the retention thesis — the only part of the product a user
+   comes back for.
    - quota-exceeded → read back to confirm the write; on fail "Couldn't save — storage full" + retry
    - corrupt JSON → quarantine to a `.corrupt` key; never render "you have no plants"
-11. **`migrate()` chain.** Runs every load, chains v1→v2→v3. Version newer than app quarantines.
-   No-op today + a test proving the chain runs.
-12. **Photo persistence.** Camera output is a cache URI; iOS purges it. Copy on save, downscale.
+6. **[M2] `migrate()` chain.** Runs every load, chains v1→v2→v3. Version newer than app
+   quarantines. No-op today + a test proving the chain runs. Cheap now, unshippable later — the
+   first stored blob without it is a permanent migration problem.
+7. **[M2] B1.3. Save button on `DiagnosisScreen`.** Nothing reaches the library without it.
+   Decide placement first — new primary, or header icon so the commerce CTA keeps the accent
+   (the screen already carries 3 actions + 2 URGENT badges). Handle: double-tap → dupes; killed
+   mid-save → persist before navigating.
+8. **[M2] B1.4. MyPlants + PlantDetail.** Needs D8. `FlatList`, real empty state.
+9. **[M2] Photo persistence.** Camera output is a cache URI; iOS purges it, so saved plants lose
+   their photos on a timeline you don't control. Copy on save, downscale.
     ```ts
     import { File, Paths } from 'expo-file-system';
     const source = new File(Paths.cache, 'temp-photo.jpg');
@@ -69,34 +69,43 @@ tunnel: `/health` counters, 401 without `x-plantai-key`, 415 past the gate with 
     await source.copy(destination);
     ```
     Not `FileSystem.copyAsync` — functional API deprecated.
-13. **E1. Plant.id v3 disease classification, server-side.** `EXPO_PUBLIC_PLANTID_API_KEY` sits
-    unused. Shape in learning `plantid-v3-response-shape`. Map: `is_healthy` → healthy; disease
-    prob <0.3 mild, <0.6 moderate, <0.85 severe, ≥0.85 critical.
-14. **E9 follow-up. Confidence rendering.** Repro: `photos_for_testing/sickmonstera.jpeg` →
-    Gallery → diagnose → wrong species at 47%, rendered identically to the old 87% mock.
-    Needs 13 for real probabilities. **Gates 16.**
-15. **B1.3. Save button on `DiagnosisScreen`.** Decide placement first — new primary, or header
-    icon so the commerce CTA keeps the accent (screen already carries 3 actions + 2 URGENT
-    badges). Handle: double-tap → dupes; killed mid-save → persist before navigating.
-16. **B1.4. MyPlants + PlantDetail.** Decide D8 first (below). `FlatList`, real empty state.
-17. **E10. Storage tests.** Add `src/` to the glob first — it is
-    `node --test scraper/*.test.ts server/*.test.ts` today, so new tests silently skip.
+10. **[M2] E10. Storage tests.** Needs 3 first.
     - save 50, force-quit mid-write, relaunch → all 50 readable
     - hand-write truncated JSON → recoverable error, not empty library
+11. **[M2] E9 follow-up. Confidence rendering.** Confirmed live 2026-08-17: the simulator run
+    rendered `Mini monstera` at **44%** with the same authority the old fabricated-87% mock had.
+    A confidently-wrong species is the fastest way to lose a user's trust in the whole product.
+    Thresholds can ship ahead of 12; real probabilities make them honest.
+12. **[M2] E1. Plant.id v3 disease classification, server-side.** `EXPO_PUBLIC_PLANTID_API_KEY`
+    sits unused. Shape in learning `plantid-v3-response-shape`. Map: `is_healthy` → healthy;
+    disease prob <0.3 mild, <0.6 moderate, <0.85 severe, ≥0.85 critical.
+13. **[M3] E5. WhatsApp `wa.me` + `tel:` handoff.** `phone` is already scraped; `onOrder` only
+    opens a site. This is the transact half of the thesis and the cheapest conversion win here —
+    Israeli nurseries answer WhatsApp, not web forms.
+14. **[M3] E4. Hebrew / RTL.** Groundwork in `143e98d`; copy missing. Mirror-test the layout. The
+    users are Israeli and the scraped inventory is already Hebrew.
+15. **[ops] O2/O3/O4 observability.** JSON logs + request id (`server/index.ts:96,99,103`);
+    `/health` reports last-successful-scrape per provider; one-page runbook. ⚠️ Also fix the
+    `jobs` field while in there — `jobs: jobs.size()` (`server/index.ts:192`) counts *stored*
+    jobs, including finished ones retained for polling, so it never returns to 0 on a healthy
+    server and reads as "something is stuck" during an incident. Split into `{active, retained}`.
+16. **[M3] H6. Accessibility.** `accessibilityLabel` on the star rating (`NurseriesScreen.tsx:27`),
+    ≥44pt rows.
+17. **[M3] Cleanups.** **H1** lift `env()` into `scraper/core.ts` (`dashboard/server.ts:50` and
+    `scripts/scrape-nurseries.ts:20` still redeclare `EXPO_PUBLIC_TAVILY_API_KEY`). **H2** rename
+    `nurseries_scraping_testing` → `nurseries-fallback.txt` (production config, read at
+    `server/index.ts:100`). **H5** route table in `server/index.ts`.
+18. **[ops] Tavily student plan.** Swap the key value, no code change.
 
-### M3 — polish
-
-18. **E4.** Hebrew / RTL. Groundwork in `143e98d`; copy missing. Mirror-test the layout.
-19. **E5.** WhatsApp `wa.me` + `tel:` handoff. `phone` already scraped; `onOrder` only opens a site.
-20. **H1.** Lift `env()` into `scraper/core.ts` — `dashboard/server.ts:50` and
-    `scripts/scrape-nurseries.ts:20` still redeclare `EXPO_PUBLIC_TAVILY_API_KEY`.
-21. **H2.** Rename `nurseries_scraping_testing` → `nurseries-fallback.txt` (production config,
-    read at `server/index.ts:100`).
-22. **H5.** Route table in `server/index.ts`. **H6.** `accessibilityLabel` on the star rating
-    (`NurseriesScreen.tsx:27`), ≥44pt rows.
-23. **O2.** JSON logs + request id (`server/index.ts:96,99,103`). **O3.** `/health` reports
-    last-successful-scrape per provider. **O4.** One-page runbook.
-24. **Tavily student plan.** Swap the key value, no code change.
+**Stopgap in place while 2.1 is blocked — `cloudflared` quick tunnel.**
+`cloudflared tunnel --url http://localhost:4000` fronts the local server on a public HTTPS URL;
+`.env` `EXPO_PUBLIC_API_BASE_URL` points at it and `GATE_MODE=enforce` is on, because a public
+billable endpoint with the gate in log mode is a stranger's daily cap. **Full loop verified from
+the iOS simulator 2026-08-17:** `[r9] /api/diagnose 71343B → Mini monstera (44%) moderate in
+10241ms`, then `[ra] scrape → ✔ 7 nurseries in 47238ms`; gate `allowed 2, rejected 0`, and a 401
+for a request with no `x-plantai-key`. Restart the tunnel → new URL → paste it into `.env`; it
+died once overnight already (`control stream encountered a failure`) and took the app with it.
+Mac sleeps → everything is down. This does **not** close M1.
 
 ---
 
@@ -106,13 +115,14 @@ tunnel: `/health` counters, 401 without `x-plantai-key`, 415 past the gate with 
 |---|------|------|------|
 | B2.1 | Care schedule + `expo-notifications` | L | Config plugin + dev build. Permission prompt behind a flag — one-shot resource. Cancel on delete. |
 | P2 | In-app live nursery discovery | M | GPS → `scraper/places.ts` `discoverNurseries()` server-side. The real product goal. Gated on scrape speed. |
-| — | Scrape speed (80-480s) | M | Quality problem now, not correctness. Parallel fan-out, cheaper model, precomputed index. |
-| E2 | Photo timeline per plant | M | Nearly free after 8. |
+| — | Scrape speed | M | Quality problem now, not correctness. Parallel fan-out, cheaper model, precomputed index. Best observed 47s (2026-08-17, 7 nurseries); worst seen 480s. |
+| — | Show "stock unknown" instead of dropping the row | S | The auditor rejects extractor rows whose page never states stock — e.g. `[decogarden.co.il] verification REJECTED (conf 92): the source text does not explicitly state stock status`. Correct call by the verifier, but the user loses a nursery that does stock the plant. Product decision: surface as `unknown` rather than drop. |
+| E2 | Photo timeline per plant | M | Nearly free after PlantStore (5). |
 | E3 | Shareable diagnosis card | M | Virality after retention. |
 | E6 | Light meter | M | Novelty, unclear retention. |
 | E7 | Cache nursery results per plant | M | Nothing cached across jobs today. |
 | E8 | Inventory index as dataset | L | Platform play, premature. |
-| E11 | Scrape freshness monitoring | M | Live silent-failure gap. **Promote the day 5 lands.** |
+| E11 | Scrape freshness monitoring | M | Live silent-failure gap. **Promote the day PlantStore (5) lands.** |
 | — | Firecrawl weekly cron | S | `scripts/scrape-nurseries.ts` as a GitHub Action. |
 | — | CI/CD for the container | M | No `.github/workflows/`; deploys are manual builds from the laptop. |
 | — | `jest-expo` + RN testing library | L | 17 untested flows, second test stack. After M2. |
@@ -139,8 +149,8 @@ tunnel: `/health` counters, 401 without `x-plantai-key`, 415 past the gate with 
 | A2 code | `Dockerfile` (node:26-alpine, non-root, zero deps), `.dockerignore`, `fly.toml`. 90s-timeout requirement retired by E12. |
 | A3 | `POST /api/diagnose` — PlantNet + OpenAI server-side, `src/lib/api.ts` the only URL/header holder. **No provider key in app code.** Server sniffs image magic numbers → 415 `unsupported_image` (test photos are WebP named .jpeg). Server is now a single point of failure for diagnosis — accepted. |
 | A5 | `getMockDiagnosis` deleted — it rendered fabricated root rot at "87% confidence". Plus named error types + `isHealthAssessment` guard. |
-| E9 | `describeFailure` in `CameraScreen` is the single source of failure copy. Killed the three-error-languages problem. Confidence *rendering* still open → step 12. |
-| E12 | Async job + poll. `POST /api/nurseries` → 202 `{jobId}`, `GET /api/nurseries/job/:id`. Client polls 1.5s→5s, tolerates 4 misses, 10 min cap. Dedupes in-flight; failed jobs not cached. Live: 8 nurseries in 80,907 ms. ⚠️ Jobs in process memory — see step 5. |
+| E9 | `describeFailure` in `CameraScreen` is the single source of failure copy. Killed the three-error-languages problem. Confidence *rendering* still open → step 11. |
+| E12 | Async job + poll. `POST /api/nurseries` → 202 `{jobId}`, `GET /api/nurseries/job/:id`. Client polls 1.5s→5s, tolerates 4 misses, 10 min cap. Dedupes in-flight; failed jobs not cached. Live: 8 nurseries in 80,907 ms. ⚠️ Jobs in process memory — see step 2.4. |
 | H1 partial | `loadEnv()` overwrote real env vars, so `GATE_MODE=enforce` silently ran as `log`. Now skips already-set keys + comment lines. |
 | H3 | One `fail()` helper — stable code to client, provider detail to log with request id. |
 | H7 | Nursery cache `Map` capped at 20, oldest-first. |
@@ -152,7 +162,7 @@ tunnel: `/health` counters, 401 without `x-plantai-key`, 415 past the gate with 
 |-----|-------|------|--------|
 | 1 | `/plan-ceo-review` | 2026-08-11 | clean — M1/M2/M3 scope |
 | 2 | `/plan-eng-review` | 2026-08-11 | clean — 11 issues, D3-D9 |
-| 3 | `/plan-design-review` | 2026-08-15..16 | 9 findings; F1-F6 closed, F7→13, F8→14, F9→12 |
+| 3 | `/plan-design-review` | 2026-08-15..16 | 9 findings; F1-F6 closed, F7→7, F8→8, F9→11 |
 
 Run 3 was screenshot-based (iPhone 17 Pro, iOS 26.1, `main` @ `cc0e5a2`); mockup generation
 failed on `OpenAI organization verification required`. Board:
