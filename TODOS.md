@@ -41,11 +41,12 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
       stale-URL failure mode (F6) for good. `EXPO_PUBLIC_API_SECRET` unchanged; `GATE_MODE` is
       already `enforce` and `fly.toml` ships it as `log`, so `fly secrets set GATE_MODE=enforce`
       to keep it enforced in production.
-3. **[M2] Add `src/` to the test glob.** One line in `package.json` — today it is
-   `node --test scraper/*.test.ts server/*.test.ts`, so every test written for the app source
-   silently doesn't run. Do this *before* writing M2 tests or they will "pass" by not existing.
-4. **[M2] Decide D8 and D7** (see OPEN DECISIONS). Free, and D8 gates item 8 — building MyPlants
-   before deciding where it lives means rebuilding it.
+3. ✅ **[M2] Test discovery fixed 2026-08-17.** `"test": "node --test"` — bare recursive
+   discovery, so anything matching `*.test.ts` anywhere outside `node_modules` runs. Replaces the
+   explicit `scraper/*.test.ts server/*.test.ts` globs that silently skipped every future `src/`
+   test. Verified with a throwaway canary under `src/`: 80 → 81 tests, then removed. 80 green.
+4. ✅ **[M2] D7 and D8 decided 2026-08-17** — triage grouping, adaptive Home (H2). See OPEN
+   DECISIONS for the consequences H2 puts on items 5, 7, and 8.
 5. **[M2] `PlantStore`.** `import Storage from 'expo-sqlite/kv-store'`. Blob
    `{ version: 1, plants: [...] }`. DI seam `StorageDeps { getItem, setItem, removeItem }`,
    mirroring `PipelineDeps`. This is the retention thesis — the only part of the product a user
@@ -59,7 +60,10 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
    Decide placement first — new primary, or header icon so the commerce CTA keeps the accent
    (the screen already carries 3 actions + 2 URGENT badges). Handle: double-tap → dupes; killed
    mid-save → persist before navigating.
-8. **[M2] B1.4. MyPlants + PlantDetail.** Needs D8. `FlatList`, real empty state.
+8. **[M2] B1.4. Home library layout + `PlantDetail`.** D8 = H2, so this is the returning-user
+   Home, not a separate MyPlants screen: `SectionList` grouped by triage (D7), plus a detail
+   screen. The first-run → library swap and the load-before-first-paint requirement are the hard
+   parts — see D8's consequence list.
 9. **[M2] Photo persistence.** Camera output is a cache URI; iOS purges it, so saved plants lose
    their photos on a timeline you don't control. Copy on save, downscale.
     ```ts
@@ -133,10 +137,25 @@ Mac sleeps → everything is down. This does **not** close M1.
 
 ## OPEN DECISIONS
 
-- **D7 — MyPlants list order.** Triage grouping vs chronological vs photo grid. Recommendation:
-  triage grouping — `PlantDiagnosis.condition` already carries the five-step scale.
-- **D8 — Home vs My Plants nav.** H1 library row under the CTA / H2 adaptive Home / H3 tab bar.
-  Home is 100% first-run content today (F8). Recommendation: H1, the only reversible option.
+- ✅ **D7 — MyPlants list order → triage grouping** (decided 2026-08-17). Group by health:
+  critical + severe, then moderate, then healthy. `PlantDiagnosis.condition` already carries the
+  five-step scale, so the grouping key is free. Matches why the app gets opened.
+- ✅ **D8 — Home vs My Plants nav → H2, adaptive Home** (decided 2026-08-17). Home shows the
+  marketing/how-it-works content on first run and a library-first layout once ≥1 plant is saved.
+  Chosen over H1 (library row under the CTA) and H3 (tab bar).
+  Consequences to build around:
+  - **Two Home layouts** to build, test, and keep on-token. The design review's *do not touch
+    Home* rule was about not degrading the existing first-run screen — the returning-user layout
+    is a new design and must hold the same tokens (`#F0FDF4`, Lora/Raleway, 8pt rhythm) on
+    purpose, not by inheritance.
+  - The swap fires once, the first time a user saves. Decide whether it animates or is simply
+    true on next mount; a screen silently becoming a different screen is disorienting.
+  - Empty state is now Home's first-run content, so "real empty state" in item 8 means the
+    *transition* is the thing to get right, not an illustration.
+  - Home needs the plant list to load before first paint, or it flashes marketing content at a
+    returning user. Read `PlantStore` synchronously on mount — `expo-sqlite/kv-store` supports it.
+  - No separate MyPlants *screen* in the H2 world; item 8 becomes the Home library layout +
+    `PlantDetail`.
 
 ---
 
