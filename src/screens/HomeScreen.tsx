@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useMemo } from 'react';
+import React, { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,13 +6,18 @@ import {
   Pressable,
   Animated,
   ScrollView,
+  SectionList,
   AccessibilityInfo,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { plantLibrary } from '../services/plantLibrary';
+import { triageSections } from '../lib/triage';
+import PlantCard from '../components/PlantCard';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
@@ -29,6 +34,28 @@ const FEATURES: { icon: IconName; title: string; desc: string }[] = [
 export default function HomeScreen({ navigation }: Props) {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
+
+  /*
+   * Adaptive Home (D8/H2): marketing copy on first run, library once a plant
+   * is saved.
+   *
+   * The lazy useState initializer is the whole reason the store is
+   * synchronous. Reading in an effect would render the first-run layout for a
+   * frame and then swap it, so a returning user would see marketing content
+   * flash before their own plants. This runs during the first render instead,
+   * so the correct layout is the only one ever painted.
+   */
+  const [library, setLibrary] = useState(() => plantLibrary.load());
+
+  // A plant saved on the Diagnosis screen has to appear on the way back.
+  useFocusEffect(
+    useCallback(() => {
+      setLibrary(plantLibrary.load());
+    }, [])
+  );
+
+  const sections = useMemo(() => triageSections(library.plants), [library]);
+  const hasPlants = library.plants.length > 0;
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(40)).current;
@@ -54,6 +81,85 @@ export default function HomeScreen({ navigation }: Props) {
     });
     return () => loop?.stop();
   }, []);
+
+  /*
+   * Returning-user layout. The design review's "do not touch Home" rule was
+   * about not degrading the first-run screen, which is why that branch below
+   * is untouched — this is a second layout holding the same tokens on purpose
+   * rather than by inheritance.
+   */
+  if (hasPlants || library.ok === false) {
+    return (
+      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+        <SectionList
+          sections={sections}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={s.libScroll}
+          showsVerticalScrollIndicator={false}
+          stickySectionHeadersEnabled={false}
+          ListHeaderComponent={
+            <>
+              <View style={s.header}>
+                <View style={s.logoIcon}>
+                  <Ionicons name="leaf" size={24} color={t.color.onPrimary} />
+                </View>
+                <View>
+                  <Text style={s.logoText}>PlantAI</Text>
+                  <Text style={s.logoSub}>Plant Doctor</Text>
+                </View>
+              </View>
+
+              {/*
+                A damaged library must never be reported as an empty one —
+                "you have no plants" is indistinguishable from a deletion the
+                user never performed. The store preserved the bytes, so the
+                copy says recoverable, not lost.
+              */}
+              {library.ok === false && (
+                <View style={s.warnCard}>
+                  <Ionicons name="alert-circle" size={20} color={t.color.warning} />
+                  <View style={s.warnBody}>
+                    <Text style={s.warnTitle}>
+                      {library.reason === 'future_version'
+                        ? 'Saved by a newer version'
+                        : "Some saved plants couldn't be read"}
+                    </Text>
+                    <Text style={s.warnText}>
+                      {library.reason === 'future_version'
+                        ? 'Update PlantAI to see this library again. Nothing has been deleted.'
+                        : 'Your data has been set aside, not deleted. New plants save normally.'}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              <Text style={s.libTitle}>My Plants</Text>
+            </>
+          }
+          renderSectionHeader={({ section }) => (
+            <Text style={s.sectionHeader}>{section.title}</Text>
+          )}
+          renderItem={({ item }) => (
+            <PlantCard
+              plant={item}
+              onPress={() => navigation.navigate('PlantDetail', { plantId: item.id })}
+            />
+          )}
+          ListFooterComponent={
+            <Pressable
+              style={({ pressed }) => [s.ctaBtn, s.libCta, pressed && s.ctaBtnPressed]}
+              onPress={() => navigation.navigate('Camera')}
+              accessibilityRole="button"
+              accessibilityLabel="Diagnose another plant — open the camera"
+            >
+              <Ionicons name="camera" size={22} color={t.color.onPrimary} />
+              <Text style={s.ctaText}>Diagnose Another Plant</Text>
+            </Pressable>
+          }
+        />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
@@ -124,6 +230,31 @@ function makeStyles(t: Theme) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: t.color.background },
     scroll: { paddingBottom: t.space['2xl'], paddingHorizontal: t.space.xl },
+
+    // ── Returning-user library layout ──────────────────────────────────────
+    libScroll: { paddingBottom: t.space['2xl'], paddingHorizontal: t.space.xl },
+    libTitle: { ...t.type.title, color: t.color.foreground, marginTop: t.space.lg, marginBottom: t.space.sm },
+    // Sections carry the grouping, so headers stay quiet — the condition
+    // colour on each card is what should draw the eye.
+    sectionHeader: {
+      ...t.type.caption,
+      color: t.color.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      marginTop: t.space.md,
+      marginBottom: t.space.sm,
+    },
+    libCta: { marginTop: t.space.xl },
+    warnCard: {
+      flexDirection: 'row',
+      backgroundColor: t.color.warningWash,
+      borderRadius: t.radius.lg,
+      padding: t.space.md,
+      marginTop: t.space.md,
+    },
+    warnBody: { flex: 1, marginLeft: t.space.sm },
+    warnTitle: { ...t.type.bodyStrong, color: t.color.foreground },
+    warnText: { ...t.type.caption, color: t.color.textSecondary, marginTop: 2 },
     header: { flexDirection: 'row', alignItems: 'center', gap: t.space.md, paddingTop: t.space.lg, paddingBottom: t.space.sm },
     logoIcon: {
       width: 44,

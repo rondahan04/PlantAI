@@ -1,0 +1,115 @@
+import React from 'react';
+import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Theme, useTheme } from '../theme';
+import type { StoredPlant } from '../services/plantStore';
+
+/*
+ * One row in the plant library.
+ *
+ * The photo is deliberately small and the condition is what carries colour: a
+ * library exists so a user can spot the plant that needs help, not to browse
+ * photographs. A grid was the alternative (D7) and was rejected for making
+ * condition secondary to aesthetics.
+ */
+
+const CONDITION_COLOR: Record<string, keyof Theme['color']> = {
+  healthy: 'conditionHealthy',
+  mild: 'conditionMild',
+  moderate: 'conditionModerate',
+  severe: 'conditionSevere',
+  critical: 'conditionCritical',
+};
+
+function relativeDay(iso: string, now: number): string {
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return '';
+  const days = Math.floor((now - then) / 86_400_000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days}d ago`;
+  if (days < 365) return `${Math.floor(days / 7)}w ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}
+
+export default function PlantCard({
+  plant,
+  onPress,
+}: {
+  plant: StoredPlant;
+  onPress: () => void;
+}) {
+  const t = useTheme();
+  const s = React.useMemo(() => makeStyles(t), [t]);
+  const color = t.color[CONDITION_COLOR[plant.diagnosis.condition] ?? 'conditionModerate'];
+  const when = relativeDay(plant.savedAt, Date.now());
+
+  return (
+    <Pressable
+      style={({ pressed }) => [s.card, pressed && s.cardPressed]}
+      onPress={onPress}
+      accessibilityRole="button"
+      // One label rather than four separate nodes: a screen reader user wants
+      // the plant and its state in a single utterance, not a tour of the row.
+      accessibilityLabel={`${plant.diagnosis.plantName}, ${plant.diagnosis.conditionLabel}, saved ${when}`}
+    >
+      {/*
+        The photo may be gone: until TODOS item 9 this is the camera's cache
+        URI and iOS purges it on its own schedule. Image renders nothing on a
+        dead URI, so the leaf placeholder sits underneath rather than leaving a
+        blank square that reads as a broken card.
+      */}
+      <View style={s.thumbWrap}>
+        <Ionicons name="leaf-outline" size={22} color={t.color.textMuted} />
+        <Image source={{ uri: plant.photoUri }} style={s.thumb} />
+      </View>
+
+      <View style={s.body}>
+        <Text style={s.name} numberOfLines={1}>
+          {plant.diagnosis.plantName}
+        </Text>
+        <View style={s.metaRow}>
+          <View style={[s.dot, { backgroundColor: color }]} />
+          <Text style={[s.condition, { color }]} numberOfLines={1}>
+            {plant.diagnosis.conditionLabel}
+          </Text>
+          <Text style={s.when}> · {when}</Text>
+        </View>
+      </View>
+
+      <Ionicons name="chevron-forward" size={18} color={t.color.textMuted} />
+    </Pressable>
+  );
+}
+
+const makeStyles = (t: Theme) =>
+  StyleSheet.create({
+    card: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: t.color.surface,
+      borderRadius: t.radius.lg,
+      padding: t.space.md,
+      marginBottom: t.space.sm,
+      minHeight: 72, // comfortably past the 44pt minimum target (H6)
+      ...t.elevation.card,
+    },
+    cardPressed: { opacity: 0.7 },
+    thumbWrap: {
+      width: 52,
+      height: 52,
+      borderRadius: t.radius.md,
+      backgroundColor: t.color.surfaceMuted,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+      marginRight: t.space.md,
+    },
+    thumb: { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0 },
+    body: { flex: 1, marginRight: t.space.sm },
+    name: { ...t.type.bodyStrong, color: t.color.foreground },
+    metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+    dot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
+    condition: { ...t.type.caption, flexShrink: 1 },
+    when: { ...t.type.caption, color: t.color.textMuted },
+  });

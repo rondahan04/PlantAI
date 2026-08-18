@@ -51,6 +51,7 @@ export type RootStackParamList = {
     imageUri: string;
     diagnosis: PlantDiagnosis;
   };
+  PlantDetail: { plantId: string };
   Nurseries: {
     plantName: string;
     lat: number;
