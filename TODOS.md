@@ -2,8 +2,8 @@
 
 > Thesis: diagnosis acquire, marketplace transact, **only plant library retain.**
 > CEO plan: `~/.gstack/projects/rondahan04-PlantAI/ceo-plans/2026-08-11-retention-spine.md`
-> M1 code all written, typechecked, 80 tests green. Full loop verified from the iOS simulator
-> over a public tunnel 2026-08-17 — diagnosis + nursery scrape. Fly deploy still blocked on billing.
+> **M1 shipped 2026-08-18** — https://plantai-api-eev0.onrender.com. Diagnosis and nursery
+> scrape both verified live against it. 92 tests green.
 
 ---
 
@@ -20,26 +20,29 @@ restricting it to the app breaks Places, and splitting needs an `android.package
 doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Android + Places API.
 
 1. ✅ **[P0] Old OpenAI key revoked 2026-08-17.** The leak is closed.
-2. **[M1] Deploy to Render.** Everything below assumes a backend that exists when your laptop
-   doesn't. **Fly is abandoned — it will not provision without a credit card** (`fly launch` →
-   `requested machine count exceeds organization limit` on an org with zero machines). Render's
-   free tier needs no card: 750 instance-hours/month, Dockerfile deploys, `render.yaml` Blueprint
-   committed. `fly.toml` and `scripts/fly-secrets.sh` are kept for the day a card exists.
-   1. Push the branch, then render.com → sign up with **GitHub** (no card).
-   2. **New → Blueprint** → pick `rondahan04/PlantAI` → it reads `render.yaml`.
-   3. Paste the 6 `sync: false` secrets when prompted — plain names, encrypted at rest, never in
-      git. `API_SHARED_SECRET` must equal `EXPO_PUBLIC_API_SECRET` in `.env` or every request 401s.
-   4. `curl https://plantai-api.onrender.com/health` → gate/jobs counters.
-   5. Point `EXPO_PUBLIC_API_BASE_URL` at the Render URL, restart `expo start --clear`. Retires
-      the stale-URL failure mode (F6) and the tunnel for good.
-   6. Free-tier spin-down: suspends after 15 min idle, ~1 min cold start. **Not a job-loss risk** —
-      the client polls every 1.5-5s for the whole scrape, so the service can only sleep when
-      nothing is in flight. Optional: free pinger (cron-job.org, no card) on `/health` every
-      10 min keeps it warm; `/health` is gate-exempt so it costs nothing against the daily cap.
-      750h/month ≈ 31 days, so one always-warm service fits and a second one would not.
-   7. ✅ Tracks `main`. Render's Blueprint scan reads the repo's **default branch** — a
-      `render.yaml` living only on a feature branch is invisible to it, which is exactly how the
-      first attempt failed. M1 was fast-forward merged to `main` 2026-08-17 (80 tests, tsc clean).
+2. ✅ **[M1] DEPLOYED — https://plantai-api-eev0.onrender.com (2026-08-18).** The app now talks
+   to a backend that exists when the laptop doesn't. Fly was abandoned: it will not provision
+   without a credit card (`fly launch` → `requested machine count exceeds organization limit` on
+   an org with zero machines). Render's free tier needs no card — 750 instance-hours/month,
+   Dockerfile deploys, `render.yaml` Blueprint on `main`. `fly.toml` and `scripts/fly-secrets.sh`
+   are kept for the day a card exists.
+
+   **Verified in production, not assumed:** `/health` 200 · `401` without `x-plantai-key` · `415`
+   on a non-image past the gate · `422 not_a_plant` on a grey square · real diagnosis
+   (`Rhaphidophora tetrasperma`, moderate) · real nursery scrape (Hebrew results, Herzliya, ~50s).
+   The iOS bundle was rebuilt with `--clear` and greps clean: the Render URL appears, the tunnel
+   and LAN IP do not.
+
+   Live-only notes worth keeping:
+   - **Blueprint scans the repo's DEFAULT branch.** A `render.yaml` on a feature branch is
+     invisible to it. That is why the first attempt found nothing.
+   - **Spin-down after 15 min idle, ~1 min cold start.** Not a job-loss risk — the client polls
+     every 1.5-5s for the whole scrape, so the service can only sleep when nothing is in flight.
+     Optional: a free pinger (cron-job.org, no card) on `/health` every 10 min keeps it warm;
+     `/health` is gate-exempt so it costs nothing against the daily cap. 750h/month ≈ 31 days, so
+     one always-warm service fits and a second one would not.
+   - **The tunnel and the local server are dead.** `.env` points at Render.
+
 3. ✅ **[M2] Test discovery fixed 2026-08-17.** `"test": "node --test"` — bare recursive
    discovery, so anything matching `*.test.ts` anywhere outside `node_modules` runs. Replaces the
    explicit `scraper/*.test.ts server/*.test.ts` globs that silently skipped every future `src/`
@@ -87,7 +90,11 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
     Israeli nurseries answer WhatsApp, not web forms.
 14. **[M3] E4. Hebrew / RTL.** Groundwork in `143e98d`; copy missing. Mirror-test the layout. The
     users are Israeli and the scraped inventory is already Hebrew.
-15. **[ops] O2/O3/O4 observability.** JSON logs + request id (`server/index.ts:96,99,103`);
+15. **[ops] O2/O3/O4 observability.** Partly done: `/health?errors=1` returns a bounded ring of
+    recent failures to a caller holding the shared secret (added 2026-08-18 — a deployed instance
+    failing on a provider call was otherwise opaque without the host's log viewer, and that is
+    what turned the r68 mystery into a two-minute diagnosis). Still open: JSON logs + request id
+    (`server/index.ts:96,99,103`);
     `/health` reports last-successful-scrape per provider; one-page runbook. ⚠️ Also fix the
     `jobs` field while in there — `jobs: jobs.size()` (`server/index.ts:192`) counts *stored*
     jobs, including finished ones retained for polling, so it never returns to 0 on a healthy
@@ -99,16 +106,6 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
     `nurseries_scraping_testing` → `nurseries-fallback.txt` (production config, read at
     `server/index.ts:100`). **H5** route table in `server/index.ts`.
 18. **[ops] Tavily student plan.** Swap the key value, no code change.
-
-**Stopgap in place while 2.1 is blocked — `cloudflared` quick tunnel.**
-`cloudflared tunnel --url http://localhost:4000` fronts the local server on a public HTTPS URL;
-`.env` `EXPO_PUBLIC_API_BASE_URL` points at it and `GATE_MODE=enforce` is on, because a public
-billable endpoint with the gate in log mode is a stranger's daily cap. **Full loop verified from
-the iOS simulator 2026-08-17:** `[r9] /api/diagnose 71343B → Mini monstera (44%) moderate in
-10241ms`, then `[ra] scrape → ✔ 7 nurseries in 47238ms`; gate `allowed 2, rejected 0`, and a 401
-for a request with no `x-plantai-key`. Restart the tunnel → new URL → paste it into `.env`; it
-died once overnight already (`control stream encountered a failure`) and took the app with it.
-Mac sleeps → everything is down. This does **not** close M1.
 
 ---
 
@@ -158,10 +155,14 @@ Mac sleeps → everything is down. This does **not** close M1.
 
 ---
 
-## SHIPPED (2026-08-16)
+## SHIPPED
 
 | Item | What |
 |------|------|
+| M1 deploy | **https://plantai-api-eev0.onrender.com** (2026-08-18). Render free tier, no card, `render.yaml` Blueprint on `main`. Fly abandoned — will not provision without a credit card. Verified live: gate 401/415, `422 not_a_plant`, real diagnosis, real nursery scrape. |
+| Icons | New leaf mark for iOS + Android. `scripts/make-icons.py` derives the set: fits a plane to the teal pixels to recover the gradient and extends it, killing the baked corners and the alpha (App Store rejects alpha; iOS double-masks pre-rounded art). Android layers rebuilt with the leaf at 60% of the canvas, inside the adaptive safe zone. |
+| Shape drift | `normalizeAssessment` — OpenAI periodically returns `issues` as objects rather than strings, which 502'd a live diagnosis (r68) that had worked locally minutes earlier. Prompt now shows an example element; parser repairs the known shapes. Only `issues` is repaired — fabricating a `condition` would invent a diagnosis. |
+| Error ring | `/health?errors=1`, secret-gated, bounded at 20. A deployed instance failing on a provider call was opaque without the host's log viewer. |
 | P0 funding | OpenAI credits restored; real photo → real diagnosis on device. |
 | A1 gate | `server/gate.ts` — `x-plantai-key`, per-IP burst limit, daily cap → 503, `CORS: *` gone. Cap checked *before* secret; `GATE_MODE` fails safe to `log`; polling exempt. ⚠️ The secret is a speed bump, not auth — **the cap bounds the bill.** 14 tests. |
 | A2 code | `Dockerfile` (node:26-alpine, non-root, zero deps), `.dockerignore`, `fly.toml`. 90s-timeout requirement retired by E12. |
