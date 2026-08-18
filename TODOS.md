@@ -58,13 +58,21 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
    - broken single records dropped, library survives; future-version blob quarantined not mangled
    - `scientificName` added to `PlantDiagnosis` — the server always sent it, the client dropped it
    - ⚠️ `photoUri` is still the camera cache URI until item 9; the record outlives the image
-6. **[M2] `migrate()` chain.** Runs every load, chains v1→v2→v3. Version newer than app
-   quarantines. No-op today + a test proving the chain runs. Cheap now, unshippable later — the
-   first stored blob without it is a permanent migration problem.
-7. **[M2] B1.3. Save button on `DiagnosisScreen`.** Nothing reaches the library without it.
-   Decide placement first — new primary, or header icon so the commerce CTA keeps the accent
-   (the screen already carries 3 actions + 2 URGENT badges). Handle: double-tap → dupes; killed
-   mid-save → persist before navigating.
+6. ✅ **[M2] `migrate()` chain — done 2026-08-18.** `runMigrations(lib, steps, target)` in
+   `plantStore.ts`; `MIGRATIONS` table empty (v1 is current). Steps keyed by the version they
+   upgrade FROM. Walks one version at a time, never jumps. Missing step → throws → quarantine,
+   rather than handing later code a shape no migration produced. Migrated result is written back
+   so a launch never re-migrates. 8 tests inject fake steps — a no-op chain can't be proven by
+   running it.
+   - **Adding v2 is two edits in one commit:** `MIGRATIONS[1] = fn` and `LIBRARY_VERSION = 2`.
+7. ✅ **[M2] B1.3. Save button — done 2026-08-18.** Header icon opposite Back (the slot was
+   already reserved as an empty 60pt spacer), so the "Find a replacement" commerce CTA keeps the
+   accent on a screen already carrying 3 actions + 2 URGENT badges. Bookmark icon, toggles to
+   un-save.
+   - double-tap → `saved` set *before* the write, rolled back on failure
+   - killed mid-save → nothing async, so a reported success is already on disk
+   - storage-full → specific copy ("free some space and try again"), not a generic error
+   - ⚠️ Not yet visually verified on device — the simulator was not booted when this landed.
 8. **[M2] B1.4. Home library layout + `PlantDetail`.** D8 = H2, so this is the returning-user
    Home, not a separate MyPlants screen: `SectionList` grouped by triage (D7), plus a detail
    screen. The first-run → library swap and the load-before-first-paint requirement are the hard
