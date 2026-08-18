@@ -13,6 +13,19 @@ export interface PlantDiagnosis {
   canBeSaved: boolean;
   confidence: number;
   description: string;
+  /*
+   * Ongoing species care — distinct from `treatments`, which fix what is wrong
+   * today. Optional because it is advisory server-side (a model that omits it
+   * must not fail the diagnosis) and because every plant saved before this
+   * field existed has none. Absent means the section is not rendered.
+   */
+  carePlan?: CarePlan;
+}
+
+export interface CarePlan {
+  soil: string;
+  light: string;
+  water: string;
 }
 
 export interface Treatment {

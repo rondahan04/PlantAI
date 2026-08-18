@@ -107,3 +107,70 @@ test('non-objects pass through without throwing', () => {
     assert.equal(isHealthAssessment(normalizeAssessment(v)), false);
   }
 });
+
+// ─── carePlan ────────────────────────────────────────────────────────────────
+//
+// The care plan is the one advisory field in the assessment. Every test here
+// exists to pin down the same rule from a different side: a bad care plan costs
+// the user a section, never the diagnosis they paid for.
+
+const carePlan = {
+  soil: 'Well-draining aroid mix, peat and perlite',
+  light: 'Bright indirect — no direct midday sun',
+  water: 'Every 7-10 days, when the top 2cm is dry',
+};
+
+test('a complete care plan validates and survives normalizing', () => {
+  const withCare = { ...valid, carePlan };
+  assert.equal(isHealthAssessment(withCare), true);
+  assert.deepEqual((normalizeAssessment(withCare) as typeof withCare).carePlan, carePlan);
+});
+
+test('an assessment with no care plan is still valid', () => {
+  assert.equal(isHealthAssessment(valid), true);
+  assert.equal(normalizeAssessment(valid), valid, 'absent carePlan is not a repair');
+});
+
+test('a malformed care plan is dropped, never fatal', () => {
+  // The diagnosis is a paid call on a plant that may be dying. Losing it
+  // because the model skipped a watering tip would be the wrong trade.
+  const cases: unknown[] = [
+    { light: 'Bright indirect' }, // missing soil and water
+    { soil: 'Loam', light: 'Bright', water: '' }, // empty string renders a blank row
+    { soil: 'Loam', light: 'Bright', water: ['weekly'] }, // wrong type
+    'water it sometimes', // not an object at all
+    null,
+  ];
+
+  for (const bad of cases) {
+    const out = normalizeAssessment({ ...valid, carePlan: bad }) as Record<string, unknown>;
+    assert.equal('carePlan' in out, false, `carePlan should be dropped: ${JSON.stringify(bad)}`);
+    assert.equal(isHealthAssessment(out), true, 'the diagnosis itself must still pass');
+  }
+});
+
+test('a malformed care plan alone does not fail the guard directly', () => {
+  // isHealthAssessment is also called on un-normalized input in tests and by
+  // any future caller, so it rejects the malformed shape rather than ignoring
+  // it — normalize is what turns that rejection into a dropped field.
+  assert.equal(isHealthAssessment({ ...valid, carePlan: { soil: 'Loam' } }), false);
+});
+
+test('issue flattening and care-plan dropping compose in one pass', () => {
+  const drifted = {
+    ...valid,
+    issues: [{ name: 'Aphids', evidence: 'Clusters on new growth.' }],
+    carePlan: { soil: 'Loam' },
+  };
+
+  const out = normalizeAssessment(drifted) as Record<string, unknown>;
+  assert.equal(isHealthAssessment(out), true);
+  assert.deepEqual(out.issues, ['Aphids — Clusters on new growth.']);
+  assert.equal('carePlan' in out, false);
+});
+
+test('normalizing does not mutate the parsed response', () => {
+  const input = { ...valid, carePlan: { soil: 'Loam' } };
+  normalizeAssessment(input);
+  assert.deepEqual(input.carePlan, { soil: 'Loam' }, 'the caller still holds what it parsed');
+});

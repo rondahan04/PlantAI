@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Theme, useTheme } from '../theme';
+import { LOGO_GLYPH } from '../brand';
 import type { StoredPlant } from '../services/plantStore';
 
 /*
@@ -56,11 +57,13 @@ export default function PlantCard({
       {/*
         The photo may be gone: until TODOS item 9 this is the camera's cache
         URI and iOS purges it on its own schedule. Image renders nothing on a
-        dead URI, so the leaf placeholder sits underneath rather than leaving a
-        blank square that reads as a broken card.
+        dead URI, so the app mark sits underneath rather than leaving a blank
+        square that reads as a broken card. Tinted muted on purpose — it is a
+        placeholder, and a full-colour logo in every row would compete with the
+        condition dot that the card exists to surface.
       */}
       <View style={s.thumbWrap}>
-        <Ionicons name="leaf-outline" size={22} color={t.color.textMuted} />
+        <Image source={LOGO_GLYPH} style={[s.thumbGlyph, { tintColor: t.color.textMuted }]} />
         <Image source={{ uri: plant.photoUri }} style={s.thumb} />
       </View>
 
@@ -105,6 +108,9 @@ const makeStyles = (t: Theme) =>
       overflow: 'hidden',
       marginRight: t.space.md,
     },
+    // Larger than the 22pt icon it replaced: the mark is drawn inside the
+    // adaptive-icon safe zone, so the visible leaf is ~60% of the box.
+    thumbGlyph: { width: 40, height: 40, resizeMode: 'contain' as const },
     thumb: { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0 },
     body: { flex: 1, marginRight: t.space.sm },
     name: { ...t.type.bodyStrong, color: t.color.foreground },

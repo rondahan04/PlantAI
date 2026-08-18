@@ -30,6 +30,23 @@ export interface Treatment {
 
 export type Condition = 'healthy' | 'mild' | 'moderate' | 'severe' | 'critical';
 
+/*
+ * Ongoing care for the SPECIES, as opposed to `treatments`, which target what is
+ * wrong in this photo right now. A healthy plant has an empty issue list and no
+ * urgent treatment, and the user still needs to know how to keep it that way —
+ * that gap is what this fills.
+ *
+ * Optional the whole way down (here, on the wire, and in the client type). A
+ * diagnosis is a paid call and the user's plant may be dying; losing it because
+ * the model omitted a watering tip would be a bad trade. Missing means "not
+ * shown", never "failed".
+ */
+export interface CarePlan {
+  soil: string;
+  light: string;
+  water: string;
+}
+
 export interface PlantDiagnosis {
   plantName: string;
   scientificName: string;
@@ -40,6 +57,7 @@ export interface PlantDiagnosis {
   canBeSaved: boolean;
   confidence: number;
   description: string;
+  carePlan?: CarePlan;
 }
 
 export interface Identification {
@@ -55,6 +73,7 @@ export interface HealthAssessment {
   treatments: Treatment[];
   description: string;
   canBeSaved: boolean;
+  carePlan?: CarePlan;
 }
 
 /*
@@ -129,6 +148,9 @@ export async function diagnose(image: Buffer, deps: DiagnosisDeps): Promise<Plan
     canBeSaved: health.canBeSaved,
     confidence: id.confidence,
     description: health.description,
+    // Omitted rather than sent as undefined: JSON.stringify drops it either
+    // way, and an absent key is what the client's optional field expects.
+    ...(health.carePlan ? { carePlan: health.carePlan } : {}),
   };
 }
 
@@ -227,7 +249,10 @@ export function openAiAssessHealth(apiKey: string) {
           },
         ],
         response_format: { type: 'json_object' },
-        max_completion_tokens: 800,
+        // 800 was sized before carePlan existed; three more fields of prose ran
+        // the response into the cap and truncated JSON fails to parse, which
+        // surfaces as a service error on a diagnosis that actually succeeded.
+        max_completion_tokens: 1000,
       }),
     });
 
@@ -281,9 +306,16 @@ function prompt(id: Identification): string {
     { "title": "string", "description": "string (max 100 chars)", "urgent": false }
   ],
   "description": "string (max 180 chars)",
-  "canBeSaved": true
+  "canBeSaved": true,
+  "carePlan": {
+    "soil": "string (max 90 chars)",
+    "light": "string (max 90 chars)",
+    "water": "string (max 90 chars)"
+  }
 }
-condition must be one of: healthy, mild, moderate, severe, critical, reflecting what you see in the photo. "issues" must be an array of PLAIN STRINGS — one short sentence per visible problem, never objects. Use [] if the plant is healthy. Provide 2-3 treatments targeting those problems (or general care tips if healthy). Return ONLY valid JSON.`;
+condition must be one of: healthy, mild, moderate, severe, critical, reflecting what you see in the photo. "issues" must be an array of PLAIN STRINGS — one short sentence per visible problem, never objects. Use [] if the plant is healthy. Provide 2-3 treatments targeting those problems (or general care tips if healthy).
+
+"carePlan" is ongoing care for this SPECIES, not a fix for what is wrong today — a healthy plant still gets one. "soil": the potting mix and its drainage. "light": state explicitly whether the plant wants DIRECT or INDIRECT light, how bright, and any exposure to avoid. "water": how often, plus the physical check that says it is time (e.g. top 2cm of soil dry). All three are required and each must be one short concrete phrase, never a paragraph. Return ONLY valid JSON.`;
 }
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -329,20 +361,44 @@ function issueToString(value: unknown): string | null {
   return (detail ?? label ?? null)?.trim() || null;
 }
 
+export function isCarePlan(value: unknown): value is CarePlan {
+  if (typeof value !== 'object' || value === null) return false;
+  const c = value as Record<string, unknown>;
+  // Non-empty on purpose: `{soil: ""}` renders a labelled row with nothing
+  // beside it, which reads as a rendering bug rather than as missing advice.
+  return (['soil', 'light', 'water'] as const).every(
+    (k) => typeof c[k] === 'string' && (c[k] as string).trim() !== ''
+  );
+}
+
 /*
  * Coerce a parsed OpenAI response toward HealthAssessment without inventing
- * anything. Only `issues` is repaired — every other field is either present and
- * correct or genuinely wrong, and quietly fabricating a `condition` would put
- * words in a pathologist's mouth. Returns the input untouched when there is
- * nothing to fix.
+ * anything. Only `issues` is repaired and only `carePlan` is dropped — every
+ * other field is either present and correct or genuinely wrong, and quietly
+ * fabricating a `condition` would put words in a pathologist's mouth. Returns
+ * the input untouched when there is nothing to fix.
  */
 export function normalizeAssessment(value: unknown): unknown {
   if (typeof value !== 'object' || value === null) return value;
   const a = value as Record<string, unknown>;
-  if (!Array.isArray(a.issues)) return value;
-  if (a.issues.every((i) => typeof i === 'string')) return value;
 
-  return { ...a, issues: a.issues.map(issueToString).filter((s): s is string => s !== null) };
+  let out = a;
+
+  if (Array.isArray(a.issues) && !a.issues.every((i) => typeof i === 'string')) {
+    out = { ...out, issues: a.issues.map(issueToString).filter((s): s is string => s !== null) };
+  }
+
+  /*
+   * A malformed care plan is discarded, not fatal. It is the one advisory field
+   * here: the diagnosis the user paid for is still correct without it, so a
+   * model that answers `{"light": "bright"}` costs them a section, not the call.
+   */
+  if ('carePlan' in a && !isCarePlan(a.carePlan)) {
+    out = { ...out };
+    delete out.carePlan;
+  }
+
+  return out;
 }
 
 export function isHealthAssessment(value: unknown): value is HealthAssessment {
@@ -357,6 +413,9 @@ export function isHealthAssessment(value: unknown): value is HealthAssessment {
     Array.isArray(a.treatments) &&
     a.treatments.every(isTreatment) &&
     typeof a.description === 'string' &&
-    typeof a.canBeSaved === 'boolean'
+    typeof a.canBeSaved === 'boolean' &&
+    // Advisory: absent is valid, malformed is not. normalizeAssessment has
+    // already dropped the malformed case, so this only bites a direct caller.
+    (a.carePlan === undefined || isCarePlan(a.carePlan))
   );
 }

@@ -6,6 +6,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { LOGO_GLYPH } from '../brand';
 import { plantLibrary } from '../services/plantLibrary';
 
 /*
@@ -29,6 +30,22 @@ const CONDITION_COLOR: Record<string, keyof Theme['color']> = {
   critical: 'conditionCritical',
 };
 
+/*
+ * The care plan reads as three fixed rows in a fixed order rather than a loop
+ * over whatever keys arrived: soil, then light, then water is the order a
+ * person actually sets a plant up in, and a stable layout is what makes the
+ * section skimmable on a plant you have opened twenty times.
+ */
+const CARE_ROWS: {
+  key: 'soil' | 'light' | 'water';
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+}[] = [
+  { key: 'soil', label: 'Soil', icon: 'layers-outline' },
+  { key: 'light', label: 'Light', icon: 'sunny-outline' },
+  { key: 'water', label: 'Water', icon: 'water-outline' },
+];
+
 export default function PlantDetailScreen({ navigation, route }: Props) {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
@@ -46,7 +63,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
     return (
       <SafeAreaView style={s.container} edges={['top', 'bottom']}>
         <View style={s.missing}>
-          <Ionicons name="leaf-outline" size={40} color={t.color.textMuted} />
+          <Image source={LOGO_GLYPH} style={[s.emptyGlyph, { tintColor: t.color.textMuted }]} />
           <Text style={s.missingTitle}>This plant is no longer saved</Text>
           <Pressable style={s.backLink} onPress={() => navigation.goBack()} accessibilityRole="button">
             <Text style={s.backLinkText}>Back to my plants</Text>
@@ -103,7 +120,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
 
         {/* Same caveat as the card: the cache URI may be dead until item 9. */}
         <View style={s.imageWrap}>
-          <Ionicons name="leaf-outline" size={40} color={t.color.textMuted} />
+          <Image source={LOGO_GLYPH} style={[s.heroGlyph, { tintColor: t.color.textMuted }]} />
           <Image source={{ uri: plant.photoUri }} style={s.image} />
         </View>
 
@@ -144,6 +161,37 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
           </View>
         )}
 
+        {/*
+          Absent for every plant saved before this field existed, and for any
+          diagnosis where the model's care plan failed validation server-side.
+          Nothing is rendered in that case — a "Care plan" heading over three
+          empty rows would read as a broken screen rather than as missing data.
+        */}
+        {!!diagnosis.carePlan && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Care plan</Text>
+            <Text style={s.sectionNote}>How to keep this plant well, once it is.</Text>
+            {CARE_ROWS.map(({ key, label, icon }) => (
+              <View
+                key={key}
+                style={s.careCard}
+                // One node per row: a screen reader should say "Light: bright
+                // indirect", not read the icon and the label as separate stops.
+                accessible
+                accessibilityLabel={`${label}: ${diagnosis.carePlan![key]}`}
+              >
+                <View style={s.careIconWrap}>
+                  <Ionicons name={icon} size={20} color={t.color.primary} />
+                </View>
+                <View style={s.careBody}>
+                  <Text style={s.careLabel}>{label}</Text>
+                  <Text style={s.careText}>{diagnosis.carePlan![key]}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
         <Text style={s.savedAt}>Saved {new Date(plant.savedAt).toLocaleDateString()}</Text>
       </ScrollView>
     </SafeAreaView>
@@ -173,6 +221,10 @@ const makeStyles = (t: Theme) =>
       overflow: 'hidden',
       ...t.elevation.card,
     },
+    // Both marks are drawn inside the adaptive-icon safe zone, so they run
+    // larger than the 40pt icons they replaced to land at the same visual size.
+    heroGlyph: { width: 96, height: 96, resizeMode: 'contain' as const },
+    emptyGlyph: { width: 72, height: 72, resizeMode: 'contain' as const },
     image: { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0 },
 
     badge: {
@@ -190,6 +242,34 @@ const makeStyles = (t: Theme) =>
 
     section: { marginTop: t.space.xl },
     sectionTitle: { ...t.type.heading, color: t.color.foreground, marginBottom: t.space.sm },
+    sectionNote: { ...t.type.caption, color: t.color.textMuted, marginTop: -t.space.xs, marginBottom: t.space.sm },
+
+    /*
+     * Same card shell as a treatment, deliberately: both are advice about this
+     * plant. The icon column is what separates them at a glance — no urgency
+     * colour here, because ongoing care is never the thing to act on first.
+     */
+    careCard: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      backgroundColor: t.color.surface,
+      borderRadius: t.radius.lg,
+      padding: t.space.md,
+      marginBottom: t.space.sm,
+      ...t.elevation.card,
+    },
+    careIconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: t.radius.md,
+      backgroundColor: t.color.surfaceMuted,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: t.space.md,
+    },
+    careBody: { flex: 1 },
+    careLabel: { ...t.type.caption, color: t.color.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
+    careText: { ...t.type.body, color: t.color.foreground, marginTop: 2 },
 
     issueRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: t.space.sm },
     issueDot: { width: 8, height: 8, borderRadius: 4, marginTop: 8, marginRight: t.space.sm },

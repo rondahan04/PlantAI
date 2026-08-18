@@ -8,6 +8,7 @@ import {
   ScrollView,
   SectionList,
   AccessibilityInfo,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +18,7 @@ import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
 import { plantLibrary } from '../services/plantLibrary';
 import { triageSections } from '../lib/triage';
+import { APP_LOGO } from '../brand';
 import PlantCard from '../components/PlantCard';
 
 type Props = {
@@ -100,9 +102,7 @@ export default function HomeScreen({ navigation }: Props) {
           ListHeaderComponent={
             <>
               <View style={s.header}>
-                <View style={s.logoIcon}>
-                  <Ionicons name="leaf" size={24} color={t.color.onPrimary} />
-                </View>
+                <Image source={APP_LOGO} style={s.logoIcon} accessibilityIgnoresInvertColors />
                 <View>
                   <Text style={s.logoText}>PlantAI</Text>
                   <Text style={s.logoSub}>Plant Doctor</Text>
@@ -166,9 +166,7 @@ export default function HomeScreen({ navigation }: Props) {
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <Animated.View style={[s.header, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-          <View style={s.logoIcon}>
-            <Ionicons name="leaf" size={24} color={t.color.onPrimary} />
-          </View>
+          <Image source={APP_LOGO} style={s.logoIcon} accessibilityIgnoresInvertColors />
           <View>
             <Text style={s.logoText}>PlantAI</Text>
             <Text style={s.logoSub}>Plant Doctor</Text>
@@ -256,13 +254,16 @@ function makeStyles(t: Theme) {
     warnTitle: { ...t.type.bodyStrong, color: t.color.foreground },
     warnText: { ...t.type.caption, color: t.color.textSecondary, marginTop: 2 },
     header: { flexDirection: 'row', alignItems: 'center', gap: t.space.md, paddingTop: t.space.lg, paddingBottom: t.space.sm },
+    /*
+     * The logo carries its own teal ground, so this is a clipping frame, not a
+     * tile: a `backgroundColor` behind it would only show as a rim if the art
+     * were ever swapped for something with transparent edges.
+     */
     logoIcon: {
       width: 44,
       height: 44,
       borderRadius: t.radius.md,
-      backgroundColor: t.color.primary,
-      alignItems: 'center',
-      justifyContent: 'center',
+      overflow: 'hidden',
     },
     logoText: { ...t.type.title, color: t.color.foreground },
     logoSub: { ...t.type.caption, color: t.color.secondary },
