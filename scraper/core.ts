@@ -86,7 +86,7 @@ async function firecrawlScrape(
     return firecrawlScrape(url, firecrawlKey, { waitFor, attempt: attempt + 1 });
   }
   if (!res.ok) throw new Error(`Firecrawl ${res.status}`);
-  const data = await res.json();
+  const data: any = await res.json();
   return data.data?.markdown ?? '';
 }
 
@@ -111,7 +111,7 @@ export async function tavilyExtract(
     body: JSON.stringify({ urls: url, format: 'markdown', extract_depth: extractDepth }),
   });
   if (!res.ok) throw new Error(`Tavily ${res.status}`);
-  const data = await res.json();
+  const data: any = await res.json();
   const first = data.results?.[0];
   if (!first) {
     const err = data.failed_results?.[0]?.error ?? 'no results';
@@ -475,7 +475,7 @@ export async function callOpenAIJson(
     const body = await res.text().catch(() => '');
     throw new Error(`OpenAI ${res.status} ${body.slice(0, 200)}`);
   }
-  const data = await res.json();
+  const data: any = await res.json();
   return JSON.parse(data.choices[0].message.content);
 }
 

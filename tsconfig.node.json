@@ -1,0 +1,28 @@
+{
+  // The backend and every test file: server/, scraper/, scripts/, dashboard/
+  // and *.test.ts wherever it lives.
+  //
+  // This exists because tsconfig.json covers the app only, which meant the
+  // entire server was never typechecked — a call with the wrong arity shipped
+  // to production undetected on 2026-08-18. Node 26 runs these .ts files
+  // directly, so nothing is emitted; this config only ever reports.
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    // esnext/bundler rather than nodenext: these files use import.meta and
+    // Node 26 runs them directly as ESM, but nodenext infers CommonJS from the
+    // absence of "type": "module" in package.json and rejects import.meta.
+    // Adding that field would change how Metro resolves the APP, so the
+    // typecheck config bends instead of the runtime.
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "es2023",
+    "lib": ["es2023"],
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true
+  },
+  "include": ["server/**/*.ts", "scraper/**/*.ts", "scripts/**/*.ts", "dashboard/**/*.ts", "src/**/*.test.ts"],
+  "exclude": ["node_modules"]
+}

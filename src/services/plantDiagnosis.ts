@@ -75,6 +75,7 @@ function isDiagnosis(value: unknown): value is PlantDiagnosis {
   const d = value as Record<string, unknown>;
   return (
     typeof d.plantName === 'string' &&
+    typeof d.scientificName === 'string' &&
     typeof d.condition === 'string' &&
     typeof d.conditionLabel === 'string' &&
     Array.isArray(d.issues) &&

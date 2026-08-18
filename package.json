@@ -19,6 +19,7 @@
     "expo-linear-gradient": "^56.0.4",
     "expo-location": "^56.0.17",
     "expo-splash-screen": "~56.0.10",
+    "expo-sqlite": "~56.0.5",
     "expo-status-bar": "~56.0.4",
     "react": "19.2.3",
     "react-native": "0.85.3",
@@ -38,7 +39,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "server": "node server/index.ts",
-    "test": "node --test"
+    "test": "node --test",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json"
   },
   "private": true
 }

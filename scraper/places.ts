@@ -58,7 +58,7 @@ export async function resolvePhotoUrl(
       `?maxWidthPx=${maxWidthPx}&skipHttpRedirect=true&key=${encodeURIComponent(apiKey)}`;
     const res = await fetchImpl(url, { method: 'GET' });
     if (!res.ok) return undefined;
-    const data = await res.json();
+    const data: any = await res.json();
     return typeof data.photoUri === 'string' ? data.photoUri : undefined;
   } catch {
     return undefined;
@@ -108,7 +108,7 @@ export async function discoverNurseries(
     throw new Error(`Places ${res.status} ${body.slice(0, 200)}`);
   }
 
-  const data = await res.json();
+  const data: any = await res.json();
   const places = Array.isArray(data.places) ? data.places : [];
 
   // Dedup by website host: chains return one place per branch (same site),

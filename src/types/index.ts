@@ -1,5 +1,11 @@
 export interface PlantDiagnosis {
   plantName: string;
+  /*
+   * Botanical name from PlantNet, e.g. "Rhaphidophora tetrasperma Hook.f.".
+   * The server has always returned it; the client type omitted it, so a saved
+   * plant used to lose its species. Two ferns can share a common name.
+   */
+  scientificName: string;
   condition: 'healthy' | 'mild' | 'moderate' | 'severe' | 'critical';
   conditionLabel: string;
   issues: string[];
