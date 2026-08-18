@@ -80,10 +80,19 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
      cliclick) reach the Simulator window but never register as touches in the RN view, so UI
      automation is not available here — screens need a human or a real test stack (backlog:
      `jest-expo` + RN testing library).
-8. **[M2] B1.4. Home library layout + `PlantDetail`.** D8 = H2, so this is the returning-user
-   Home, not a separate MyPlants screen: `SectionList` grouped by triage (D7), plus a detail
-   screen. The first-run → library swap and the load-before-first-paint requirement are the hard
-   parts — see D8's consequence list.
+8. ✅ **[M2] B1.4. Home library layout + `PlantDetail` — done 2026-08-18.** Returning-user Home
+   (`SectionList`, triage-grouped) + `PlantDetailScreen` + `PlantCard`. `src/lib/triage.ts` is a
+   pure tested function, 8 tests.
+   - **Load before first paint**: lazy `useState(() => plantLibrary.load())`, not an effect — an
+     effect would flash the marketing layout at a returning user. `useFocusEffect` re-reads so a
+     plant saved on Diagnosis appears on the way back.
+   - First-run branch untouched; the library layout is a second layout holding the same tokens.
+   - D7: five conditions → three buckets (attention / watching / healthy). Unknown condition →
+     watching, never healthy.
+   - Corrupt / future-version library renders a warning, never an empty state.
+   - `PlantDetail` re-reads by id, not via nav params — params are a stale snapshot.
+   - ✅ **Verified on device** against a real saved plant: listed under WATCHING with photo and
+     condition; detail screen renders `scientificName` correctly.
 9. **[M2] Photo persistence.** Camera output is a cache URI; iOS purges it, so saved plants lose
    their photos on a timeline you don't control. Copy on save, downscale.
     ```ts
@@ -177,6 +186,7 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
 
 | Item | What |
 |------|------|
+| Plant library UI | Adaptive Home (D8/H2) + PlantDetail + triage grouping (D7). Library read synchronously during first render so a returning user never sees marketing content flash. Corrupt libraries warn rather than showing an empty state. |
 | PlantStore | Saved-plant persistence with read-back-confirmed writes and quarantine-on-corrupt. Plus `tsconfig.node.json`: `server/` and `scraper/` had never been typechecked, which is how a wrong-arity call reached production. `npm run typecheck` now gates both. |
 | M1 deploy | **https://plantai-api-eev0.onrender.com** (2026-08-18). Render free tier, no card, `render.yaml` Blueprint on `main`. Fly abandoned — will not provision without a credit card. Verified live: gate 401/415, `422 not_a_plant`, real diagnosis, real nursery scrape. |
 | Icons | New leaf mark for iOS + Android. `scripts/make-icons.py` derives the set: fits a plane to the teal pixels to recover the gradient and extends it, killing the baked corners and the alpha (App Store rejects alpha; iOS double-masks pre-rounded art). Android layers rebuilt with the leaf at 60% of the canvas, inside the adaptive safe zone. |
