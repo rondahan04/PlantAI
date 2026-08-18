@@ -49,12 +49,15 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
    test. Verified with a throwaway canary under `src/`: 80 → 81 tests, then removed. 80 green.
 4. ✅ **[M2] D7 and D8 decided 2026-08-17** — triage grouping, adaptive Home (H2). See OPEN
    DECISIONS for the consequences H2 puts on items 5, 7, and 8.
-5. **[M2] `PlantStore`.** `import Storage from 'expo-sqlite/kv-store'`. Blob
-   `{ version: 1, plants: [...] }`. DI seam `StorageDeps { getItem, setItem, removeItem }`,
-   mirroring `PipelineDeps`. This is the retention thesis — the only part of the product a user
-   comes back for.
-   - quota-exceeded → read back to confirm the write; on fail "Couldn't save — storage full" + retry
-   - corrupt JSON → quarantine to a `.corrupt` key; never render "you have no plants"
+5. ✅ **[M2] `PlantStore` — done 2026-08-18.** `src/services/plantStore.ts` (pure, testable) +
+   `src/services/plantLibrary.ts` (binds `expo-sqlite/kv-store`). Blob
+   `{ version: 1, plants: [...] }` under `plantai.library`, `StorageDeps` seam mirroring
+   `PipelineDeps`, sync throughout so D8's adaptive Home can read before first paint. 19 tests.
+   - quota → every write is read back and compared; throw *and* silent-noop both reported
+   - corrupt → quarantined to `plantai.library.corrupt`, never deleted; first quarantine wins
+   - broken single records dropped, library survives; future-version blob quarantined not mangled
+   - `scientificName` added to `PlantDiagnosis` — the server always sent it, the client dropped it
+   - ⚠️ `photoUri` is still the camera cache URI until item 9; the record outlives the image
 6. **[M2] `migrate()` chain.** Runs every load, chains v1→v2→v3. Version newer than app
    quarantines. No-op today + a test proving the chain runs. Cheap now, unshippable later — the
    first stored blob without it is a permanent migration problem.
@@ -159,6 +162,7 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
 
 | Item | What |
 |------|------|
+| PlantStore | Saved-plant persistence with read-back-confirmed writes and quarantine-on-corrupt. Plus `tsconfig.node.json`: `server/` and `scraper/` had never been typechecked, which is how a wrong-arity call reached production. `npm run typecheck` now gates both. |
 | M1 deploy | **https://plantai-api-eev0.onrender.com** (2026-08-18). Render free tier, no card, `render.yaml` Blueprint on `main`. Fly abandoned — will not provision without a credit card. Verified live: gate 401/415, `422 not_a_plant`, real diagnosis, real nursery scrape. |
 | Icons | New leaf mark for iOS + Android. `scripts/make-icons.py` derives the set: fits a plane to the teal pixels to recover the gradient and extends it, killing the baked corners and the alpha (App Store rejects alpha; iOS double-masks pre-rounded art). Android layers rebuilt with the leaf at 60% of the canvas, inside the adaptive safe zone. |
 | Shape drift | `normalizeAssessment` — OpenAI periodically returns `issues` as objects rather than strings, which 502'd a live diagnosis (r68) that had worked locally minutes earlier. Prompt now shows an example element; parser repairs the known shapes. Only `issues` is repaired — fabricating a `condition` would invent a diagnosis. |
