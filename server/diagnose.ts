@@ -256,14 +256,18 @@ export function openAiAssessHealth(apiKey: string) {
       throw new DiagnosisServiceError('openai', `content was not JSON: ${content.slice(0, 300)}`);
     }
 
-    if (!isHealthAssessment(parsed)) {
+    // Repair known model shape-drift before validating. The guard below still
+    // rejects anything genuinely unusable — this only rescues responses whose
+    // content is right and whose structure is not.
+    const normalized = normalizeAssessment(parsed);
+    if (!isHealthAssessment(normalized)) {
       throw new DiagnosisServiceError(
         'openai',
         `assessment failed validation: ${content.slice(0, 300)}`
       );
     }
 
-    return parsed;
+    return normalized;
   };
 }
 
@@ -272,14 +276,14 @@ function prompt(id: Identification): string {
 {
   "condition": "healthy",
   "conditionLabel": "Healthy",
-  "issues": [],
+  "issues": ["short sentence naming one visible problem", "another one"],
   "treatments": [
     { "title": "string", "description": "string (max 100 chars)", "urgent": false }
   ],
   "description": "string (max 180 chars)",
   "canBeSaved": true
 }
-condition must be one of: healthy, mild, moderate, severe, critical, reflecting what you see in the photo. List each visible problem in "issues". Provide 2-3 treatments targeting those problems (or general care tips if healthy). Return ONLY valid JSON.`;
+condition must be one of: healthy, mild, moderate, severe, critical, reflecting what you see in the photo. "issues" must be an array of PLAIN STRINGS — one short sentence per visible problem, never objects. Use [] if the plant is healthy. Provide 2-3 treatments targeting those problems (or general care tips if healthy). Return ONLY valid JSON.`;
 }
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -294,6 +298,51 @@ function isTreatment(value: unknown): value is Treatment {
     typeof t.description === 'string' &&
     typeof t.urgent === 'boolean'
   );
+}
+
+/*
+ * Flatten one `issues` element to a string.
+ *
+ * The prompt asks for plain strings, but the model periodically returns richly
+ * shaped objects instead — `{name, evidence, likelyCause}` and similar. That is
+ * not an error worth failing a paid diagnosis over: the information the user
+ * needs is present, just nested. This lost a live request on 2026-08-18 (r68)
+ * while the identical photo had succeeded locally minutes earlier, which is
+ * exactly how non-deterministic shape drift shows up — as a phantom
+ * environment bug.
+ *
+ * Prefer the descriptive field over the label when both exist, since `name`
+ * alone ("Brown necrotic leaf margins") loses the evidence that justifies it.
+ */
+function issueToString(value: unknown): string | null {
+  if (typeof value === 'string') return value.trim() || null;
+  if (typeof value !== 'object' || value === null) return null;
+
+  const o = value as Record<string, unknown>;
+  const pick = (...keys: string[]) =>
+    keys.map((k) => o[k]).find((v) => typeof v === 'string' && v.trim()) as string | undefined;
+
+  const label = pick('name', 'issue', 'title', 'problem');
+  const detail = pick('evidence', 'description', 'detail', 'observation', 'likelyCause', 'cause');
+
+  if (label && detail) return `${label.replace(/[.:]\s*$/, '')} — ${detail}`;
+  return (detail ?? label ?? null)?.trim() || null;
+}
+
+/*
+ * Coerce a parsed OpenAI response toward HealthAssessment without inventing
+ * anything. Only `issues` is repaired — every other field is either present and
+ * correct or genuinely wrong, and quietly fabricating a `condition` would put
+ * words in a pathologist's mouth. Returns the input untouched when there is
+ * nothing to fix.
+ */
+export function normalizeAssessment(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null) return value;
+  const a = value as Record<string, unknown>;
+  if (!Array.isArray(a.issues)) return value;
+  if (a.issues.every((i) => typeof i === 'string')) return value;
+
+  return { ...a, issues: a.issues.map(issueToString).filter((s): s is string => s !== null) };
 }
 
 export function isHealthAssessment(value: unknown): value is HealthAssessment {
