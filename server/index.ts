@@ -159,8 +159,25 @@ function json(res: http.ServerResponse, status: number, body: unknown) {
  * 429 from OpenAI reads as a sentence about our unpaid invoice. Detail goes to
  * the log with the request id and nowhere else.
  */
+/*
+ * Recent failures, kept in memory so a deployed instance can be debugged
+ * without shell access to its logs. Bounded — this is a debugging aid, not a
+ * log store, and an unbounded array on a 512 MB box is a slow leak.
+ *
+ * Exposed ONLY to a caller holding the shared secret (see /health). The detail
+ * strings are provider error bodies: not secrets, but not public either.
+ */
+const RECENT_ERRORS_MAX = 20;
+const recentErrors: Array<{ at: string; rid: string; code: string; detail: string }> = [];
+
+function recordError(rid: string, code: string, detail: string) {
+  recentErrors.push({ at: new Date().toISOString(), rid, code, detail: detail.slice(0, 500) });
+  if (recentErrors.length > RECENT_ERRORS_MAX) recentErrors.shift();
+}
+
 function fail(res: http.ServerResponse, rid: string, status: number, code: string, message: string, detail: string) {
   console.error(`[${rid}] ${code}: ${detail}`);
+  recordError(rid, code, detail);
   json(res, status, { error: code, message });
 }
 
@@ -188,8 +205,15 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ── GET /health ─────────────────────────────────────────────────────────────
+  // Public liveness. `?errors=1` additionally returns the recent-failure ring,
+  // but only for a caller holding the shared secret — provider error bodies are
+  // internal detail and this endpoint is otherwise unauthenticated.
   if (u.pathname === '/health') {
-    json(res, 200, { ok: true, gate: gate.stats(), jobs: jobs.size() });
+    const body: Record<string, unknown> = { ok: true, gate: gate.stats(), jobs: jobs.size() };
+    if (u.searchParams.get('errors') === '1') {
+      body.errors = gate.checkSecret(ip, secret).allow ? recentErrors : 'secret required';
+    }
+    json(res, 200, body);
     return;
   }
 
