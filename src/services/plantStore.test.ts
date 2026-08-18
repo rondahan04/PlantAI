@@ -5,6 +5,7 @@ import {
   QUARANTINE_KEY,
   LIBRARY_VERSION,
   createPlantStore,
+  runMigrations,
   type StorageDeps,
 } from './plantStore.ts';
 import type { PlantDiagnosis } from '../types/index.ts';
@@ -282,4 +283,77 @@ test('load is synchronous — the adaptive Home reads it before first paint', ()
     'load() must not return a Promise'
   );
   assert.equal(result.ok, true);
+});
+
+// ─── Migration chain (item 6) ─────────────────────────────────────────────────
+
+/*
+ * There are no real migrations yet — v1 is current. A no-op chain cannot be
+ * proven to work by running it, so these inject fake steps and assert on the
+ * mechanism. The point is that when v2 arrives the runner is already trusted.
+ */
+
+test('a library already at the current version is returned untouched', () => {
+  const lib = { version: 3, plants: [] };
+  assert.equal(runMigrations(lib, {}, 3), lib);
+});
+
+test('a single step upgrades one version', () => {
+  const steps = { 1: (l: any) => ({ ...l, plants: [...l.plants, 'added-by-v2'] }) };
+  const out = runMigrations({ version: 1, plants: [] }, steps, 2);
+  assert.equal(out.version, 2);
+  assert.deepEqual(out.plants, ['added-by-v2']);
+});
+
+test('steps chain v1 → v2 → v3 in order, not skipping the middle', () => {
+  const seen: number[] = [];
+  const steps = {
+    1: (l: any) => (seen.push(1), l),
+    2: (l: any) => (seen.push(2), l),
+  };
+  const out = runMigrations({ version: 1, plants: [] }, steps, 3);
+  assert.deepEqual(seen, [1, 2], 'every intermediate step must run');
+  assert.equal(out.version, 3);
+});
+
+test('a blob with no version is treated as v1 — it predates versioning', () => {
+  const steps = { 1: (l: any) => ({ ...l, migrated: true }) };
+  const out = runMigrations({ plants: [] } as any, steps, 2);
+  assert.equal((out as any).migrated, true);
+});
+
+test('a missing step for a version in the chain is a hard error, not a silent skip', () => {
+  // Silently jumping the gap would hand later code a shape no migration ever
+  // produced, which is worse than refusing to load.
+  assert.throws(() => runMigrations({ version: 1, plants: [] }, {}, 3), /no migration/i);
+});
+
+test('load() runs the chain and PERSISTS the result', () => {
+  // Without the write-back, every launch re-migrates: slow, and it hides a
+  // broken step behind a result that looks right in memory.
+  const s = fakeStorage({
+    [LIBRARY_KEY]: JSON.stringify({ version: 1, plants: [] }),
+  });
+  const store = createPlantStore(s.deps, {
+    ...fixedOpts(),
+    migrations: { 1: (l: any) => ({ ...l, plants: [] }) },
+    targetVersion: 2,
+  });
+
+  assert.equal(store.load().ok, true);
+  assert.equal(JSON.parse(s.data.get(LIBRARY_KEY)!).version, 2, 'migrated blob must be written back');
+});
+
+test('a throwing migration quarantines rather than leaving half-migrated data', () => {
+  const s = fakeStorage({ [LIBRARY_KEY]: JSON.stringify({ version: 1, plants: [] }) });
+  const store = createPlantStore(s.deps, {
+    ...fixedOpts(),
+    migrations: { 1: () => { throw new Error('bad step'); } },
+    targetVersion: 2,
+  });
+
+  const r = store.load();
+  assert.equal(r.ok, false);
+  assert.equal(r.ok === false && r.reason, 'corrupt');
+  assert.ok(s.data.get(QUARANTINE_KEY), 'the pre-migration bytes must be preserved');
 });

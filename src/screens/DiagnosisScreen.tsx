@@ -8,6 +8,7 @@ import {
   Image,
   Animated,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +18,7 @@ import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, DeliveryMode } from '../types';
 import { Theme, useTheme } from '../theme';
 import { prefetchNearbyNurseries } from '../services/nurseryService';
+import { plantLibrary } from '../services/plantLibrary';
 import { identityConfidence } from '../lib/confidence';
 
 // Tel Aviv center — used as fallback when location permission is denied
@@ -124,6 +126,50 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
     });
   };
 
+
+  /*
+   * Save to the plant library (TODOS item 7).
+   *
+   * Placement is the header icon rather than a fourth button: this screen
+   * already carries three actions and up to two URGENT badges, and "Find a
+   * replacement" is the commerce CTA that has to keep the accent colour. The
+   * header had a reserved empty slot opposite Back, which is exactly the
+   * weight a bookmark action deserves.
+   *
+   * `saved` is set BEFORE the write, not after. A double-tap on a slow device
+   * would otherwise run save() twice and put two identical plants in the
+   * library; the flag is rolled back if the write actually fails.
+   */
+  const [saved, setSaved] = useState(false);
+  const [savedId, setSavedId] = useState<string | null>(null);
+
+  const handleSave = () => {
+    if (saved) return;
+    setSaved(true);
+
+    const result = plantLibrary.save({ photoUri: imageUri, diagnosis });
+    if (!result.ok) {
+      setSaved(false);
+      // The store already distinguishes this from every other failure: the
+      // write did not land, and retrying after freeing space will work.
+      Alert.alert(
+        "Couldn't save",
+        'Your device is out of storage space. Free some space and try again.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    setSavedId(result.plant.id);
+  };
+
+  const handleUnsave = () => {
+    if (!savedId) return;
+    const result = plantLibrary.remove(savedId);
+    if (!result.ok) return;
+    setSaved(false);
+    setSavedId(null);
+  };
+
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
@@ -134,7 +180,23 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
             <Text style={s.backText}>Back</Text>
           </Pressable>
           <Text style={s.headerTitle}>Diagnosis</Text>
-          <View style={{ width: 60 }} />
+          <Pressable
+            style={s.saveBtn}
+            onPress={saved ? handleUnsave : handleSave}
+            accessibilityRole="button"
+            accessibilityLabel={saved ? 'Saved to my plants. Tap to remove.' : 'Save to my plants'}
+            accessibilityState={{ selected: saved }}
+            hitSlop={8}
+          >
+            <Ionicons
+              name={saved ? 'bookmark' : 'bookmark-outline'}
+              size={22}
+              color={saved ? t.color.primary : t.color.foreground}
+            />
+            <Text style={[s.saveText, saved && s.saveTextActive]}>
+              {saved ? 'Saved' : 'Save'}
+            </Text>
+          </Pressable>
         </View>
 
         <Animated.View style={{ opacity: fadeAnim }}>
@@ -308,6 +370,17 @@ function makeStyles(t: Theme) {
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: t.space.md },
     backBtn: { flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingRight: t.space.sm },
     backText: { ...t.type.label, color: t.color.primary },
+    // Mirrors backBtn's 44pt target and width so the title stays centred.
+    saveBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      minWidth: 60,
+      minHeight: 44,
+      paddingLeft: t.space.sm,
+    },
+    saveText: { ...t.type.label, color: t.color.foreground, marginLeft: 4 },
+    saveTextActive: { color: t.color.primary },
     headerTitle: { ...t.type.heading, color: t.color.foreground },
     imageWrap: { borderRadius: t.radius.xl, overflow: 'hidden', height: 240, ...t.elevation.card },
     plantImage: { width: '100%', height: '100%' },

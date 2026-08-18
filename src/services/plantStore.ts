@@ -67,6 +67,9 @@ export interface StorageDeps {
 export interface StoreOptions {
   now?: () => number;
   newId?: () => string;
+  /* Overridable so the chain can be exercised while the real table is empty. */
+  migrations?: Migrations;
+  targetVersion?: number;
 }
 
 /*
@@ -115,11 +118,58 @@ function isStoredPlant(v: unknown): v is StoredPlant {
   );
 }
 
+
+/*
+ * A migration step takes a library at version N and returns it at N+1. Steps
+ * are keyed by the version they upgrade FROM, so `{ 1: fn }` moves v1 → v2.
+ */
+export type Migration = (library: any) => any;
+export type Migrations = Record<number, Migration>;
+
+/*
+ * The real migration table. Empty today because v1 is current — the chain
+ * exists before it is needed on purpose: the first blob written without a
+ * migration path is a permanent problem, and by the time v2 is required there
+ * is live user data that cannot be re-created.
+ *
+ * Adding v2 is two edits in one commit: `MIGRATIONS[1] = fn` (keyed by the
+ * version it upgrades FROM) and `LIBRARY_VERSION = 2`. They must move together
+ * — a bump without a step makes load() throw, and a step without a bump never
+ * runs.
+ */
+export const MIGRATIONS: Migrations = {};
+
+/*
+ * Walk a library forward one version at a time until it reaches `target`.
+ *
+ * Deliberately steps rather than jumping: a v1 blob on a v4 app must pass
+ * through every intermediate shape, because each step is only written to
+ * understand the one immediately before it. A missing step throws instead of
+ * skipping — handing later code a shape no migration ever produced is worse
+ * than refusing to load, and the caller quarantines on throw.
+ */
+export function runMigrations(library: any, steps: Migrations, target: number): any {
+  // A blob with no version predates versioning, which can only mean v1.
+  let current = typeof library?.version === 'number' ? library.version : 1;
+  if (current >= target) return library;
+
+  let out = library;
+  while (current < target) {
+    const step = steps[current];
+    if (!step) throw new Error(`no migration from library version ${current}`);
+    out = { ...step(out), version: current + 1 };
+    current++;
+  }
+  return out;
+}
+
 export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) {
   const now = opts.now ?? (() => Date.now());
   const newId =
     opts.newId ??
     (() => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
+  const migrations = opts.migrations ?? MIGRATIONS;
+  const targetVersion = opts.targetVersion ?? LIBRARY_VERSION;
 
   /*
    * Move the unreadable value aside instead of deleting it. The FIRST
@@ -166,10 +216,36 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
      * fields the newer app wrote, and the next save would persist that loss.
      * Migration forward is item 6; refusing to mangle is this build's job.
      */
-    if (typeof lib.version === 'number' && lib.version > LIBRARY_VERSION) {
+    if (typeof lib.version === 'number' && lib.version > targetVersion) {
       quarantine(raw);
       return { ok: false, reason: 'future_version', plants: [] };
     }
+
+    /*
+     * Bring an older blob up to the current shape, then WRITE IT BACK. Without
+     * the write-back every launch re-migrates: wasted work, and a broken step
+     * stays hidden behind an in-memory result that looks correct.
+     *
+     * A step that throws means the data is in an unknown state, so the
+     * pre-migration bytes are quarantined rather than half-migrated data being
+     * persisted over them.
+     */
+    let migrated: Partial<Library>;
+    try {
+      migrated = runMigrations(lib, migrations, targetVersion);
+    } catch {
+      quarantine(raw);
+      return { ok: false, reason: 'corrupt', plants: [] };
+    }
+
+    if (migrated !== lib && Array.isArray(migrated.plants)) {
+      persist(migrated.plants.filter(isStoredPlant));
+    }
+    if (!Array.isArray(migrated.plants)) {
+      quarantine(raw);
+      return { ok: false, reason: 'corrupt', plants: [] };
+    }
+    lib.plants = migrated.plants;
 
     /*
      * Drop individually unreadable records rather than condemning the whole
@@ -185,7 +261,7 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
    * on.
    */
   function persist(plants: StoredPlant[]): boolean {
-    const payload = JSON.stringify({ version: LIBRARY_VERSION, plants } satisfies Library);
+    const payload = JSON.stringify({ version: targetVersion, plants } satisfies Library);
     try {
       storage.setItem(LIBRARY_KEY, payload);
     } catch {
