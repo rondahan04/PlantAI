@@ -72,7 +72,14 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
    - double-tap → `saved` set *before* the write, rolled back on failure
    - killed mid-save → nothing async, so a reported success is already on disk
    - storage-full → specific copy ("free some space and try again"), not a generic error
-   - ⚠️ Not yet visually verified on device — the simulator was not booted when this landed.
+   - ✅ **Verified on device 2026-08-18** (iPhone 17 Pro sim). A startup harness exercised the
+     real `expo-sqlite/kv-store` path: save → synchronous re-read sees the write in the same tick
+     (the D8 requirement), `scientificName` round-trips, remove works, and a probe left behind
+     **survived a full JS reload** (`count=1`). Harness removed and its rows purged afterwards.
+   - ⚠️ The *button itself* is still unverified visually. Synthetic taps (AppleScript and
+     cliclick) reach the Simulator window but never register as touches in the RN view, so UI
+     automation is not available here — screens need a human or a real test stack (backlog:
+     `jest-expo` + RN testing library).
 8. **[M2] B1.4. Home library layout + `PlantDetail`.** D8 = H2, so this is the returning-user
    Home, not a separate MyPlants screen: `SectionList` grouped by triage (D7), plus a detail
    screen. The first-run → library swap and the load-before-first-paint requirement are the hard
