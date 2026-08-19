@@ -67,10 +67,11 @@ export default function PlantCard({
       }
     >
       {/*
-        The photo may be gone: until TODOS item 9 this is the camera's cache
-        URI and iOS purges it on its own schedule. Image renders nothing on a
-        dead URI, so the app mark sits underneath rather than leaving a blank
-        square that reads as a broken card. Tinted muted on purpose — it is a
+        The photo may be gone. Item 9 copies it into the document directory on
+        save, but a plant saved before that shipped — or one whose copy was
+        interrupted — still points at the camera cache, which iOS purges on its
+        own schedule. Image renders nothing on a dead URI, so the app mark sits
+        underneath rather than leaving a blank square that reads as a broken card. Tinted muted on purpose — it is a
         placeholder, and a full-colour logo in every row would compete with the
         condition dot that the card exists to surface.
       */}

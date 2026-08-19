@@ -40,9 +40,11 @@ export interface StoredPlant {
   /* ISO-8601. Sort key for the library and, later, the photo timeline (E2). */
   savedAt: string;
   /*
-   * Until TODOS item 9 this is the camera's cache URI, which iOS purges on its
-   * own schedule. The record survives; the image may not. Item 9 copies the
-   * file into the document directory on save.
+   * Normally a file in the app's document directory, copied there on save by
+   * `photoStore` (item 9). It can still be a camera cache URI — a plant saved
+   * before that shipped, or one whose copy was interrupted — and iOS purges
+   * that directory on its own schedule, so a reader must tolerate a dead URI.
+   * Home repairs what it can on launch.
    */
   photoUri: string;
   diagnosis: PlantDiagnosis;
@@ -361,13 +363,15 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
   /*
    * Patch one plant in place.
    *
-   * Narrow by design: only the two fields the watering schedule owns. A general
-   * `update(id, patch)` would let a caller overwrite a diagnosis — the one thing
-   * in a stored plant that came from a paid call and cannot be re-derived.
+   * Narrow by design: the two fields the watering schedule owns, plus
+   * `photoUri` once item 9's copy into the document directory finishes. A
+   * general `update(id, patch)` would let a caller overwrite a diagnosis — the
+   * one thing in a stored plant that came from a paid call and cannot be
+   * re-derived.
    */
   function update(
     id: string,
-    patch: Partial<Pick<StoredPlant, 'lastWateredAt' | 'reminderId'>>
+    patch: Partial<Pick<StoredPlant, 'lastWateredAt' | 'reminderId' | 'photoUri'>>
   ): UpdateResult {
     const current = load().plants;
     const target = current.find((p) => p.id === id);
@@ -385,6 +389,13 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
     for (const key of ['lastWateredAt', 'reminderId'] as const) {
       if (key in patch && patch[key] === undefined) delete updated[key];
     }
+    /*
+     * `photoUri` is required, so unlike the optional fields above it cannot be
+     * cleared — spreading an explicit `undefined` over it would write a record
+     * that fails `isStoredPlant` and vanishes from the library on the next
+     * load. A patch that omits a photo keeps the one already there.
+     */
+    if (patch.photoUri === undefined) updated.photoUri = target.photoUri;
 
     const next = current.map((p) => (p.id === id ? updated : p));
     if (!persist(next)) return { ok: false, reason: 'storage_full' };

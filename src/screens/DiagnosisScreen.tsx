@@ -19,6 +19,7 @@ import { RootStackParamList, DeliveryMode } from '../types';
 import { Theme, useTheme } from '../theme';
 import { prefetchNearbyNurseries } from '../services/nurseryService';
 import { plantLibrary } from '../services/plantLibrary';
+import { plantPhotos } from '../services/photos';
 import { identityConfidence } from '../lib/confidence';
 
 // Tel Aviv center — used as fallback when location permission is denied
@@ -160,12 +161,31 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
       return;
     }
     setSavedId(result.plant.id);
+
+    /*
+     * Photo persistence (TODOS item 9), deliberately AFTER the synchronous
+     * write and deliberately not awaited.
+     *
+     * `imageUri` points into the cache directory, which iOS empties whenever it
+     * wants the space — so the record would outlive its picture. The copy is
+     * async in expo-file-system 56, and putting an await in front of the save
+     * would trade a guaranteed record for a nicer photo: killed mid-copy, the
+     * plant itself would be gone. This way the worst case is a plant whose
+     * photo never made it across, which the next load repairs or forgets.
+     */
+    const id = result.plant.id;
+    void plantPhotos.adopt(id, imageUri).then((persisted) => {
+      if (persisted) plantLibrary.update(id, { photoUri: persisted });
+    });
   };
 
   const handleUnsave = () => {
     if (!savedId) return;
     const result = plantLibrary.remove(savedId);
     if (!result.ok) return;
+    // Only after the record is gone — a failed removal must not cost the photo
+    // of a plant that is still in the library.
+    plantPhotos.discard(savedId);
     setSaved(false);
     setSavedId(null);
   };

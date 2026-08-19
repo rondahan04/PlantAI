@@ -8,6 +8,7 @@ import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
 import { LOGO_GLYPH } from '../brand';
 import { plantLibrary } from '../services/plantLibrary';
+import { plantPhotos } from '../services/photos';
 import { intervalLabel, wateringState } from '../lib/watering';
 import { cancelWateringReminder, scheduleWateringReminder } from '../services/wateringReminder';
 
@@ -150,6 +151,11 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
             Alert.alert("Couldn't remove", 'Your device is out of storage space.');
             return;
           }
+          // The record is gone, so its photo is unreachable — leaving the file
+          // behind would grow the document directory forever. Deleted after
+          // the write, never before: a failed removal must not cost the user a
+          // picture of a plant that is still in their library.
+          plantPhotos.discard(plant.id);
           navigation.goBack();
         },
       },
@@ -180,7 +186,8 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
           </Pressable>
         </View>
 
-        {/* Same caveat as the card: the cache URI may be dead until item 9. */}
+        {/* Same caveat as the card: a photo that never finished copying out of
+            the cache may be gone, so the mark sits underneath. */}
         <View style={s.imageWrap}>
           <Image source={LOGO_GLYPH} style={[s.heroGlyph, { tintColor: t.color.textMuted }]} />
           <Image source={{ uri: plant.photoUri }} style={s.image} />

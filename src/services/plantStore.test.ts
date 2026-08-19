@@ -428,6 +428,34 @@ test('an explicit undefined clears a field rather than being ignored', () => {
   assert.equal('reminderId' in store.load().plants[0], false, 'a dangling handle is worse than none');
 });
 
+test('update repoints a photo at its persisted copy', () => {
+  // Item 9: the plant is saved synchronously with the camera's cache URI, then
+  // repointed once the copy into the document directory lands.
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'file:///cache/temp.jpg', diagnosis });
+  const id = saved.ok && (saved.plant.id as string);
+
+  store.update(id as string, { photoUri: 'file:///doc/plant-photos/p.jpg' });
+
+  assert.equal(store.load().plants[0].photoUri, 'file:///doc/plant-photos/p.jpg');
+});
+
+test('update never clears the photo, even when handed an explicit undefined', () => {
+  // Unlike the optional fields, photoUri is required: writing undefined over it
+  // produces a record that fails validation and disappears on the next load.
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'file:///a.jpg', diagnosis });
+  const id = saved.ok && (saved.plant.id as string);
+
+  store.update(id as string, { photoUri: undefined });
+
+  const plants = store.load().plants;
+  assert.equal(plants.length, 1, 'the plant survived');
+  assert.equal(plants[0].photoUri, 'file:///a.jpg');
+});
+
 test('updating one plant leaves the others untouched', () => {
   const s = fakeStorage();
   const store = createPlantStore(s.deps, fixedOpts());

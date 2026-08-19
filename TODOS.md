@@ -93,15 +93,31 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
    - `PlantDetail` re-reads by id, not via nav params — params are a stale snapshot.
    - ✅ **Verified on device** against a real saved plant: listed under WATCHING with photo and
      condition; detail screen renders `scientificName` correctly.
-9. **[M2] Photo persistence.** Camera output is a cache URI; iOS purges it, so saved plants lose
-   their photos on a timeline you don't control. Copy on save, downscale.
-    ```ts
-    import { File, Paths } from 'expo-file-system';
-    const source = new File(Paths.cache, 'temp-photo.jpg');
-    const destination = new File(Paths.document, `plant-${id}.jpg`);
-    await source.copy(destination);
-    ```
-    Not `FileSystem.copyAsync` — functional API deprecated.
+9. ✅ **[M2] Photo persistence — done 2026-08-19.** `src/services/photoStore.ts` (pure, 18 tests) +
+   `src/services/photos.ts` (binds `expo-file-system` 56). Photos land in
+   `<document>/plant-photos/<id>.<ext>`; the `File`/`Directory` API, not the deprecated
+   functional one.
+   - **`copy` is async in SDK 56, everything else on `File` is sync.** So the save is NOT
+     awaited: `plantLibrary.save()` still runs synchronously with the cache URI, the copy
+     follows, and `update(id, {photoUri})` repoints the record. Awaiting first would trade a
+     guaranteed record for a nicer photo — killed mid-copy, the plant itself would be gone.
+   - `update()` widened to accept `photoUri`, and it refuses to clear it: `photoUri` is
+     required, so an explicit `undefined` would write a record that fails validation and
+     disappears on the next load.
+   - Read-back after the copy, same reason as `persist()` — a `copy` that resolves is not
+     evidence the bytes landed, and a record pointing at nothing renders broken forever.
+   - Source extension preserved (`.heic` from the picker stays `.heic`), `.jpg` when there
+     isn't a trustworthy one; ids sanitised so a filename can't escape the directory.
+   - **Home does launch-time housekeeping:** retries any plant still on a cache URI (the file
+     often survives long enough for a second attempt), then sweeps files no plant claims.
+     Neither runs when the library failed to load — it reports zero plants, so a sweep would
+     delete every photo the user has.
+   - Unsave and Remove delete the photo *after* the record write, never before.
+   - ❌ **Downscale not done** — decided 2026-08-19. It needs `expo-image-manipulator`, a
+     native dep and a dev-client rebuild. Camera capture is already `quality: 0.7`; a large
+     gallery pick is copied at full size. Revisit if the document directory gets fat.
+   - ⚠️ Unverified on device: needs a real save → force-quit → relaunch to confirm the photo
+     survives.
 10. **[M2] E10. Storage tests.** Needs 3 first.
     - save 50, force-quit mid-write, relaunch → all 50 readable
     - hand-write truncated JSON → recoverable error, not empty library

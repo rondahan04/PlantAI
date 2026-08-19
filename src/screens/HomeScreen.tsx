@@ -17,6 +17,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
 import { plantLibrary } from '../services/plantLibrary';
+import { plantPhotos } from '../services/photos';
 import { triageSections } from '../lib/triage';
 import { APP_LOGO } from '../brand';
 import { FEATURES } from '../content/features';
@@ -57,6 +58,50 @@ export default function HomeScreen({ navigation }: Props) {
       setLibrary(plantLibrary.load());
     }, [])
   );
+
+  /*
+   * Photo housekeeping (TODOS item 9), once per launch and off the render path.
+   *
+   * Two jobs. First, RETRY: a plant whose `photoUri` still points at the cache
+   * directory had its copy interrupted — by a kill, a full disk, a removal that
+   * raced it. The cache file often survives long enough for a second attempt to
+   * work, and the alternative is a photo that is lost for good.
+   *
+   * Second, SWEEP: a file no plant claims can never be reached again. It comes
+   * from the same interruptions, and from an unsave that landed after its copy.
+   * Both are silent leaks into a directory the system never reclaims.
+   *
+   * Neither runs against a library that failed to load: it reports zero plants,
+   * so a sweep would delete every photo the user has.
+   */
+  useEffect(() => {
+    if (!library.ok) return;
+    const plants = library.plants;
+
+    (async () => {
+      let repaired = false;
+      for (const plant of plants) {
+        if (plantPhotos.owns(plant.photoUri)) continue;
+        const persisted = await plantPhotos.adopt(plant.id, plant.photoUri);
+        if (persisted && plantLibrary.update(plant.id, { photoUri: persisted }).ok) {
+          repaired = true;
+        }
+      }
+
+      // Re-read rather than sweeping against `plants`: a plant could have been
+      // saved or removed while the copies were running, and the newest read is
+      // the only one that can say which files are still claimed.
+      const current = plantLibrary.load();
+      plantPhotos.sweep(
+        current.plants.map((p) => p.id),
+        { libraryReadable: current.ok }
+      );
+
+      if (repaired) setLibrary(current);
+    })();
+    // Launch-time housekeeping, not a reaction to the library changing — the
+    // focus effect above re-reads it constantly and this must not run each time.
+  }, []);
 
   const sections = useMemo(() => triageSections(library.plants), [library]);
   const hasPlants = library.plants.length > 0;
