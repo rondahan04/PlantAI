@@ -54,6 +54,17 @@ export interface StoredPlant {
    */
   lastWateredAt?: string;
   /*
+   * Every watering, newest first, ISO-8601. `lastWateredAt` is kept alongside
+   * it rather than derived: the schedule reads that field on every render and
+   * every card in the library, and it must not depend on the log being sorted,
+   * present, or intact. The log is history for the calendar; the field is the
+   * one fact the reminder is built on.
+   *
+   * Absent on plants watered before the log existed — read it through
+   * `wateringHistory()`, which folds `lastWateredAt` back in.
+   */
+  wateringLog?: string[];
+  /*
    * Identifier of the scheduled local notification, so the next watering can
    * cancel the one it replaces. Absent when nothing is scheduled: no OS
    * permission, no interval in the care plan, or the reminder already fired.
@@ -107,6 +118,45 @@ export type RemoveResult = { ok: true; plants: StoredPlant[] } | { ok: false; re
 export type UpdateResult =
   | { ok: true; plant: StoredPlant; plants: StoredPlant[] }
   | { ok: false; reason: 'storage_full' | 'not_found' };
+
+/*
+ * Roughly three years of daily watering. Far past any real use, and low enough
+ * that a pathological log cannot bloat the blob the app parses on every launch.
+ */
+export const MAX_WATERING_LOG = 1000;
+
+function sameDay(a: string, b: string): boolean {
+  const x = new Date(a);
+  const y = new Date(b);
+  return (
+    x.getFullYear() === y.getFullYear() &&
+    x.getMonth() === y.getMonth() &&
+    x.getDate() === y.getDate()
+  );
+}
+
+/*
+ * Every watering this plant has, newest first.
+ *
+ * Folds `lastWateredAt` back in because plants watered before the log existed
+ * hold that field alone — without this they would open a calendar with nothing
+ * on it, which reads as data loss rather than as a feature that arrived late.
+ * Junk entries are dropped instead of reaching the calendar as `Invalid Date`.
+ */
+export function wateringHistory(plant: StoredPlant): string[] {
+  const raw = Array.isArray(plant.wateringLog) ? plant.wateringLog : [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const entry of [...raw, plant.lastWateredAt].filter((e): e is string => typeof e === 'string')) {
+    const t = Date.parse(entry);
+    if (Number.isNaN(t) || seen.has(entry)) continue;
+    seen.add(entry);
+    out.push(entry);
+  }
+
+  return out.sort((a, b) => Date.parse(b) - Date.parse(a));
+}
 
 function isTreatmentish(v: unknown): boolean {
   if (typeof v !== 'object' || v === null) return false;
@@ -348,7 +398,32 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
    * Scheduling the replacement is the caller's job — it needs the OS.
    */
   function markWatered(id: string, at: number = now()): UpdateResult {
-    return update(id, { lastWateredAt: new Date(at).toISOString(), reminderId: undefined });
+    const current = load().plants;
+    const target = current.find((p) => p.id === id);
+    if (!target) return { ok: false, reason: 'not_found' };
+
+    const stamp = new Date(at).toISOString();
+    const history = wateringHistory(target);
+    /*
+     * A double tap must not become two waterings on the same day. The calendar
+     * would show one dot either way, so a duplicate is invisible there and only
+     * shows up as a wrong count — the quietest kind of wrong.
+     */
+    const log = history[0] && sameDay(history[0], stamp) ? history.slice(1) : history;
+
+    const updated: StoredPlant = {
+      ...target,
+      lastWateredAt: stamp,
+      // Newest first, and bounded: the whole library is one JSON blob that is
+      // re-read on every render, so an unbounded log is a slow leak into the
+      // cost of opening the app.
+      wateringLog: [stamp, ...log].slice(0, MAX_WATERING_LOG),
+    };
+    delete updated.reminderId;
+
+    const next = current.map((p) => (p.id === id ? updated : p));
+    if (!persist(next)) return { ok: false, reason: 'storage_full' };
+    return { ok: true, plant: updated, plants: next };
   }
 
   function remove(id: string): RemoveResult {

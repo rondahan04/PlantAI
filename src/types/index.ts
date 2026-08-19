@@ -74,6 +74,7 @@ export type RootStackParamList = {
     diagnosis: PlantDiagnosis;
   };
   PlantDetail: { plantId: string };
+  WateringHistory: { plantId: string };
   Nurseries: {
     plantName: string;
     lat: number;

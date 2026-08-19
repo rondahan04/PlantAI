@@ -6,6 +6,8 @@ import {
   LIBRARY_VERSION,
   createPlantStore,
   runMigrations,
+  wateringHistory,
+  MAX_WATERING_LOG,
   type StorageDeps,
 } from './plantStore.ts';
 import type { PlantDiagnosis } from '../types/index.ts';
@@ -478,4 +480,121 @@ test('a plant saved before watering existed still loads', () => {
 
   // ...and can start a schedule from today without a migration.
   assert.equal(store.markWatered('old-1').ok, true);
+});
+
+// ─── Watering history ────────────────────────────────────────────────────────
+//
+// The log is what the calendar draws. It is append-only from the app's side, so
+// the failure that matters is a lost or duplicated entry — both show up as a
+// calendar that quietly disagrees with what the user remembers doing.
+
+test('every watering is appended, newest first', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'file:///a.jpg', diagnosis });
+  const id = saved.ok && (saved.plant.id as string);
+
+  store.markWatered(id as string, Date.parse('2026-08-01T09:00:00.000Z'));
+  store.markWatered(id as string, Date.parse('2026-08-09T09:00:00.000Z'));
+  store.markWatered(id as string, Date.parse('2026-08-18T09:00:00.000Z'));
+
+  const log = store.load().plants[0].wateringLog;
+  assert.deepEqual(log, [
+    '2026-08-18T09:00:00.000Z',
+    '2026-08-09T09:00:00.000Z',
+    '2026-08-01T09:00:00.000Z',
+  ]);
+});
+
+test('two waterings on the same day count once', () => {
+  // The calendar draws one square either way, so a duplicate is invisible
+  // there and surfaces only as a wrong total — the quietest kind of wrong.
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'file:///a.jpg', diagnosis });
+  const id = saved.ok && (saved.plant.id as string);
+
+  store.markWatered(id as string, Date.parse('2026-08-18T08:00:00.000Z'));
+  store.markWatered(id as string, Date.parse('2026-08-18T20:00:00.000Z'));
+
+  const plant = store.load().plants[0];
+  assert.equal(plant.wateringLog?.length, 1, 'one entry for the day');
+  assert.equal(plant.lastWateredAt, '2026-08-18T20:00:00.000Z', 'the later time wins');
+});
+
+test('the log is bounded so the library blob cannot grow without limit', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'file:///a.jpg', diagnosis });
+  const id = saved.ok && (saved.plant.id as string);
+
+  const start = Date.parse('2020-01-01T09:00:00.000Z');
+  for (let i = 0; i < MAX_WATERING_LOG + 25; i++) {
+    store.markWatered(id as string, start + i * 86_400_000);
+  }
+
+  const log = store.load().plants[0].wateringLog!;
+  assert.equal(log.length, MAX_WATERING_LOG);
+  assert.equal(log[0], new Date(start + (MAX_WATERING_LOG + 24) * 86_400_000).toISOString(),
+    'the newest entry is kept, the oldest is dropped');
+});
+
+test('history folds in a plant watered before the log existed', () => {
+  // Otherwise these plants open an empty calendar, which reads as data loss.
+  const legacy = {
+    id: 'old-1',
+    savedAt: '2026-08-01T00:00:00.000Z',
+    photoUri: 'file:///a.jpg',
+    diagnosis,
+    lastWateredAt: '2026-08-10T09:00:00.000Z',
+  };
+  assert.deepEqual(wateringHistory(legacy), ['2026-08-10T09:00:00.000Z']);
+});
+
+test('history is empty for a plant that was never watered', () => {
+  assert.deepEqual(
+    wateringHistory({ id: 'x', savedAt: '2026-08-01T00:00:00.000Z', photoUri: 'f', diagnosis }),
+    []
+  );
+});
+
+test('history drops unreadable entries rather than passing NaN to the calendar', () => {
+  const plant = {
+    id: 'x',
+    savedAt: '2026-08-01T00:00:00.000Z',
+    photoUri: 'f',
+    diagnosis,
+    wateringLog: ['2026-08-10T09:00:00.000Z', 'last tuesday', ''],
+    lastWateredAt: '2026-08-10T09:00:00.000Z',
+  };
+  assert.deepEqual(wateringHistory(plant), ['2026-08-10T09:00:00.000Z'], 'deduped and cleaned');
+});
+
+test('history is sorted newest first even if the stored log is not', () => {
+  const plant = {
+    id: 'x',
+    savedAt: '2026-08-01T00:00:00.000Z',
+    photoUri: 'f',
+    diagnosis,
+    wateringLog: ['2026-08-01T09:00:00.000Z', '2026-08-18T09:00:00.000Z', '2026-08-09T09:00:00.000Z'],
+  };
+  assert.deepEqual(wateringHistory(plant), [
+    '2026-08-18T09:00:00.000Z',
+    '2026-08-09T09:00:00.000Z',
+    '2026-08-01T09:00:00.000Z',
+  ]);
+});
+
+test('a watering that fails to persist leaves the log untouched', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'file:///a.jpg', diagnosis });
+  const id = saved.ok && (saved.plant.id as string);
+  store.markWatered(id as string, Date.parse('2026-08-01T09:00:00.000Z'));
+
+  s.breakWrites('silent');
+  assert.equal(store.markWatered(id as string, Date.parse('2026-08-09T09:00:00.000Z')).ok, false);
+
+  s.fixWrites();
+  assert.deepEqual(store.load().plants[0].wateringLog, ['2026-08-01T09:00:00.000Z']);
 });

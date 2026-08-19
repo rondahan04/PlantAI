@@ -25,6 +25,7 @@ import CameraScreen from './src/screens/CameraScreen';
 import DiagnosisScreen from './src/screens/DiagnosisScreen';
 import NurseriesScreen from './src/screens/NurseriesScreen';
 import PlantDetailScreen from './src/screens/PlantDetailScreen';
+import WateringHistoryScreen from './src/screens/WateringHistoryScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -88,6 +89,7 @@ export default function App() {
             />
             <Stack.Screen name="Diagnosis" component={DiagnosisScreen} />
             <Stack.Screen name="PlantDetail" component={PlantDetailScreen} />
+            <Stack.Screen name="WateringHistory" component={WateringHistoryScreen} />
             <Stack.Screen name="Nurseries" component={NurseriesScreen} />
           </Stack.Navigator>
         </NavigationContainer>

@@ -43,6 +43,18 @@ const light = {
   danger: '#DC2626',
   onDanger: '#FFFFFF',
 
+  /*
+   * Water — the ONE blue in a green system, and the exception is earned: a
+   * watering action reads as water, and running it in the nature green would
+   * make it the second primary CTA on a screen that already has one. Sky-700
+   * rather than a brighter blue so white text clears 4.5:1 on the filled
+   * button. Reserve it for the watering schedule; nothing else is water.
+   */
+  water: '#0369A1',
+  waterPressed: '#075985',
+  onWater: '#FFFFFF',
+  waterWash: '#E0F2FE',
+
   // Plant condition scale — badge/dot/bar accents (>=3:1 on light surfaces).
   conditionHealthy: '#15803D',
   conditionMild: '#0F766E',
@@ -78,6 +90,12 @@ const dark = {
   warningWash: '#3A2C12', // deep amber tint
   danger: '#F87171',
   onDanger: '#1A0606',
+
+  // Water — lighter tonal variant, dark text on the fill (see the light note).
+  water: '#38BDF8',
+  waterPressed: '#22A3DC',
+  onWater: '#04212E',
+  waterWash: '#0F2E3E',
 
   // Plant condition scale — lighter tonal variants for dark surfaces.
   conditionHealthy: '#34D399',

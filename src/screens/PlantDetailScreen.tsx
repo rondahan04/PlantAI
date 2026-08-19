@@ -79,6 +79,12 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
   const { diagnosis } = plant;
   const color = t.color[CONDITION_COLOR[diagnosis.condition] ?? 'conditionModerate'];
   const water = wateringState(diagnosis.carePlan, plant.lastWateredAt, Date.now());
+  /*
+   * Watered, and not due again yet — there is no watering to log. `ok` is the
+   * only status that means this: `due` and `overdue` are exactly when the
+   * button has to work, and `never_watered` is the tap that starts everything.
+   */
+  const settled = water.status === 'ok';
 
   /*
    * Log a watering.
@@ -236,8 +242,13 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
                 accessible
                 accessibilityLabel={`${label}: ${diagnosis.carePlan![key]}`}
               >
-                <View style={s.careIconWrap}>
-                  <Ionicons name={icon} size={20} color={t.color.primary} />
+                {/*
+                  The water row is tinted blue so the eye connects it to the
+                  schedule card directly beneath — they are one idea split over
+                  two blocks, and the colour is what says so.
+                */}
+                <View style={[s.careIconWrap, key === 'water' && { backgroundColor: t.color.waterWash }]}>
+                  <Ionicons name={icon} size={20} color={key === 'water' ? t.color.water : t.color.primary} />
                 </View>
                 <View style={s.careBody}>
                   <Text style={s.careLabel}>{label}</Text>
@@ -257,42 +268,118 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
             {water.status !== 'unscheduled' && (
               <View style={s.scheduleCard}>
                 <View style={s.scheduleRow}>
-                  <Text style={s.careLabel}>Schedule</Text>
-                  <Text style={s.scheduleInterval}>{intervalLabel(diagnosis.carePlan)}</Text>
+                  <View style={s.scheduleHeading}>
+                    <Ionicons name="calendar-outline" size={14} color={t.color.water} />
+                    <Text style={s.scheduleLabel}>Watering schedule</Text>
+                  </View>
+                  {/*
+                    A quiet text button, not a second filled control: the card
+                    already has one action, and history is something you go look
+                    at rather than something you do.
+                  */}
+                  <Pressable
+                    style={({ pressed }) => [s.historyBtn, pressed && { opacity: 0.6 }]}
+                    onPress={() => navigation.navigate('WateringHistory', { plantId: plant.id })}
+                    accessibilityRole="button"
+                    accessibilityLabel={`See the watering history for ${diagnosis.plantName}`}
+                    hitSlop={8}
+                  >
+                    <Text style={s.historyBtnText}>History</Text>
+                    <Ionicons name="chevron-forward" size={14} color={t.color.water} />
+                  </Pressable>
                 </View>
 
-                <Text
-                  style={[
-                    s.scheduleStatus,
-                    water.status === 'overdue' && { color: t.color.danger },
-                    water.status === 'due' && { color: t.color.warning },
-                  ]}
-                >
-                  {water.label}
-                </Text>
+                <Text style={s.scheduleInterval}>{intervalLabel(diagnosis.carePlan)}</Text>
 
+                {/*
+                  The countdown sits in ONE place, and which place depends on
+                  whether it is news. Due and overdue are the reason the user
+                  opened the card, so they get the loud line; a plant with days
+                  left is reassurance, and reassurance belongs under the button
+                  rather than shouted above it.
+                */}
+                {!settled && (
+                  <Text
+                    style={[
+                      s.scheduleStatus,
+                      water.status === 'overdue' && { color: t.color.danger },
+                      water.status === 'due' && { color: t.color.warning },
+                    ]}
+                  >
+                    {water.label}
+                  </Text>
+                )}
+
+                {/*
+                  Nothing to do until the plant is due again, so the button
+                  stops being a button: filled and blue while there is an action
+                  to take, an outlined "Watered" receipt once the schedule is
+                  running. It comes back on its own the day watering is due —
+                  the state is derived from the schedule, never from a flag
+                  somebody has to remember to clear.
+                */}
                 <Pressable
                   style={({ pressed }) => [
                     s.waterBtn,
-                    pressed && s.waterBtnPressed,
+                    settled && s.waterBtnDone,
+                    // Still gives feedback while held, or the long press feels
+                    // like nothing is happening until it fires.
+                    pressed && (settled ? s.waterBtnDonePressed : s.waterBtnPressed),
                     watering && s.waterBtnBusy,
                   ]}
-                  onPress={handleWater}
+                  /*
+                   * Settled swaps the gestures rather than switching the button
+                   * off: a tap does nothing, but a hold still logs a watering.
+                   * Someone who tops a plant up on day 3 of a 7-day interval is
+                   * not making a mistake, and a schedule that refuses the real
+                   * event goes stale — but it takes a deliberate press, so the
+                   * common case (already watered, nothing to do) stays inert.
+                   */
+                  onPress={settled ? undefined : handleWater}
+                  onLongPress={settled ? handleWater : undefined}
                   disabled={watering}
                   accessibilityRole="button"
                   accessibilityState={{ disabled: watering }}
-                  accessibilityLabel={`Log a watering for ${diagnosis.plantName}. ${water.label}`}
+                  accessibilityLabel={
+                    settled
+                      ? `${diagnosis.plantName} has been watered. ${water.label}.`
+                      : `Log a watering for ${diagnosis.plantName}. ${water.label}`
+                  }
+                  accessibilityHint={
+                    settled ? 'Double tap and hold to log an early watering' : undefined
+                  }
                 >
-                  <Ionicons name="water" size={18} color={t.color.onPrimary} />
-                  <Text style={s.waterBtnText}>
-                    {water.status === 'never_watered' ? 'I watered it today' : 'Water now'}
+                  <Ionicons
+                    name={settled ? 'checkmark-circle' : 'water'}
+                    size={18}
+                    color={settled ? t.color.water : t.color.onWater}
+                  />
+                  <Text style={[s.waterBtnText, settled && s.waterBtnDoneText]}>
+                    {settled
+                      ? 'Watered'
+                      : water.status === 'never_watered'
+                        ? 'I watered it today'
+                        : 'Water now'}
                   </Text>
                 </Pressable>
 
-                {!!plant.lastWateredAt && (
+                {/*
+                  The date the plant was last watered was the wrong fact to end
+                  on: it is history, and the only question a person opens this
+                  card with is when the next watering is. That answer is the
+                  status line above, so this row carries only what it does not —
+                  whether the OS will actually remind them, and how to log an
+                  early watering once the button has gone quiet.
+                */}
+                {(settled || !!plant.reminderId) && (
                   <Text style={s.scheduleNote}>
-                    Last watered {new Date(plant.lastWateredAt).toLocaleDateString()}
-                    {plant.reminderId ? ' · reminder set' : ''}
+                    {[
+                      settled ? water.label : null,
+                      plant.reminderId ? 'reminder set' : null,
+                      settled ? 'hold Watered to log an early one' : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </Text>
                 )}
               </View>
@@ -380,18 +467,31 @@ const makeStyles = (t: Theme) =>
     careText: { ...t.type.body, color: t.color.foreground, marginTop: 2 },
 
     /*
-     * Tinted rather than plain surface: this is the one card in the section the
-     * user acts on, and it has to read as different from the three they only
-     * read. The accent stays on the button — the card itself only leans.
+     * The one card in this section the user ACTS on, so it is drawn as an
+     * object rather than a tint: its own water-blue ground, a blue edge, and
+     * lift off the page. Sitting on `surfaceMuted` with no border, it read as a
+     * gap between the care rows instead of as a thing to press.
      */
     scheduleCard: {
-      backgroundColor: t.color.surfaceMuted,
+      backgroundColor: t.color.waterWash,
       borderRadius: t.radius.lg,
-      padding: t.space.md,
-      marginTop: t.space.xs,
+      borderWidth: 1,
+      borderColor: t.color.water,
+      padding: t.space.lg,
+      marginTop: t.space.sm,
+      ...t.elevation.card,
     },
     scheduleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    scheduleInterval: { ...t.type.caption, color: t.color.textSecondary },
+    scheduleHeading: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+    scheduleLabel: {
+      ...t.type.caption,
+      color: t.color.water,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    },
+    scheduleInterval: { ...t.type.caption, color: t.color.textSecondary, marginTop: 2 },
+    historyBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 28 },
+    historyBtnText: { ...t.type.caption, color: t.color.water, fontWeight: '700' },
     scheduleStatus: { ...t.type.bodyStrong, color: t.color.foreground, marginTop: 4 },
     scheduleNote: { ...t.type.caption, color: t.color.textMuted, marginTop: t.space.sm, textAlign: 'center' },
     waterBtn: {
@@ -399,17 +499,35 @@ const makeStyles = (t: Theme) =>
       alignItems: 'center',
       justifyContent: 'center',
       gap: t.space.sm,
-      backgroundColor: t.color.primary,
+      // Water blue, not the app's nature green: this is a watering action, and
+      // green here would compete with the screen's real primary CTA.
+      backgroundColor: t.color.water,
       borderRadius: t.radius.lg,
       marginTop: t.space.md,
       paddingVertical: t.space.md,
       minHeight: 48,
+      ...t.elevation.raised,
     },
-    waterBtnPressed: { backgroundColor: t.color.primaryPressed, transform: [{ scale: 0.98 }] },
+    waterBtnPressed: { backgroundColor: t.color.waterPressed, transform: [{ scale: 0.98 }] },
+    /*
+     * Outlined, unfilled, unlifted — a receipt rather than an action. Greying it
+     * out was the alternative and was rejected: a disabled grey control reads as
+     * "broken" or "not available to you", when what actually happened is the
+     * user succeeded.
+     */
+    waterBtnDone: {
+      backgroundColor: 'transparent',
+      borderWidth: 1,
+      borderColor: t.color.water,
+      shadowOpacity: 0,
+      elevation: 0,
+    },
+    waterBtnDonePressed: { opacity: 0.55, transform: [{ scale: 0.98 }] },
+    waterBtnDoneText: { color: t.color.water },
     // The write is fast, but scheduling talks to the OS and can hang behind a
     // permission dialog. Dimming beats a spinner that flashes for one frame.
     waterBtnBusy: { opacity: 0.6 },
-    waterBtnText: { ...t.type.label, color: t.color.onPrimary },
+    waterBtnText: { ...t.type.label, color: t.color.onWater },
 
     issueRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: t.space.sm },
     issueDot: { width: 8, height: 8, borderRadius: 4, marginTop: 8, marginRight: t.space.sm },
