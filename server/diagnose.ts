@@ -45,7 +45,25 @@ export interface CarePlan {
   soil: string;
   light: string;
   water: string;
+  /*
+   * The watering interval as a NUMBER, alongside the prose in `water`.
+   *
+   * The app schedules a reminder off this, and "Every 7-10 days, when the top
+   * 2cm is dry" is not a date. Parsing that sentence client-side was the
+   * alternative and was rejected: the model writes it a dozen ways ("weekly",
+   * "twice a month", "keep evenly moist") and a regex that silently misreads one
+   * of them schedules a reminder for the wrong week, which is worse than none.
+   *
+   * `waterEveryDaysMax` is the far end of a range and may be absent even when
+   * the minimum is present — plenty of species get a single number.
+   */
+  waterEveryDays?: number;
+  waterEveryDaysMax?: number;
 }
+
+/* Anything outside this is a model mistake, not a plant. */
+const MIN_WATER_DAYS = 1;
+const MAX_WATER_DAYS = 90;
 
 export interface PlantDiagnosis {
   plantName: string;
@@ -310,12 +328,16 @@ function prompt(id: Identification): string {
   "carePlan": {
     "soil": "string (max 90 chars)",
     "light": "string (max 90 chars)",
-    "water": "string (max 90 chars)"
+    "water": "string (max 90 chars)",
+    "waterEveryDays": 7,
+    "waterEveryDaysMax": 10
   }
 }
 condition must be one of: healthy, mild, moderate, severe, critical, reflecting what you see in the photo. "issues" must be an array of PLAIN STRINGS — one short sentence per visible problem, never objects. Use [] if the plant is healthy. Provide 2-3 treatments targeting those problems (or general care tips if healthy).
 
-"carePlan" is ongoing care for this SPECIES, not a fix for what is wrong today — a healthy plant still gets one. "soil": the potting mix and its drainage. "light": state explicitly whether the plant wants DIRECT or INDIRECT light, how bright, and any exposure to avoid. "water": how often, plus the physical check that says it is time (e.g. top 2cm of soil dry). All three are required and each must be one short concrete phrase, never a paragraph. Return ONLY valid JSON.`;
+"carePlan" is ongoing care for this SPECIES, not a fix for what is wrong today — a healthy plant still gets one. "soil": the potting mix and its drainage. "light": state explicitly whether the plant wants DIRECT or INDIRECT light, how bright, and any exposure to avoid. "water": how often, plus the physical check that says it is time (e.g. top 2cm of soil dry). Those three are required and each must be one short concrete phrase, never a paragraph.
+
+"waterEveryDays" is the SAME interval as a whole number of days, because the app schedules a watering reminder from it — it must agree with the "water" sentence. Give "waterEveryDaysMax" as well when the interval is a range ("every 7-10 days" is 7 and 10); omit it for a single figure. Both are between 1 and 90. Adjust the interval for the season and the plant's condition only if the photo justifies it. Return ONLY valid JSON.`;
 }
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -361,14 +383,78 @@ function issueToString(value: unknown): string | null {
   return (detail ?? label ?? null)?.trim() || null;
 }
 
+function isWaterDays(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= MIN_WATER_DAYS &&
+    value <= MAX_WATER_DAYS
+  );
+}
+
 export function isCarePlan(value: unknown): value is CarePlan {
   if (typeof value !== 'object' || value === null) return false;
   const c = value as Record<string, unknown>;
   // Non-empty on purpose: `{soil: ""}` renders a labelled row with nothing
   // beside it, which reads as a rendering bug rather than as missing advice.
-  return (['soil', 'light', 'water'] as const).every(
+  const prose = (['soil', 'light', 'water'] as const).every(
     (k) => typeof c[k] === 'string' && (c[k] as string).trim() !== ''
   );
+  if (!prose) return false;
+
+  if (c.waterEveryDays !== undefined && !isWaterDays(c.waterEveryDays)) return false;
+  if (c.waterEveryDaysMax !== undefined && !isWaterDays(c.waterEveryDaysMax)) return false;
+  /*
+   * A max below the minimum is a contradiction — the reminder would be
+   * scheduled off whichever end the client read first. A max EQUAL to the
+   * minimum is not wrong, just not a range, and carrying it renders as "every
+   * 7-7 days"; normalizeCarePlan drops it, so the guard rejects it here rather
+   * than letting an un-normalized value through with a field normalize removes.
+   */
+  if (
+    isWaterDays(c.waterEveryDays) &&
+    isWaterDays(c.waterEveryDaysMax) &&
+    c.waterEveryDaysMax <= c.waterEveryDays
+  ) {
+    return false;
+  }
+  // A range with no floor cannot be scheduled from; the prose still stands.
+  if (c.waterEveryDaysMax !== undefined && c.waterEveryDays === undefined) return false;
+
+  return true;
+}
+
+/*
+ * Salvage a care plan whose prose is good and whose numbers are not.
+ *
+ * The interval is the newest and least reliable part of the response, and it is
+ * strictly an enhancement: without it the user reads "every 7-10 days" and
+ * waters by eye, exactly as they did before reminders existed. Dropping the
+ * whole section over a bad integer would trade three correct sentences for one
+ * wrong number. Returns null when the prose itself is unusable.
+ */
+function normalizeCarePlan(value: unknown): CarePlan | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const c = value as Record<string, unknown>;
+
+  const prose = ['soil', 'light', 'water'].map((k) => c[k]);
+  if (!prose.every((v) => typeof v === 'string' && v.trim() !== '')) return null;
+
+  const plan: CarePlan = {
+    soil: (c.soil as string).trim(),
+    light: (c.light as string).trim(),
+    water: (c.water as string).trim(),
+  };
+
+  if (isWaterDays(c.waterEveryDays)) {
+    plan.waterEveryDays = c.waterEveryDays;
+    // Only meaningful alongside a floor, and only when it is actually above it.
+    if (isWaterDays(c.waterEveryDaysMax) && c.waterEveryDaysMax > c.waterEveryDays) {
+      plan.waterEveryDaysMax = c.waterEveryDaysMax;
+    }
+  }
+
+  return plan;
 }
 
 /*
@@ -389,13 +475,16 @@ export function normalizeAssessment(value: unknown): unknown {
   }
 
   /*
-   * A malformed care plan is discarded, not fatal. It is the one advisory field
-   * here: the diagnosis the user paid for is still correct without it, so a
-   * model that answers `{"light": "bright"}` costs them a section, not the call.
+   * A malformed care plan is repaired where possible and discarded otherwise,
+   * never fatal. It is the one advisory field here: the diagnosis the user paid
+   * for is still correct without it, so a model that answers `{"light":
+   * "bright"}` costs them a section, not the call.
    */
   if ('carePlan' in a && !isCarePlan(a.carePlan)) {
+    const repaired = normalizeCarePlan(a.carePlan);
     out = { ...out };
-    delete out.carePlan;
+    if (repaired) out.carePlan = repaired;
+    else delete out.carePlan;
   }
 
   return out;

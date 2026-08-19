@@ -48,6 +48,13 @@
         }
       ],
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-monochrome.png",
+          "color": "#38D5C1"
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#F0FDF4",

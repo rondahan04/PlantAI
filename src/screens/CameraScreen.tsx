@@ -20,6 +20,7 @@ import {
   UnsupportedImageError,
 } from '../services/plantDiagnosis';
 import { Theme, useTheme } from '../theme';
+import { APP_LOGO } from '../brand';
 import StatusView from '../components/StatusView';
 
 type Props = {
@@ -224,9 +225,11 @@ export default function CameraScreen({ navigation }: Props) {
         <View style={[StyleSheet.absoluteFill, s.analyzeScrim]} />
         <SafeAreaView style={s.analyzeContent}>
           <View style={s.analyzeCard}>
-            <View style={s.permissionIcon}>
-              <Ionicons name="leaf-outline" size={32} color={t.color.primary} />
-            </View>
+            {/*
+              The one screen the user stares at for ten seconds straight, so it
+              carries the real mark rather than a stock leaf glyph.
+            */}
+            <Image source={APP_LOGO} style={s.analyzeLogo} accessibilityIgnoresInvertColors />
             <ActivityIndicator color={t.color.primary} size="large" style={{ marginVertical: t.space.lg }} />
             <Text style={s.analyzeTitle}>Analyzing your plant</Text>
             <Text style={s.analyzeDesc}>
@@ -362,6 +365,14 @@ function makeStyles(t: Theme) {
       backgroundColor: t.color.surfaceMuted,
       alignItems: 'center',
       justifyContent: 'center',
+      marginBottom: t.space.xl,
+    },
+    // The logo carries its own ground, so this is a clipping frame with no fill
+    // — same treatment as the Home header badge.
+    analyzeLogo: {
+      width: 72,
+      height: 72,
+      borderRadius: t.radius.xl,
       marginBottom: t.space.xl,
     },
     permissionTitle: { ...t.type.title, color: t.color.foreground, marginBottom: t.space.md },

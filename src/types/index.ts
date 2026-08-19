@@ -26,6 +26,15 @@ export interface CarePlan {
   soil: string;
   light: string;
   water: string;
+  /*
+   * The watering interval as whole days, mirroring the prose in `water`. The
+   * reminder is scheduled from this, so it is absent rather than guessed: a
+   * plant whose diagnosis carried no number gets the advice without a schedule,
+   * never a schedule invented from a sentence.
+   */
+  waterEveryDays?: number;
+  /* Upper end of a range ("every 7-10 days"); absent for a single figure. */
+  waterEveryDaysMax?: number;
 }
 
 export interface Treatment {

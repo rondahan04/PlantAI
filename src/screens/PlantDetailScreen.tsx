@@ -8,6 +8,8 @@ import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
 import { LOGO_GLYPH } from '../brand';
 import { plantLibrary } from '../services/plantLibrary';
+import { intervalLabel, wateringState } from '../lib/watering';
+import { cancelWateringReminder, scheduleWateringReminder } from '../services/wateringReminder';
 
 /*
  * A saved plant, read back from the library.
@@ -51,9 +53,10 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
   const s = useMemo(() => makeStyles(t), [t]);
   const { plantId } = route.params;
 
-  const [plant] = useState(() =>
+  const [plant, setPlant] = useState(() =>
     plantLibrary.load().plants.find((p) => p.id === plantId) ?? null
   );
+  const [watering, setWatering] = useState(false);
 
   /*
    * The plant is gone. Reachable if it was removed in another tab of the
@@ -75,6 +78,59 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
 
   const { diagnosis } = plant;
   const color = t.color[CONDITION_COLOR[diagnosis.condition] ?? 'conditionModerate'];
+  const water = wateringState(diagnosis.carePlan, plant.lastWateredAt, Date.now());
+
+  /*
+   * Log a watering.
+   *
+   * The order matters and is the opposite of the obvious one: the record is
+   * written FIRST and the notification scheduled after. Storage is the source of
+   * truth for the schedule, so a reminder scheduled against a watering that
+   * failed to persist would fire for a date the app does not believe in. The
+   * reverse — a stored watering with no notification — is the degraded state
+   * this whole feature is designed to survive, since the detail screen and the
+   * library badge both read from storage, not from the OS.
+   */
+  const handleWater = async () => {
+    if (watering) return;
+    setWatering(true);
+    try {
+      // Cancel before rescheduling: the pending reminder points at a due date
+      // this watering is about to move.
+      await cancelWateringReminder(plant.reminderId);
+
+      const at = Date.now();
+      const logged = plantLibrary.markWatered(plant.id, at);
+      if (!logged.ok) {
+        Alert.alert(
+          "Couldn't record that",
+          logged.reason === 'not_found'
+            ? 'This plant is no longer saved.'
+            : 'Your device is out of storage space, so the watering was not saved.'
+        );
+        return;
+      }
+      setPlant(logged.plant);
+
+      const next = wateringState(diagnosis.carePlan, logged.plant.lastWateredAt, at);
+      if (next.nextDueAt === null) return;
+
+      // Null means no permission, or a runtime that cannot schedule. Both are
+      // normal: the in-app countdown above is unaffected, so there is nothing
+      // to tell the user about.
+      const reminderId = await scheduleWateringReminder({
+        plantName: diagnosis.plantName,
+        dueAt: next.nextDueAt,
+        now: at,
+      });
+      if (!reminderId) return;
+
+      const stored = plantLibrary.update(plant.id, { reminderId });
+      if (stored.ok) setPlant(stored.plant);
+    } finally {
+      setWatering(false);
+    }
+  };
 
   const confirmRemove = () => {
     Alert.alert('Remove this plant?', `${diagnosis.plantName} will be removed from your plants.`, [
@@ -189,6 +245,58 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
                 </View>
               </View>
             ))}
+
+            {/*
+              The schedule hangs off the water row rather than sitting in its
+              own section: "every 7-10 days" and "next water in 3 days" are the
+              same fact in two tenses, and splitting them makes the user read
+              the interval twice. Absent entirely when the diagnosis carried no
+              number — a tap that promises a reminder the app cannot schedule is
+              worse than no button.
+            */}
+            {water.status !== 'unscheduled' && (
+              <View style={s.scheduleCard}>
+                <View style={s.scheduleRow}>
+                  <Text style={s.careLabel}>Schedule</Text>
+                  <Text style={s.scheduleInterval}>{intervalLabel(diagnosis.carePlan)}</Text>
+                </View>
+
+                <Text
+                  style={[
+                    s.scheduleStatus,
+                    water.status === 'overdue' && { color: t.color.danger },
+                    water.status === 'due' && { color: t.color.warning },
+                  ]}
+                >
+                  {water.label}
+                </Text>
+
+                <Pressable
+                  style={({ pressed }) => [
+                    s.waterBtn,
+                    pressed && s.waterBtnPressed,
+                    watering && s.waterBtnBusy,
+                  ]}
+                  onPress={handleWater}
+                  disabled={watering}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: watering }}
+                  accessibilityLabel={`Log a watering for ${diagnosis.plantName}. ${water.label}`}
+                >
+                  <Ionicons name="water" size={18} color={t.color.onPrimary} />
+                  <Text style={s.waterBtnText}>
+                    {water.status === 'never_watered' ? 'I watered it today' : 'Water now'}
+                  </Text>
+                </Pressable>
+
+                {!!plant.lastWateredAt && (
+                  <Text style={s.scheduleNote}>
+                    Last watered {new Date(plant.lastWateredAt).toLocaleDateString()}
+                    {plant.reminderId ? ' · reminder set' : ''}
+                  </Text>
+                )}
+              </View>
+            )}
           </View>
         )}
 
@@ -270,6 +378,38 @@ const makeStyles = (t: Theme) =>
     careBody: { flex: 1 },
     careLabel: { ...t.type.caption, color: t.color.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
     careText: { ...t.type.body, color: t.color.foreground, marginTop: 2 },
+
+    /*
+     * Tinted rather than plain surface: this is the one card in the section the
+     * user acts on, and it has to read as different from the three they only
+     * read. The accent stays on the button — the card itself only leans.
+     */
+    scheduleCard: {
+      backgroundColor: t.color.surfaceMuted,
+      borderRadius: t.radius.lg,
+      padding: t.space.md,
+      marginTop: t.space.xs,
+    },
+    scheduleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    scheduleInterval: { ...t.type.caption, color: t.color.textSecondary },
+    scheduleStatus: { ...t.type.bodyStrong, color: t.color.foreground, marginTop: 4 },
+    scheduleNote: { ...t.type.caption, color: t.color.textMuted, marginTop: t.space.sm, textAlign: 'center' },
+    waterBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: t.space.sm,
+      backgroundColor: t.color.primary,
+      borderRadius: t.radius.lg,
+      marginTop: t.space.md,
+      paddingVertical: t.space.md,
+      minHeight: 48,
+    },
+    waterBtnPressed: { backgroundColor: t.color.primaryPressed, transform: [{ scale: 0.98 }] },
+    // The write is fast, but scheduling talks to the OS and can hang behind a
+    // permission dialog. Dimming beats a spinner that flashes for one frame.
+    waterBtnBusy: { opacity: 0.6 },
+    waterBtnText: { ...t.type.label, color: t.color.onPrimary },
 
     issueRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: t.space.sm },
     issueDot: { width: 8, height: 8, borderRadius: 4, marginTop: 8, marginRight: t.space.sm },

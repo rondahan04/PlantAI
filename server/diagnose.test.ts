@@ -174,3 +174,80 @@ test('normalizing does not mutate the parsed response', () => {
   normalizeAssessment(input);
   assert.deepEqual(input.carePlan, { soil: 'Loam' }, 'the caller still holds what it parsed');
 });
+
+// ─── watering interval ───────────────────────────────────────────────────────
+//
+// The interval is what a reminder is scheduled from, so a wrong number is worse
+// than no number: it tells the user their plant is fine on the day it dries out.
+// These tests pin the rule that bad numbers are stripped while the prose stays.
+
+const withDays = (extra: Record<string, unknown>) => ({
+  ...valid,
+  carePlan: { ...carePlan, ...extra },
+});
+
+test('a numeric watering interval survives normalizing', () => {
+  const out = normalizeAssessment(withDays({ waterEveryDays: 7, waterEveryDaysMax: 10 })) as any;
+  assert.equal(isHealthAssessment(out), true);
+  assert.equal(out.carePlan.waterEveryDays, 7);
+  assert.equal(out.carePlan.waterEveryDaysMax, 10);
+});
+
+test('a single figure needs no maximum', () => {
+  const out = normalizeAssessment(withDays({ waterEveryDays: 14 })) as any;
+  assert.equal(isHealthAssessment(out), true);
+  assert.equal(out.carePlan.waterEveryDays, 14);
+  assert.equal('waterEveryDaysMax' in out.carePlan, false);
+});
+
+test('a bad interval loses the number, never the prose', () => {
+  // Three correct sentences are worth more than one wrong integer.
+  const cases: Record<string, unknown>[] = [
+    { waterEveryDays: 0 }, // below the floor
+    { waterEveryDays: 400 }, // a year is not a watering interval
+    { waterEveryDays: 7.5 }, // days are whole
+    { waterEveryDays: '7' }, // string, not number
+    { waterEveryDays: NaN },
+    { waterEveryDaysMax: 10 }, // a range with no floor cannot be scheduled
+  ];
+
+  for (const bad of cases) {
+    const out = normalizeAssessment(withDays(bad)) as any;
+    assert.equal(isHealthAssessment(out), true, `still a valid assessment: ${JSON.stringify(bad)}`);
+    assert.equal(out.carePlan.water, carePlan.water, 'the prose survives');
+    assert.equal('waterEveryDays' in out.carePlan, false, JSON.stringify(bad));
+    assert.equal('waterEveryDaysMax' in out.carePlan, false, JSON.stringify(bad));
+  }
+});
+
+test('a maximum below the minimum is dropped, the minimum is kept', () => {
+  const out = normalizeAssessment(withDays({ waterEveryDays: 10, waterEveryDaysMax: 3 })) as any;
+  assert.equal(isHealthAssessment(out), true);
+  assert.equal(out.carePlan.waterEveryDays, 10);
+  assert.equal('waterEveryDaysMax' in out.carePlan, false);
+});
+
+test('a maximum equal to the minimum is not a range', () => {
+  const out = normalizeAssessment(withDays({ waterEveryDays: 7, waterEveryDaysMax: 7 })) as any;
+  assert.equal(out.carePlan.waterEveryDays, 7);
+  assert.equal('waterEveryDaysMax' in out.carePlan, false, 'nothing to show as "7-7 days"');
+});
+
+test('the guard rejects a contradictory interval outright', () => {
+  // normalize is what turns these into a dropped field; called directly, the
+  // guard must not wave them through.
+  assert.equal(isHealthAssessment(withDays({ waterEveryDays: 0 })), false);
+  assert.equal(isHealthAssessment(withDays({ waterEveryDays: 10, waterEveryDaysMax: 3 })), false);
+  assert.equal(isHealthAssessment(withDays({ waterEveryDaysMax: 10 })), false);
+});
+
+test('bad prose with a good number is still dropped entirely', () => {
+  // The number alone is unusable: a reminder with no watering advice behind it
+  // is a notification the user cannot act on.
+  const out = normalizeAssessment({
+    ...valid,
+    carePlan: { soil: 'Loam', waterEveryDays: 7 },
+  }) as Record<string, unknown>;
+  assert.equal('carePlan' in out, false);
+  assert.equal(isHealthAssessment(out), true);
+});

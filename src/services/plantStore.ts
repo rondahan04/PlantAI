@@ -46,6 +46,21 @@ export interface StoredPlant {
    */
   photoUri: string;
   diagnosis: PlantDiagnosis;
+  /*
+   * ISO-8601, set when the user logs a watering. Absent means the schedule has
+   * not been started — deliberately NOT defaulted to `savedAt`, because "you
+   * watered this plant the day you photographed it" is a fact the app would be
+   * inventing, and the whole reminder would then be built on it.
+   */
+  lastWateredAt?: string;
+  /*
+   * Identifier of the scheduled local notification, so the next watering can
+   * cancel the one it replaces. Absent when nothing is scheduled: no OS
+   * permission, no interval in the care plan, or the reminder already fired.
+   * Stored rather than recomputed because the OS owns the notification and this
+   * is the only handle back to it.
+   */
+  reminderId?: string;
 }
 
 interface Library {
@@ -88,6 +103,10 @@ export type SaveResult =
   | { ok: false; reason: 'storage_full' };
 
 export type RemoveResult = { ok: true; plants: StoredPlant[] } | { ok: false; reason: 'storage_full' };
+
+export type UpdateResult =
+  | { ok: true; plant: StoredPlant; plants: StoredPlant[] }
+  | { ok: false; reason: 'storage_full' | 'not_found' };
 
 function isTreatmentish(v: unknown): boolean {
   if (typeof v !== 'object' || v === null) return false;
@@ -289,6 +308,49 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
     return { ok: true, plant, plants: next };
   }
 
+  /*
+   * Patch one plant in place.
+   *
+   * Narrow by design: only the two fields the watering schedule owns. A general
+   * `update(id, patch)` would let a caller overwrite a diagnosis — the one thing
+   * in a stored plant that came from a paid call and cannot be re-derived.
+   */
+  function update(
+    id: string,
+    patch: Partial<Pick<StoredPlant, 'lastWateredAt' | 'reminderId'>>
+  ): UpdateResult {
+    const current = load().plants;
+    const target = current.find((p) => p.id === id);
+    // Gone: the plant was removed on another screen while this one held it.
+    // Not an error the user can act on, and inventing the record back would be
+    // worse than reporting that it is missing.
+    if (!target) return { ok: false, reason: 'not_found' };
+
+    /*
+     * `undefined` in the patch CLEARS the field rather than being skipped —
+     * clearing `reminderId` after cancelling a notification is the common case,
+     * and a patch that silently ignored it would leave a dangling handle.
+     */
+    const updated: StoredPlant = { ...target, ...patch };
+    for (const key of ['lastWateredAt', 'reminderId'] as const) {
+      if (key in patch && patch[key] === undefined) delete updated[key];
+    }
+
+    const next = current.map((p) => (p.id === id ? updated : p));
+    if (!persist(next)) return { ok: false, reason: 'storage_full' };
+    return { ok: true, plant: updated, plants: next };
+  }
+
+  /*
+   * Log a watering. Clears the reminder handle along with it: the notification
+   * that handle points at was scheduled for a due date this watering has just
+   * moved, so keeping it would fire a reminder for a plant already watered.
+   * Scheduling the replacement is the caller's job — it needs the OS.
+   */
+  function markWatered(id: string, at: number = now()): UpdateResult {
+    return update(id, { lastWateredAt: new Date(at).toISOString(), reminderId: undefined });
+  }
+
   function remove(id: string): RemoveResult {
     const current = load().plants;
     const next = current.filter((p) => p.id !== id);
@@ -300,7 +362,7 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
     return { ok: true, plants: next };
   }
 
-  return { load, save, remove };
+  return { load, save, update, markWatered, remove };
 }
 
 export type PlantStore = ReturnType<typeof createPlantStore>;

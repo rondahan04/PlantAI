@@ -357,3 +357,125 @@ test('a throwing migration quarantines rather than leaving half-migrated data', 
   assert.equal(r.ok === false && r.reason, 'corrupt');
   assert.ok(s.data.get(QUARANTINE_KEY), 'the pre-migration bytes must be preserved');
 });
+
+// ─── Watering schedule ───────────────────────────────────────────────────────
+//
+// `markWatered` is the only write a user makes to a plant after saving it, and
+// it is the anchor the whole reminder hangs off. A watering that does not land
+// means the app keeps telling someone their plant is overdue after they watered
+// it — so it goes through the same confirmed persist as everything else here.
+
+test('logging a watering persists and survives a relaunch', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'file:///a.jpg', diagnosis });
+  assert.equal(saved.ok, true);
+  const id = saved.ok && saved.plant.id;
+
+  const watered = store.markWatered(id as string, Date.parse('2026-08-18T09:00:00.000Z'));
+  assert.equal(watered.ok, true);
+  assert.equal(watered.ok && watered.plant.lastWateredAt, '2026-08-18T09:00:00.000Z');
+
+  const reloaded = createPlantStore(s.deps, fixedOpts()).load();
+  assert.equal(reloaded.plants[0].lastWateredAt, '2026-08-18T09:00:00.000Z');
+});
+
+test('a fresh plant has no watering date — the app must not invent one', () => {
+  // Defaulting to savedAt would claim the user watered the plant the day they
+  // photographed it, and the entire schedule would rest on that invention.
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'file:///a.jpg', diagnosis });
+  assert.equal(saved.ok && 'lastWateredAt' in saved.plant, false);
+});
+
+test('watering again moves the date forward', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'file:///a.jpg', diagnosis });
+  const id = saved.ok && (saved.plant.id as string);
+
+  store.markWatered(id as string, Date.parse('2026-08-01T09:00:00.000Z'));
+  store.markWatered(id as string, Date.parse('2026-08-18T09:00:00.000Z'));
+  assert.equal(store.load().plants[0].lastWateredAt, '2026-08-18T09:00:00.000Z');
+});
+
+test('watering clears the reminder it replaces', () => {
+  // The stored handle points at a notification scheduled for a due date this
+  // watering just moved. Keeping it fires a reminder for a watered plant.
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'file:///a.jpg', diagnosis });
+  const id = saved.ok && (saved.plant.id as string);
+
+  store.update(id as string, { reminderId: 'notif-1' });
+  assert.equal(store.load().plants[0].reminderId, 'notif-1');
+
+  store.markWatered(id as string);
+  assert.equal('reminderId' in store.load().plants[0], false);
+});
+
+test('an explicit undefined clears a field rather than being ignored', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'file:///a.jpg', diagnosis });
+  const id = saved.ok && (saved.plant.id as string);
+
+  store.update(id as string, { reminderId: 'notif-1' });
+  store.update(id as string, { reminderId: undefined });
+  assert.equal('reminderId' in store.load().plants[0], false, 'a dangling handle is worse than none');
+});
+
+test('updating one plant leaves the others untouched', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  store.save({ photoUri: 'file:///a.jpg', diagnosis });
+  const second = store.save({ photoUri: 'file:///b.jpg', diagnosis });
+  const id = second.ok && (second.plant.id as string);
+
+  store.markWatered(id as string, Date.parse('2026-08-18T09:00:00.000Z'));
+
+  const plants = store.load().plants;
+  assert.equal(plants.length, 2);
+  assert.equal(plants.filter((p) => p.lastWateredAt).length, 1);
+});
+
+test('watering a plant that is no longer saved reports it, rather than resurrecting it', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const r = store.markWatered('plant-does-not-exist');
+  assert.equal(r.ok, false);
+  assert.equal(r.ok === false && r.reason, 'not_found');
+  assert.equal(store.load().plants.length, 0);
+});
+
+test('a watering that cannot be written is reported, never silently lost', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'file:///a.jpg', diagnosis });
+  const id = saved.ok && (saved.plant.id as string);
+
+  s.breakWrites('silent');
+  const r = store.markWatered(id as string);
+  assert.equal(r.ok, false);
+  assert.equal(r.ok === false && r.reason, 'storage_full');
+  assert.equal('lastWateredAt' in store.load().plants[0], false, 'nothing landed, nothing claimed');
+});
+
+test('a plant saved before watering existed still loads', () => {
+  // Every library written before this field is exactly this shape.
+  const s = fakeStorage({
+    [LIBRARY_KEY]: JSON.stringify({
+      version: LIBRARY_VERSION,
+      plants: [{ id: 'old-1', savedAt: '2026-08-01T00:00:00.000Z', photoUri: 'file:///a.jpg', diagnosis }],
+    }),
+  });
+  const store = createPlantStore(s.deps, fixedOpts());
+  const loaded = store.load();
+  assert.equal(loaded.ok, true);
+  assert.equal(loaded.plants.length, 1);
+  assert.equal(loaded.plants[0].lastWateredAt, undefined);
+
+  // ...and can start a schedule from today without a migration.
+  assert.equal(store.markWatered('old-1').ok, true);
+});
