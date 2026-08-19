@@ -67,6 +67,7 @@ export interface Nursery {
 export type DeliveryMode = 'delivery' | 'pickup';
 
 export type RootStackParamList = {
+  Onboarding: undefined;
   Home: undefined;
   Camera: undefined;
   Diagnosis: {

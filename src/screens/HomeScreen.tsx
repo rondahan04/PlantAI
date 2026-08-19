@@ -19,19 +19,13 @@ import { Theme, useTheme } from '../theme';
 import { plantLibrary } from '../services/plantLibrary';
 import { triageSections } from '../lib/triage';
 import { APP_LOGO } from '../brand';
+import { FEATURES } from '../content/features';
+import { onboarding } from '../services/onboarding';
 import PlantCard from '../components/PlantCard';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
 };
-
-type IconName = keyof typeof Ionicons.glyphMap;
-
-const FEATURES: { icon: IconName; title: string; desc: string }[] = [
-  { icon: 'scan-outline', title: 'Snap & Diagnose', desc: 'AI identifies what is hurting your plant instantly' },
-  { icon: 'storefront-outline', title: 'Find Replacements', desc: 'Locate healthy plants at nurseries near you' },
-  { icon: 'car-outline', title: 'Deliver or Pickup', desc: 'Get it today — delivered or ready to collect' },
-];
 
 export default function HomeScreen({ navigation }: Props) {
   const t = useTheme();
@@ -48,6 +42,14 @@ export default function HomeScreen({ navigation }: Props) {
    * so the correct layout is the only one ever painted.
    */
   const [library, setLibrary] = useState(() => plantLibrary.load());
+
+  /*
+   * The name from onboarding, read synchronously for the same reason the
+   * library is: the header would otherwise render "Plant Doctor" and then swap
+   * to the greeting a frame later. Read once — it cannot change while the app
+   * is running, since onboarding only precedes Home.
+   */
+  const [profileName] = useState(() => onboarding.load()?.name);
 
   // A plant saved on the Diagnosis screen has to appear on the way back.
   useFocusEffect(
@@ -105,7 +107,9 @@ export default function HomeScreen({ navigation }: Props) {
                 <Image source={APP_LOGO} style={s.logoIcon} accessibilityIgnoresInvertColors />
                 <View>
                   <Text style={s.logoText}>PlantAI</Text>
-                  <Text style={s.logoSub}>Plant Doctor</Text>
+                  <Text style={s.logoSub}>
+                    {profileName ? `${profileName}'s plants` : 'Plant Doctor'}
+                  </Text>
                 </View>
               </View>
 
@@ -169,7 +173,7 @@ export default function HomeScreen({ navigation }: Props) {
           <Image source={APP_LOGO} style={s.logoIcon} accessibilityIgnoresInvertColors />
           <View>
             <Text style={s.logoText}>PlantAI</Text>
-            <Text style={s.logoSub}>Plant Doctor</Text>
+            <Text style={s.logoSub}>{profileName ? `Hello, ${profileName}` : 'Plant Doctor'}</Text>
           </View>
         </Animated.View>
 

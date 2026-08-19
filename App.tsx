@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useColorScheme } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -20,6 +20,8 @@ import * as SplashScreen from 'expo-splash-screen';
 
 import { RootStackParamList } from './src/types';
 import { getTheme } from './src/theme';
+import { onboarding } from './src/services/onboarding';
+import OnboardingScreen from './src/screens/OnboardingScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import CameraScreen from './src/screens/CameraScreen';
 import DiagnosisScreen from './src/screens/DiagnosisScreen';
@@ -50,6 +52,18 @@ export default function App() {
     if (fontsLoaded || fontError) SplashScreen.hideAsync();
   }, [fontsLoaded, fontError]);
 
+  /*
+   * Read once, during the first render, and never again — the same synchronous
+   * requirement the adaptive Home has. Resolving this in an effect would mount
+   * Home and then push Onboarding over it, so a first-time user's very first
+   * frame would be a screen they are not meant to see yet.
+   *
+   * A lazy initializer rather than a module constant so the read is tied to the
+   * component's life (Fast Refresh re-runs it) instead of to import order, and
+   * so it cannot run before the Expo runtime is ready.
+   */
+  const [onboarded] = useState(() => onboarding.load() !== null);
+
   // Hold render until fonts resolve (or fail → fall back to system font).
   if (!fontsLoaded && !fontError) return null;
 
@@ -74,13 +88,19 @@ export default function App() {
         <StatusBar style={isDark ? 'light' : 'dark'} />
         <NavigationContainer theme={navTheme}>
           <Stack.Navigator
-            initialRouteName="Home"
+            initialRouteName={onboarded ? 'Home' : 'Onboarding'}
             screenOptions={{
               headerShown: false,
               animation: 'slide_from_right',
               contentStyle: { backgroundColor: theme.color.background },
             }}
           >
+            {/* Onboarding leaves via replace(), so it never sits under Home. */}
+            <Stack.Screen
+              name="Onboarding"
+              component={OnboardingScreen}
+              options={{ animation: 'fade' }}
+            />
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen
               name="Camera"
