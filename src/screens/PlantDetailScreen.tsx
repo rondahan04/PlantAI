@@ -6,6 +6,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { directionalIconStyle } from '../lib/rtl';
 import { LOGO_GLYPH } from '../brand';
 import { plantLibrary } from '../services/plantLibrary';
 import { plantPhotos } from '../services/photos';
@@ -172,7 +173,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
             accessibilityRole="button"
             accessibilityLabel="Back to my plants"
           >
-            <Ionicons name="chevron-back" size={22} color={t.color.primary} />
+            <Ionicons name="chevron-back" size={22} color={t.color.primary} style={directionalIconStyle} />
             <Text style={s.backText}>My Plants</Text>
           </Pressable>
           <Pressable
@@ -292,7 +293,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
                     hitSlop={8}
                   >
                     <Text style={s.historyBtnText}>History</Text>
-                    <Ionicons name="chevron-forward" size={14} color={t.color.water} />
+                    <Ionicons name="chevron-forward" size={14} color={t.color.water} style={directionalIconStyle} />
                   </Pressable>
                 </View>
 
@@ -438,8 +439,8 @@ const makeStyles = (t: Theme) =>
     },
     badgeText: { ...t.type.caption, color: '#FFFFFF' },
 
-    name: { ...t.type.display, color: t.color.foreground, marginTop: t.space.sm },
-    sciName: { ...t.type.body, color: t.color.textMuted, fontStyle: 'italic', marginTop: 2 },
+    name: { ...t.type.display, color: t.color.foreground, marginTop: t.space.sm, writingDirection: 'auto' },
+    sciName: { ...t.type.body, color: t.color.textMuted, fontStyle: 'italic', marginTop: 2, writingDirection: 'auto' },
     desc: { ...t.type.body, color: t.color.textSecondary, marginTop: t.space.md },
 
     section: { marginTop: t.space.xl },
@@ -467,11 +468,11 @@ const makeStyles = (t: Theme) =>
       backgroundColor: t.color.surfaceMuted,
       alignItems: 'center',
       justifyContent: 'center',
-      marginRight: t.space.md,
+      marginEnd: t.space.md,
     },
     careBody: { flex: 1 },
     careLabel: { ...t.type.caption, color: t.color.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
-    careText: { ...t.type.body, color: t.color.foreground, marginTop: 2 },
+    careText: { ...t.type.body, color: t.color.foreground, marginTop: 2, writingDirection: 'auto' },
 
     /*
      * The one card in this section the user ACTS on, so it is drawn as an
@@ -537,8 +538,8 @@ const makeStyles = (t: Theme) =>
     waterBtnText: { ...t.type.label, color: t.color.onWater },
 
     issueRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: t.space.sm },
-    issueDot: { width: 8, height: 8, borderRadius: 4, marginTop: 8, marginRight: t.space.sm },
-    issueText: { ...t.type.body, color: t.color.textSecondary, flex: 1 },
+    issueDot: { width: 8, height: 8, borderRadius: 4, marginTop: 8, marginEnd: t.space.sm },
+    issueText: { ...t.type.body, color: t.color.textSecondary, flex: 1, writingDirection: 'auto' },
 
     treatmentCard: {
       backgroundColor: t.color.surface,
@@ -556,8 +557,8 @@ const makeStyles = (t: Theme) =>
       marginBottom: 6,
     },
     urgentText: { ...t.type.caption, color: t.color.onDanger, fontSize: 10 },
-    treatmentTitle: { ...t.type.bodyStrong, color: t.color.foreground },
-    treatmentDesc: { ...t.type.body, color: t.color.textSecondary, marginTop: 2 },
+    treatmentTitle: { ...t.type.bodyStrong, color: t.color.foreground, writingDirection: 'auto' },
+    treatmentDesc: { ...t.type.body, color: t.color.textSecondary, marginTop: 2, writingDirection: 'auto' },
 
     savedAt: { ...t.type.caption, color: t.color.textMuted, marginTop: t.space.xl, textAlign: 'center' },
 

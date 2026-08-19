@@ -6,6 +6,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { directionalIconStyle } from '../lib/rtl';
 import { plantLibrary } from '../services/plantLibrary';
 import { wateringHistory } from '../services/plantStore';
 import { WEEKDAY_LABELS, dayKey, dayKeySet, monthView, shiftMonth } from '../lib/calendar';
@@ -77,7 +78,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
             accessibilityRole="button"
             accessibilityLabel={`Back to ${plant.diagnosis.plantName}`}
           >
-            <Ionicons name="chevron-back" size={22} color={t.color.primary} />
+            <Ionicons name="chevron-back" size={22} color={t.color.primary} style={directionalIconStyle} />
             <Text style={s.backText}>{plant.diagnosis.plantName}</Text>
           </Pressable>
         </View>
@@ -103,7 +104,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
               accessibilityLabel="Previous month"
               hitSlop={8}
             >
-              <Ionicons name="chevron-back" size={20} color={t.color.water} />
+              <Ionicons name="chevron-back" size={20} color={t.color.water} style={directionalIconStyle} />
             </Pressable>
             <Text style={s.monthTitle}>{view.title}</Text>
             <Pressable
@@ -113,7 +114,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
               accessibilityLabel="Next month"
               hitSlop={8}
             >
-              <Ionicons name="chevron-forward" size={20} color={t.color.water} />
+              <Ionicons name="chevron-forward" size={20} color={t.color.water} style={directionalIconStyle} />
             </Pressable>
           </View>
 
@@ -232,7 +233,7 @@ const makeStyles = (t: Theme) =>
     backText: { ...t.type.label, color: t.color.primary, flexShrink: 1 },
 
     title: { ...t.type.display, color: t.color.foreground },
-    subtitle: { ...t.type.body, color: t.color.textSecondary, marginTop: 2, marginBottom: t.space.lg },
+    subtitle: { ...t.type.body, color: t.color.textSecondary, marginTop: 2, marginBottom: t.space.lg, writingDirection: 'auto' },
 
     card: {
       backgroundColor: t.color.surface,

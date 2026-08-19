@@ -20,6 +20,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { directionalIconStyle } from '../lib/rtl';
 import { APP_LOGO } from '../brand';
 import { FEATURES } from '../content/features';
 import { onboarding } from '../services/onboarding';
@@ -300,7 +301,7 @@ function PrimaryButton({
       accessibilityState={{ disabled: !!disabled }}
     >
       <Text style={s.ctaText}>{label}</Text>
-      <Ionicons name="arrow-forward" size={20} color={t.color.onPrimary} />
+      <Ionicons name="arrow-forward" size={20} color={t.color.onPrimary} style={directionalIconStyle} />
     </Pressable>
   );
 }
@@ -371,6 +372,9 @@ function makeStyles(t: Theme) {
       width: '100%',
       maxWidth: 340,
       textAlign: 'center',
+      // A Hebrew name must type right-to-left even while the placeholder above
+      // it is still English.
+      writingDirection: 'auto',
     },
 
     dots: { flexDirection: 'row', justifyContent: 'center', gap: t.space.sm, paddingVertical: t.space.lg },

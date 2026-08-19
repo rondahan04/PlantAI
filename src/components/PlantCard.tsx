@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Theme, useTheme } from '../theme';
+import { directionalIconStyle } from '../lib/rtl';
 import { LOGO_GLYPH } from '../brand';
 import { needsWater, wateringState } from '../lib/watering';
 import type { StoredPlant } from '../services/plantStore';
@@ -111,7 +112,7 @@ export default function PlantCard({
         )}
       </View>
 
-      <Ionicons name="chevron-forward" size={18} color={t.color.textMuted} />
+      <Ionicons name="chevron-forward" size={18} color={t.color.textMuted} style={directionalIconStyle} />
     </Pressable>
   );
 }
@@ -137,17 +138,17 @@ const makeStyles = (t: Theme) =>
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
-      marginRight: t.space.md,
+      marginEnd: t.space.md,
     },
     // Larger than the 22pt icon it replaced: the mark is drawn inside the
     // adaptive-icon safe zone, so the visible leaf is ~60% of the box.
     thumbGlyph: { width: 40, height: 40, resizeMode: 'contain' as const },
     thumb: { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0 },
-    body: { flex: 1, marginRight: t.space.sm },
-    name: { ...t.type.bodyStrong, color: t.color.foreground },
+    body: { flex: 1, marginEnd: t.space.sm },
+    name: { ...t.type.bodyStrong, color: t.color.foreground, writingDirection: 'auto' },
     metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-    dot: { width: 8, height: 8, borderRadius: 4, marginRight: 6 },
-    condition: { ...t.type.caption, flexShrink: 1 },
+    dot: { width: 8, height: 8, borderRadius: 4, marginEnd: 6 },
+    condition: { ...t.type.caption, flexShrink: 1, writingDirection: 'auto' },
     when: { ...t.type.caption, color: t.color.textMuted },
     waterRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
     waterText: { ...t.type.caption, flexShrink: 1 },

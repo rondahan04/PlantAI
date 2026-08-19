@@ -17,6 +17,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, DeliveryMode } from '../types';
 import { Theme, useTheme } from '../theme';
+import { directionalIconStyle } from '../lib/rtl';
 import { prefetchNearbyNurseries } from '../services/nurseryService';
 import { plantLibrary } from '../services/plantLibrary';
 import { plantPhotos } from '../services/photos';
@@ -196,7 +197,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
         {/* Header */}
         <View style={s.header}>
           <Pressable style={s.backBtn} onPress={() => navigation.navigate('Home')} accessibilityRole="button" accessibilityLabel="Back to home">
-            <Ionicons name="chevron-back" size={22} color={t.color.primary} />
+            <Ionicons name="chevron-back" size={22} color={t.color.primary} style={directionalIconStyle} />
             <Text style={s.backText}>Back</Text>
           </Pressable>
           <Text style={s.headerTitle}>Diagnosis</Text>
@@ -388,7 +389,7 @@ function makeStyles(t: Theme) {
     container: { flex: 1, backgroundColor: t.color.background },
     scroll: { paddingBottom: t.space['2xl'], paddingHorizontal: t.space.xl },
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: t.space.md },
-    backBtn: { flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingRight: t.space.sm },
+    backBtn: { flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingEnd: t.space.sm },
     backText: { ...t.type.label, color: t.color.primary },
     // Mirrors backBtn's 44pt target and width so the title stays centred.
     saveBtn: {
@@ -397,9 +398,9 @@ function makeStyles(t: Theme) {
       justifyContent: 'flex-end',
       minWidth: 60,
       minHeight: 44,
-      paddingLeft: t.space.sm,
+      paddingStart: t.space.sm,
     },
-    saveText: { ...t.type.label, color: t.color.foreground, marginLeft: 4 },
+    saveText: { ...t.type.label, color: t.color.foreground, marginStart: 4 },
     saveTextActive: { color: t.color.primary },
     headerTitle: { ...t.type.heading, color: t.color.foreground },
     imageWrap: { borderRadius: t.radius.xl, overflow: 'hidden', height: 240, ...t.elevation.card },
@@ -407,7 +408,7 @@ function makeStyles(t: Theme) {
     conditionBadge: {
       position: 'absolute',
       bottom: t.space.md,
-      left: t.space.md,
+      start: t.space.md,
       flexDirection: 'row',
       alignItems: 'center',
       gap: t.space.xs,

@@ -118,22 +118,63 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
      gallery pick is copied at full size. Revisit if the document directory gets fat.
    - ⚠️ Unverified on device: needs a real save → force-quit → relaunch to confirm the photo
      survives.
-10. **[M2] E10. Storage tests.** Needs 3 first.
+10. **[P0] Verify items 9 (photo persistence) and 15 (RTL layout) on a device.** Both shipped 2026-08-19 with tests and a
+    clean typecheck and NOTHING else — no run has touched a real filesystem or a mirrored
+    layout. `app.json` changed, so this needs a rebuild, not a reload.
+    1. `npx expo prebuild --clean`, then rebuild the dev client / run on the simulator.
+    2. Diagnose a plant → tap **Save** (bookmark, top right of Diagnosis).
+    3. Force-quit from the app switcher, relaunch, open the plant from Home. **Photo still
+       there** means the copy into the document directory landed. A grey placeholder means
+       `adopt()` returned null — check that `<document>/plant-photos/` exists and holds a file.
+    4. Save a second plant, then Remove it from the detail screen. Its file should be gone
+       from `plant-photos/` and the other plant's file untouched.
+    5. Simulator → Settings → General → Language & Region → add **Hebrew**, make it primary.
+       Relaunch PlantAI. If the layout does not mirror at all, `CFBundleLocalizations` did not
+       make it into the built plist — check the prebuilt `ios/` Info.plist before touching
+       anything else.
+    6. On every screen: rows mirror, back chevrons point **right**, the watering calendar's
+       prev/next arrows swap sides, nothing clips or overlaps.
+    7. Delete the app, reinstall, type a **Hebrew name** in onboarding — it must type
+       right-to-left, and Home's subtitle must render it correctly.
+    - While in there, confirm the prebuilt `AndroidManifest.xml` carries
+      `android:supportsRtl="true"` (Expo's template should set it).
+11. **[M2] E10. Storage tests.** Needs 3 first.
     - save 50, force-quit mid-write, relaunch → all 50 readable
     - hand-write truncated JSON → recoverable error, not empty library
-11. **[M2] E9 follow-up. Confidence rendering.** Confirmed live 2026-08-17: the simulator run
+12. **[M2] E9 follow-up. Confidence rendering.** Confirmed live 2026-08-17: the simulator run
     rendered `Mini monstera` at **44%** with the same authority the old fabricated-87% mock had.
     A confidently-wrong species is the fastest way to lose a user's trust in the whole product.
     Thresholds can ship ahead of 12; real probabilities make them honest.
-12. **[M2] E1. Plant.id v3 disease classification, server-side.** `EXPO_PUBLIC_PLANTID_API_KEY`
+13. **[M2] E1. Plant.id v3 disease classification, server-side.** `EXPO_PUBLIC_PLANTID_API_KEY`
     sits unused. Shape in learning `plantid-v3-response-shape`. Map: `is_healthy` → healthy;
     disease prob <0.3 mild, <0.6 moderate, <0.85 severe, ≥0.85 critical.
-13. **[M3] E5. WhatsApp `wa.me` + `tel:` handoff.** `phone` is already scraped; `onOrder` only
+14. **[M3] E5. WhatsApp `wa.me` + `tel:` handoff.** `phone` is already scraped; `onOrder` only
     opens a site. This is the transact half of the thesis and the cheapest conversion win here —
     Israeli nurseries answer WhatsApp, not web forms.
-14. **[M3] E4. Hebrew / RTL.** Groundwork in `143e98d`; copy missing. Mirror-test the layout. The
-    users are Israeli and the scraped inventory is already Hebrew.
-15. **[ops] O2/O3/O4 observability.** Partly done: `/health?errors=1` returns a bounded ring of
+15. **[M3] E4. Hebrew / RTL — layout half done 2026-08-19, copy still missing.**
+    - ✅ **Mirroring.** Every physical edge in `src/` is now logical: `marginLeft/Right`,
+      `paddingLeft/Right` and positional `left/right` → `marginStart/End`, `paddingStart/End`,
+      `start/end`. Yoga mirrors those and reverses `flexDirection: 'row'` on its own; it does
+      **not** mirror `left`/`right`, which is why they had to go. `grep -rn "marginLeft\|
+      marginRight\|paddingLeft\|paddingRight" src/` returns nothing — keep it that way.
+      Deliberately left physical: the camera viewfinder corners and the two absolute
+      `top/left/right/bottom: 0` image fills, all symmetric.
+    - ✅ **Directional glyphs.** `src/lib/rtl.ts` exports `directionalIconStyle`, applied to
+      every back/forward chevron and the onboarding arrow. Yoga cannot flip an icon, and a
+      back chevron pointing left in a mirrored layout points *forward*.
+    - ✅ **`writingDirection: 'auto'`** on every style rendering AI or user text — plant and
+      species names, care rows, issues, treatments, card names, the onboarding name input,
+      the profile-name subtitle. `143e98d` had covered Diagnosis and Nurseries only.
+    - ✅ **iOS can actually enter RTL:** `CFBundleLocalizations: ["en","he"]` +
+      `CFBundleAllowMixedLocalizations` in `app.json`. Without a declared Hebrew localization
+      iOS never reports RTL, so none of the above would ever fire. Set as raw plist keys
+      rather than via the `expo-localization` plugin — same result, no native dep.
+    - ⚠️ **Needs a rebuild to test** (`app.json` changed) and then a device set to Hebrew.
+      Android: Expo's prebuild template already sets `android:supportsRtl="true"`; confirm
+      after the next prebuild.
+    - ❌ **Still open: the actual Hebrew copy.** No i18n module, no translated strings — the
+      UI stays English in an RTL layout. That is the rest of E4.
+16. **[ops] O2/O3/O4 observability.** Partly done: `/health?errors=1` returns a bounded ring of
     recent failures to a caller holding the shared secret (added 2026-08-18 — a deployed instance
     failing on a provider call was otherwise opaque without the host's log viewer, and that is
     what turned the r68 mystery into a two-minute diagnosis). Still open: JSON logs + request id
@@ -142,13 +183,13 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
     `jobs` field while in there — `jobs: jobs.size()` (`server/index.ts:192`) counts *stored*
     jobs, including finished ones retained for polling, so it never returns to 0 on a healthy
     server and reads as "something is stuck" during an incident. Split into `{active, retained}`.
-16. **[M3] H6. Accessibility.** `accessibilityLabel` on the star rating (`NurseriesScreen.tsx:27`),
+17. **[M3] H6. Accessibility.** `accessibilityLabel` on the star rating (`NurseriesScreen.tsx:27`),
     ≥44pt rows.
-17. **[M3] Cleanups.** **H1** lift `env()` into `scraper/core.ts` (`dashboard/server.ts:50` and
+18. **[M3] Cleanups.** **H1** lift `env()` into `scraper/core.ts` (`dashboard/server.ts:50` and
     `scripts/scrape-nurseries.ts:20` still redeclare `EXPO_PUBLIC_TAVILY_API_KEY`). **H2** rename
     `nurseries_scraping_testing` → `nurseries-fallback.txt` (production config, read at
     `server/index.ts:100`). **H5** route table in `server/index.ts`.
-18. **[ops] Tavily student plan.** Swap the key value, no code change.
+19. **[ops] Tavily student plan.** Swap the key value, no code change.
 
 ---
 

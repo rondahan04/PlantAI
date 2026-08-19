@@ -299,7 +299,7 @@ function makeStyles(t: Theme) {
       padding: t.space.md,
       marginTop: t.space.md,
     },
-    warnBody: { flex: 1, marginLeft: t.space.sm },
+    warnBody: { flex: 1, marginStart: t.space.sm },
     warnTitle: { ...t.type.bodyStrong, color: t.color.foreground },
     warnText: { ...t.type.caption, color: t.color.textSecondary, marginTop: 2 },
     header: { flexDirection: 'row', alignItems: 'center', gap: t.space.md, paddingTop: t.space.lg, paddingBottom: t.space.sm },
@@ -315,7 +315,7 @@ function makeStyles(t: Theme) {
       overflow: 'hidden',
     },
     logoText: { ...t.type.title, color: t.color.foreground },
-    logoSub: { ...t.type.caption, color: t.color.secondary },
+    logoSub: { ...t.type.caption, color: t.color.secondary, writingDirection: 'auto' },
 
     heroCard: {
       marginTop: t.space.xl,

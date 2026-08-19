@@ -12,6 +12,8 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
+        "CFBundleLocalizations": ["en", "he"],
+        "CFBundleAllowMixedLocalizations": true,
         "NSCameraUsageDescription": "PlantAI needs camera access to diagnose your plants.",
         "NSPhotoLibraryUsageDescription": "PlantAI needs photo library access to analyze plant photos.",
         "NSLocationWhenInUseUsageDescription": "PlantAI uses your location to find nearby nurseries."

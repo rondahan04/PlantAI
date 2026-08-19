@@ -7,6 +7,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, Nursery, DeliveryMode } from '../types';
 import { Theme, useTheme } from '../theme';
+import { directionalIconStyle } from '../lib/rtl';
 import { fetchNearbyNurseries } from '../services/nurseryService';
 import StatusView from '../components/StatusView';
 
@@ -253,7 +254,7 @@ export default function NurseriesScreen({ navigation, route }: Props) {
       {/* Header */}
       <Animated.View style={[s.header, { opacity: headerFade }]}>
         <Pressable style={s.backBtn} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Back">
-          <Ionicons name="chevron-back" size={22} color={t.color.primary} />
+          <Ionicons name="chevron-back" size={22} color={t.color.primary} style={directionalIconStyle} />
         </Pressable>
         <View style={s.headerCenter}>
           <Text style={s.headerTitle} numberOfLines={2}>{plantName}</Text>
@@ -458,7 +459,7 @@ function makeStyles(t: Theme) {
     distanceBadge: {
       position: 'absolute',
       bottom: t.space.sm,
-      right: t.space.sm,
+      end: t.space.sm,
       flexDirection: 'row',
       alignItems: 'center',
       gap: t.space.xs,
@@ -469,14 +470,14 @@ function makeStyles(t: Theme) {
       ...t.elevation.card,
     },
     distanceText: { ...t.type.caption, color: t.color.foreground, fontWeight: '600' },
-    closestBadge: { position: 'absolute', top: t.space.sm, left: t.space.sm, backgroundColor: t.color.primary, paddingHorizontal: t.space.sm, paddingVertical: t.space.xs, borderRadius: t.radius.sm },
+    closestBadge: { position: 'absolute', top: t.space.sm, start: t.space.sm, backgroundColor: t.color.primary, paddingHorizontal: t.space.sm, paddingVertical: t.space.xs, borderRadius: t.radius.sm },
     closestText: { ...t.type.caption, color: t.color.onPrimary, fontWeight: '700' },
     cardContent: { padding: t.space.lg },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: t.space.sm },
-    cardTitleWrap: { flex: 1, marginRight: t.space.md },
+    cardTitleWrap: { flex: 1, marginEnd: t.space.md },
     cardName: { ...t.type.bodyStrong, fontSize: 16, fontWeight: '700', color: t.color.foreground, marginBottom: t.space.xs, writingDirection: 'auto' },
     starRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginBottom: 2 },
-    ratingNum: { ...t.type.caption, color: t.color.textSecondary, marginLeft: t.space.xs, fontWeight: '600' },
+    ratingNum: { ...t.type.caption, color: t.color.textSecondary, marginStart: t.space.xs, fontWeight: '600' },
     reviewCount: { ...t.type.caption, fontSize: 11, color: t.color.textMuted },
     priceTag: { backgroundColor: t.color.primaryWash, borderRadius: t.radius.md, paddingHorizontal: t.space.md, paddingVertical: t.space.xs },
     priceText: { ...t.type.bodyStrong, fontSize: 16, fontWeight: '800', color: t.color.primary },
