@@ -71,3 +71,8 @@ coverage/
 # generated native folders
 /ios
 /android
+
+# caveman-compress backups — TODOS.md is the tracked file; these two are the
+# human-readable original and its English rendering, regenerated on demand
+TODOS.original.md
+TODOS.english.md
