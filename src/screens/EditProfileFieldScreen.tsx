@@ -15,8 +15,9 @@ type Props = {
 };
 
 const FIELD_META = {
-  full_name: { title: 'Full name', label: 'Full name', autoCapitalize: 'words' as const },
-  username: { title: 'Username', label: 'Username', autoCapitalize: 'none' as const },
+  full_name: { title: 'Full name', label: 'Full name', autoCapitalize: 'words' as const, required: true },
+  username: { title: 'Username', label: 'Username', autoCapitalize: 'none' as const, required: true },
+  bio: { title: 'Bio', label: 'Bio', autoCapitalize: 'sentences' as const, required: false },
 };
 
 export default function EditProfileFieldScreen({ navigation, route }: Props) {
@@ -66,11 +67,16 @@ export default function EditProfileFieldScreen({ navigation, route }: Props) {
             autoCapitalize={meta.autoCapitalize}
             autoFocus
             error={error ?? undefined}
+            multiline={field === 'bio'}
           />
           <Pressable
-            style={({ pressed }) => [s.saveBtn, pressed && s.saveBtnPressed, (saving || !value.trim()) && s.disabled]}
+            style={({ pressed }) => [
+              s.saveBtn,
+              pressed && s.saveBtnPressed,
+              (saving || (meta.required && !value.trim())) && s.disabled,
+            ]}
             onPress={handleSave}
-            disabled={saving || !value.trim()}
+            disabled={saving || (meta.required && !value.trim())}
             accessibilityRole="button"
             accessibilityLabel="Save"
           >
