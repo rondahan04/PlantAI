@@ -49,7 +49,7 @@ export interface PipelineDeps {
     site: string
   ) => Promise<{ confidence: number; reasoning: string }>;
   resolvePhoto: (photoName: string) => Promise<string | undefined>;
-  readFallbackUrls: () => string[]; // nurseries_scraping_testing
+  readFallbackUrls: () => string[]; // nurseries-fallback.txt
   nationalUrls: string[]; // ship-to-home shippers
 }
 

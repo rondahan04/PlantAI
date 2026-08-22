@@ -49,6 +49,18 @@ export function loadEnv(envPath: string): void {
   }
 }
 
+/*
+ * A key's plain name (`TAVILY_API_KEY`) wins in production hosts, which never
+ * set the `EXPO_PUBLIC_` build-time prefix; the prefixed name is the fallback
+ * for local dev, where `.env` is shared with the Expo app. `server/index.ts`
+ * had this logic; `dashboard/server.ts` and `scripts/scrape-nurseries.ts` each
+ * redeclared a narrower, prefix-only version that could not see a plain-name
+ * production var (TODOS H1) - one copy here, three callers.
+ */
+export function env(key: string): string | undefined {
+  return process.env[key] || process.env[`EXPO_PUBLIC_${key}`];
+}
+
 // --- Firecrawl -------------------------------------------------------------
 
 /*

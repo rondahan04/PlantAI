@@ -57,7 +57,10 @@ const hasCoords = (n: Nursery) => n.latitude !== 0 && n.longitude !== 0;
 
 function StarRating({ rating, t, s }: { rating: number; t: Theme; s: Styles }) {
   return (
-    <View style={s.starRow}>
+    // Individual star glyphs carry no meaning to a screen reader on their own
+    // (five unlabelled icons plus a bare number) - one accessible group with
+    // the plain-language rating replaces that with a single readable value.
+    <View style={s.starRow} accessible accessibilityLabel={`Rated ${rating.toFixed(1)} out of 5 stars`}>
       {[1, 2, 3, 4, 5].map((i) => {
         const name = i <= Math.floor(rating) ? 'star' : i - rating < 1 ? 'star-half' : 'star-outline';
         return <Ionicons key={i} name={name} size={13} color={t.color.warning} />;

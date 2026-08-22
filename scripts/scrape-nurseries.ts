@@ -11,13 +11,13 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { loadEnv, scrapeUrl, extractAndVerifyPlants } from '../scraper/core.ts';
+import { loadEnv, env, scrapeUrl, extractAndVerifyPlants } from '../scraper/core.ts';
 
 loadEnv(path.join(__dirname, '..', '.env'));
 
-const FIRECRAWL_KEY = process.env.EXPO_PUBLIC_FIRECRAWL_API_KEY;
-const OPENAI_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
-const TAVILY_KEY = process.env.EXPO_PUBLIC_TAVILY_API_KEY; // optional Firecrawl fallback
+const FIRECRAWL_KEY = env('FIRECRAWL_API_KEY');
+const OPENAI_KEY = env('OPENAI_API_KEY');
+const TAVILY_KEY = env('TAVILY_API_KEY'); // optional Firecrawl fallback
 const NURSERIES_PATH = path.join(__dirname, '..', 'assets', 'nurseries.json');
 
 if (!FIRECRAWL_KEY || !OPENAI_KEY) {

@@ -17,7 +17,7 @@ WORKDIR /app
 COPY package.json ./
 COPY server ./server
 COPY scraper ./scraper
-COPY nurseries_scraping_testing ./nurseries_scraping_testing
+COPY nurseries-fallback.txt ./nurseries-fallback.txt
 
 # Drop root. The process only needs to read its own source and write
 # scraper/learned-platforms.json, which is a cache the container regenerates.

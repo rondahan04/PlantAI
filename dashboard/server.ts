@@ -5,7 +5,7 @@
  * Run:  node dashboard/server.ts   (then open http://localhost:4000)
  * Env:  EXPO_PUBLIC_FIRECRAWL_API_KEY, EXPO_PUBLIC_OPENAI_API_KEY (from ../.env)
  *
- * Enter a query -> for each nursery URL in ../nurseries_scraping_testing,
+ * Enter a query -> for each nursery URL in ../nurseries-fallback.txt,
  * detect the store platform, hit its product-search, extract matching items +
  * prices (ILS) via OpenAI, and render them in a table. All scraping logic
  * lives in ../scraper/core.ts (shared with scripts/scrape-nurseries.ts).
@@ -17,6 +17,7 @@ import * as http from 'http';
 import { fileURLToPath } from 'url';
 import {
   loadEnv,
+  env,
   createSearcher,
   extractAndVerifyPlants,
   inferAvailabilityLLM,
@@ -45,11 +46,11 @@ for (const level of ['log', 'error', 'warn'] as const) {
 
 loadEnv(path.join(ROOT, '.env'));
 
-const FIRECRAWL_KEY = process.env.EXPO_PUBLIC_FIRECRAWL_API_KEY;
-const OPENAI_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
-const TAVILY_KEY = process.env.EXPO_PUBLIC_TAVILY_API_KEY; // optional Firecrawl fallback
-const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY; // optional Places discovery
-const URLS_PATH = path.join(ROOT, 'nurseries_scraping_testing');
+const FIRECRAWL_KEY = env('FIRECRAWL_API_KEY');
+const OPENAI_KEY = env('OPENAI_API_KEY');
+const TAVILY_KEY = env('TAVILY_API_KEY'); // optional Firecrawl fallback
+const GOOGLE_KEY = env('GOOGLE_MAPS_API_KEY'); // optional Places discovery
+const URLS_PATH = path.join(ROOT, 'nurseries-fallback.txt');
 
 if (!FIRECRAWL_KEY || !OPENAI_KEY) {
   console.error('Missing EXPO_PUBLIC_FIRECRAWL_API_KEY or EXPO_PUBLIC_OPENAI_API_KEY in .env');
@@ -200,7 +201,7 @@ const HTML = `<!doctype html>
 </head>
 <body>
   <h1>🌱 Nursery Scraper Test</h1>
-  <p class="sub">Searches nursery sites and lists matching items + prices (ILS). Leave location blank to use <code>nurseries_scraping_testing</code>; enter <code>lat,lng</code> to discover nearby nurseries via Google Places.</p>
+  <p class="sub">Searches nursery sites and lists matching items + prices (ILS). Leave location blank to use <code>nurseries-fallback.txt</code>; enter <code>lat,lng</code> to discover nearby nurseries via Google Places.</p>
   <form id="f">
     <input id="q" placeholder="e.g. monstera, cactus, lavender…" autofocus />
     <input id="loc" placeholder="lat,lng (optional → discover nearby, e.g. 32.0853,34.7818)" />

@@ -31,10 +31,18 @@ export interface Job<T> {
   errorCode?: string;
 }
 
+export interface JobStats {
+  /* Currently running - the number that matters for "is something stuck". */
+  active: number;
+  /* Finished (done or error) but still held for a late poll, per RETENTION_MS. */
+  retained: number;
+}
+
 export interface JobStore<T> {
   start(key: string, run: () => Promise<T>): Job<T>;
   get(id: string): Job<T> | undefined;
   size(): number;
+  stats(): JobStats;
 }
 
 /*
@@ -105,6 +113,23 @@ export function createJobStore<T>(
 
     size() {
       return byId.size;
+    },
+
+    /*
+     * `size()` alone reads as "something is stuck" during a perfectly healthy
+     * incident-free hour, because it counts finished jobs kept for late polls
+     * alongside genuinely in-flight ones and so never returns to 0 on a busy
+     * server (TODOS H-jobs-split). `active` is the number worth alerting on.
+     */
+    stats() {
+      sweep();
+      let active = 0;
+      let retained = 0;
+      for (const job of byId.values()) {
+        if (job.state === 'running') active++;
+        else retained++;
+      }
+      return { active, retained };
     },
   };
 }

@@ -147,6 +147,58 @@ test('finished jobs are swept after the retention window, in-flight ones never a
   assert.deepEqual(store.get('job-2')?.result, ['b']);
 });
 
+// ─── stats() ─────────────────────────────────────────────────────────────────
+//
+// `size()` alone reads as "something is stuck" on a perfectly healthy server,
+// because it counts jobs held only for a late poll alongside genuinely
+// in-flight ones and so never returns to 0. `stats()` exists to split them.
+
+test('a running job counts as active, not retained', async () => {
+  const store = createJobStore<string[]>(clock().now, ids());
+  const d = deferred<string[]>();
+  store.start('key', () => d.promise);
+
+  assert.deepEqual(store.stats(), { active: 1, retained: 0 });
+});
+
+test('a finished job counts as retained, not active', async () => {
+  const store = createJobStore<string[]>(clock().now, ids());
+  store.start('key', () => Promise.resolve(['a']));
+  await tick();
+
+  assert.deepEqual(store.stats(), { active: 0, retained: 1 });
+});
+
+test('a failed job counts as retained too - it is still held for a poll', async () => {
+  const store = createJobStore<string[]>(clock().now, ids());
+  store.start('key', () => Promise.reject(new Error('boom')));
+  await tick();
+
+  assert.deepEqual(store.stats(), { active: 0, retained: 1 });
+});
+
+test('active and retained are counted independently across several jobs', async () => {
+  const store = createJobStore<string[]>(clock().now, ids());
+  const running = deferred<string[]>();
+  store.start('a', () => Promise.resolve(['x']));
+  store.start('b', () => Promise.reject(new Error('boom')));
+  store.start('c', () => running.promise);
+  await tick();
+
+  assert.deepEqual(store.stats(), { active: 1, retained: 2 });
+});
+
+test('stats() drops swept jobs the same way size() does', async () => {
+  const c = clock();
+  const store = createJobStore<string[]>(c.now, ids());
+  store.start('done-key', () => Promise.resolve(['a']));
+  await tick();
+
+  c.advance(11 * 60_000);
+
+  assert.deepEqual(store.stats(), { active: 0, retained: 0 });
+});
+
 test('a swept job stops deduping, so the next request starts fresh work', async () => {
   const c = clock();
   const store = createJobStore<string[]>(c.now, ids());

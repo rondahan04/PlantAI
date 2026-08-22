@@ -192,22 +192,33 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
       after the next prebuild.
     - ❌ **Still open: the actual Hebrew copy.** No i18n module, no translated strings - the
       UI stays English in an RTL layout. That is the rest of E4.
-16. **[ops] O2/O3/O4 observability.** Partly done: `/health?errors=1` returns a bounded ring of
-    recent failures to a caller holding the shared secret (added 2026-08-18 - a deployed instance
-    failing on a provider call was otherwise opaque without the host's log viewer, and that is
-    what turned the r68 mystery into a two-minute diagnosis). Still open: JSON logs + request id
-    (`server/index.ts:96,99,103`);
-    `/health` reports last-successful-scrape per provider; one-page runbook. ⚠️ Also fix the
-    `jobs` field while in there - `jobs: jobs.size()` (`server/index.ts:192`) counts *stored*
-    jobs, including finished ones retained for polling, so it never returns to 0 on a healthy
-    server and reads as "something is stuck" during an incident. Split into `{active, retained}`.
-17. **[M3] H6. Accessibility.** `accessibilityLabel` on the star rating (`NurseriesScreen.tsx:27`),
-    ≥44pt rows.
-18. **[M3] Cleanups.** **H1** lift `env()` into `scraper/core.ts` (`dashboard/server.ts:50` and
-    `scripts/scrape-nurseries.ts:20` still redeclare `EXPO_PUBLIC_TAVILY_API_KEY`). **H2** rename
-    `nurseries_scraping_testing` → `nurseries-fallback.txt` (production config, read at
-    `server/index.ts:100`). **H5** route table in `server/index.ts`.
-19. **[ops] Tavily student plan.** Swap the key value, no code change.
+16. ✅ **[ops] O2/O3/O4 observability - done 2026-08-22.** `/health?errors=1`'s bounded failure
+    ring (2026-08-18) stays as-is. Added: every request/job log line is now one JSON object
+    (`{at,rid,event,...}` via `logEvent()`/`fail()` in `server/index.ts`) instead of a
+    printf-style `[${rid}] text` string, so a host's log viewer can filter/query a field instead
+    of parsing a sentence. `/health` gained `lastSuccess: {plantnet_identify, health_assessment,
+    nursery_scrape}` (each `identify`/`assessHealth` call wrapped to stamp it on success) so a
+    provider outage is visible without waiting for a user to hit it. `docs/RUNBOOK.md` - one page,
+    covers `/health` reading, the errors ring, log format, and a symptom table for the known
+    incident classes (provider down, stub mode, hung scrape, secret mismatch, oversized photo).
+    Fixed the `jobs` field: `jobs.stats()` in `server/jobs.ts` replaces `jobs.size()`, returning
+    `{active, retained}` instead of one number that never hit 0 on a healthy server (5 new tests).
+17. ✅ **[M3] H6. Accessibility - done 2026-08-22.** `StarRating` in `NurseriesScreen.tsx` wrapped
+    in one `accessible` `View` with `accessibilityLabel="Rated X out of 5 stars"` - five unlabelled
+    star glyphs plus a bare number read as nothing to a screen reader; now one readable value.
+    Tap targets audited: `backBtn`/`viewToggleBtn` (44×44), `modeBtn`/`retryBtn`/
+    `actionSecondary`/`actionPrimary`/`scanMoreBtn` (`minHeight: 44`) were already ≥44pt - no
+    change needed there.
+18. ✅ **[M3] Cleanups - done 2026-08-22.** **H1** `env()` lifted into `scraper/core.ts`
+    (plain-name-first, `EXPO_PUBLIC_` fallback); `dashboard/server.ts`, `scripts/scrape-nurseries.ts`,
+    and `server/index.ts`'s own local copy all now import the one implementation instead of each
+    redeclaring a narrower, prefix-only version. **H2** `nurseries_scraping_testing` renamed to
+    `nurseries-fallback.txt` (`git mv`, plus every reference: `server/index.ts`, `dashboard/server.ts`,
+    `scraper/pipeline.ts`, `Dockerfile`). **H5** the route table comment at the top of
+    `server/index.ts` was already accurate - confirmed, no change needed.
+19. ✅ **[ops] Tavily student plan - done 2026-08-22.** Key swapped in local `.env`
+    (`EXPO_PUBLIC_TAVILY_API_KEY`) and in Render's `TAVILY_API_KEY` env var (`sync: false`,
+    dashboard-only). No code change.
 
 ---
 

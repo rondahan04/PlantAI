@@ -23,6 +23,7 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import {
   loadEnv,
+  env,
   createSearcher,
   extractAndVerifyPlants,
   inferAvailabilityLLM,
@@ -48,7 +49,6 @@ const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.PORT) || 4000;
 
 loadEnv(path.join(ROOT, '.env'));
-const env = (k: string) => process.env[k] || process.env[`EXPO_PUBLIC_${k}`];
 const FIRECRAWL_KEY = env('FIRECRAWL_API_KEY');
 const OPENAI_KEY = env('OPENAI_API_KEY');
 const TAVILY_KEY = env('TAVILY_API_KEY');
@@ -98,7 +98,7 @@ const deps: PipelineDeps = {
   resolvePhoto: (photoName) => resolvePhotoUrl(photoName, GOOGLE_KEY!),
   readFallbackUrls: () =>
     fs
-      .readFileSync(path.join(ROOT, 'nurseries_scraping_testing'), 'utf8')
+      .readFileSync(path.join(ROOT, 'nurseries-fallback.txt'), 'utf8')
       .split('\n')
       .map((l) => l.trim())
       .filter((l) => l.startsWith('http')),
@@ -114,9 +114,23 @@ if (SKIP_OPENAI_DIAGNOSIS) {
   console.warn('[diagnose] DIAGNOSIS_SKIP_OPENAI=true - serving a stub health assessment, not a real diagnosis.');
 }
 
+const identifyImpl = plantNetIdentify(PLANTNET_KEY!);
+const assessHealthImpl = SKIP_OPENAI_DIAGNOSIS ? stubAssessHealth : openAiAssessHealth(OPENAI_KEY!);
+
 const diagnosisDeps: DiagnosisDeps = {
-  identify: plantNetIdentify(PLANTNET_KEY!),
-  assessHealth: SKIP_OPENAI_DIAGNOSIS ? stubAssessHealth : openAiAssessHealth(OPENAI_KEY!),
+  identify: async (image) => {
+    const result = await identifyImpl(image);
+    recordSuccess('plantnet_identify');
+    return result;
+  },
+  assessHealth: async (image, id) => {
+    const result = await assessHealthImpl(image, id);
+    // Counts the labelled stub too - SKIP_OPENAI_DIAGNOSIS means "not calling
+    // OpenAI", not "the diagnosis step is down", and /health should not read
+    // as an outage during an intentional, logged cost-saving mode.
+    recordSuccess('health_assessment');
+    return result;
+  },
 };
 
 // ─── HTTP plumbing ────────────────────────────────────────────────────────────
@@ -185,14 +199,41 @@ function recordError(rid: string, code: string, detail: string) {
   if (recentErrors.length > RECENT_ERRORS_MAX) recentErrors.shift();
 }
 
+/*
+ * O2: one JSON object per line, `rid` on every entry, rather than the
+ * printf-style `[${rid}] text` strings this replaced. A host's log viewer
+ * (Render's included) can filter/query a field but not parse an ad-hoc
+ * sentence, and grepping a raw string for "the" request id across an
+ * interleaved multi-request stream was the actual problem this fixes.
+ */
+function logEvent(rid: string, event: string, fields: Record<string, unknown> = {}): void {
+  console.log(JSON.stringify({ at: new Date().toISOString(), rid, event, ...fields }));
+}
+
 function fail(res: http.ServerResponse, rid: string, status: number, code: string, message: string, detail: string) {
-  console.error(`[${rid}] ${code}: ${detail}`);
+  console.error(JSON.stringify({ at: new Date().toISOString(), rid, event: 'error', code, detail }));
   recordError(rid, code, detail);
   json(res, status, { error: code, message });
 }
 
 let requestSeq = 0;
 const nextRequestId = () => `r${(++requestSeq).toString(36)}`;
+
+/*
+ * O4: when the last successful call to each provider happened, so `/health`
+ * can answer "is PlantNet actually working" without waiting for a user to hit
+ * a broken flow first. A 502 on /api/diagnose is ambiguous between PlantNet
+ * and the health-assessment step (PlantNet vs OpenAI/stub) - this splits it.
+ */
+type Provider = 'plantnet_identify' | 'health_assessment' | 'nursery_scrape';
+const lastSuccess: Record<Provider, string | null> = {
+  plantnet_identify: null,
+  health_assessment: null,
+  nursery_scrape: null,
+};
+function recordSuccess(provider: Provider): void {
+  lastSuccess[provider] = new Date().toISOString();
+}
 
 // ─── Server ───────────────────────────────────────────────────────────────────
 
@@ -219,7 +260,12 @@ const server = http.createServer(async (req, res) => {
   // but only for a caller holding the shared secret - provider error bodies are
   // internal detail and this endpoint is otherwise unauthenticated.
   if (u.pathname === '/health') {
-    const body: Record<string, unknown> = { ok: true, gate: gate.stats(), jobs: jobs.size() };
+    const body: Record<string, unknown> = {
+      ok: true,
+      gate: gate.stats(),
+      jobs: jobs.stats(),
+      lastSuccess,
+    };
     if (u.searchParams.get('errors') === '1') {
       body.errors = gate.checkSecret(ip, secret).allow ? recentErrors : 'secret required';
     }
@@ -262,25 +308,28 @@ const server = http.createServer(async (req, res) => {
     }
 
     const t0 = Date.now();
-    console.log(`[${rid}] 🌿 /api/diagnose ${image.length}B`);
+    logEvent(rid, 'diagnose_start', { bytes: image.length });
     try {
       const result = await diagnose(image, diagnosisDeps);
-      console.log(
-        `[${rid}] ✔ ${result.plantName} (${result.confidence}%) ${result.condition} in ${Date.now() - t0}ms`
-      );
+      logEvent(rid, 'diagnose_done', {
+        plantName: result.plantName,
+        confidence: result.confidence,
+        condition: result.condition,
+        ms: Date.now() - t0,
+      });
       json(res, 200, result);
     } catch (err: unknown) {
       if (err instanceof NotAPlantError) {
         // Not a failure of ours: the photo has no plant in it. Distinct code so
         // the app can say something true and specific about the photo.
-        console.log(`[${rid}] · no plant recognized (${Date.now() - t0}ms)`);
+        logEvent(rid, 'diagnose_not_a_plant', { ms: Date.now() - t0 });
         json(res, 422, { error: 'not_a_plant', message: 'No plant was recognized in that photo.' });
         return;
       }
       if (err instanceof UnsupportedImageError) {
         // About the file, not about us. Saying "the service did not answer"
         // here would send the user to retry a photo that can never work.
-        console.log(`[${rid}] · unsupported image: ${err.detectedType}`);
+        logEvent(rid, 'diagnose_unsupported_image', { detectedType: err.detectedType });
         json(res, 415, {
           error: 'unsupported_image',
           message: 'That image format is not supported. JPEG or PNG works.',
@@ -327,12 +376,13 @@ const server = http.createServer(async (req, res) => {
     const key = `${input.plant.toLowerCase()}|${input.lat.toFixed(3)}|${input.lng.toFixed(3)}|${input.radiusM}`;
     const t0 = Date.now();
     const job = jobs.start(key, async () => {
-      console.log(`[${rid}] 🔍 scrape "${input.plant}" @ ${input.lat},${input.lng} r=${input.radiusM}m`);
+      logEvent(rid, 'nursery_scrape_start', { plant: input.plant, lat: input.lat, lng: input.lng, radiusM: input.radiusM });
       const results = await runNurserySearch(
         { plantName: input.plant, lat: input.lat, lng: input.lng, radiusM: input.radiusM },
         deps
       );
-      console.log(`[${rid}] ✔ ${results.length} nurseries in ${Date.now() - t0}ms`);
+      recordSuccess('nursery_scrape');
+      logEvent(rid, 'nursery_scrape_done', { count: results.length, ms: Date.now() - t0 });
       return results;
     });
 
