@@ -1,6 +1,6 @@
 # Everything is excluded by default; the Dockerfile COPYs only what the server
-# reads at runtime. This list exists so an accidental `COPY . .` — or a `docker
-# build` context upload — cannot carry the app source, the 138 MB demo video, or
+# reads at runtime. This list exists so an accidental `COPY . .` - or a `docker
+# build` context upload - cannot carry the app source, the 138 MB demo video, or
 # the .env full of live keys into an image that gets pushed to a registry.
 .env
 .env.*
@@ -12,7 +12,7 @@ node_modules
 .codegraph
 .claude
 
-# React Native app — never runs in the container.
+# React Native app - never runs in the container.
 src
 assets
 App.tsx

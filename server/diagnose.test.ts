@@ -7,7 +7,7 @@ import { isHealthAssessment, normalizeAssessment } from './diagnose.ts';
  * diagnosis path that no amount of correct code can pin down: the model decides
  * the shape at runtime and periodically changes its mind.
  *
- * The object-shaped `issues` case below is not hypothetical — it is the payload
+ * The object-shaped `issues` case below is not hypothetical - it is the payload
  * that 502'd a live request on 2026-08-18 (r68) while the identical photo had
  * succeeded locally minutes earlier.
  */
@@ -26,7 +26,7 @@ test('a well-formed assessment passes untouched', () => {
   assert.equal(normalizeAssessment(valid), valid, 'nothing to fix → same object back');
 });
 
-test('object-shaped issues are flattened to strings — the r68 production failure', () => {
+test('object-shaped issues are flattened to strings - the r68 production failure', () => {
   const drifted = {
     ...valid,
     issues: [
@@ -43,7 +43,7 @@ test('object-shaped issues are flattened to strings — the r68 production failu
   const fixed = normalizeAssessment(drifted);
   assert.equal(isHealthAssessment(fixed), true, 'normalized shape must validate');
   assert.deepEqual((fixed as typeof valid).issues, [
-    'Brown necrotic leaf margins — Several leaves show dry brown edges and tips with yellow halos.',
+    'Brown necrotic leaf margins - Several leaves show dry brown edges and tips with yellow halos.',
   ]);
 });
 
@@ -51,7 +51,7 @@ test('label and detail are joined, not one at the expense of the other', () => {
   // `name` alone loses the evidence justifying the claim; `evidence` alone
   // loses what the problem is called. A user deserves both.
   const out = normalizeAssessment({ ...valid, issues: [{ name: 'Root rot', evidence: 'Mushy stem base.' }] });
-  assert.deepEqual((out as typeof valid).issues, ['Root rot — Mushy stem base.']);
+  assert.deepEqual((out as typeof valid).issues, ['Root rot - Mushy stem base.']);
 });
 
 test('alternative key spellings the model reaches for are understood', () => {
@@ -59,7 +59,7 @@ test('alternative key spellings the model reaches for are understood', () => {
     ...valid,
     issues: [{ issue: 'Spider mites', description: 'Fine webbing under leaves.' }],
   });
-  assert.deepEqual((out as typeof valid).issues, ['Spider mites — Fine webbing under leaves.']);
+  assert.deepEqual((out as typeof valid).issues, ['Spider mites - Fine webbing under leaves.']);
 });
 
 test('a lone descriptive field is kept as-is', () => {
@@ -69,7 +69,7 @@ test('a lone descriptive field is kept as-is', () => {
 
 test('trailing punctuation on a label does not produce a double separator', () => {
   const out = normalizeAssessment({ ...valid, issues: [{ name: 'Leaf scorch:', evidence: 'Crispy tips.' }] });
-  assert.deepEqual((out as typeof valid).issues, ['Leaf scorch — Crispy tips.']);
+  assert.deepEqual((out as typeof valid).issues, ['Leaf scorch - Crispy tips.']);
 });
 
 test('unusable issue entries are dropped rather than rendered as junk', () => {
@@ -79,12 +79,12 @@ test('unusable issue entries are dropped rather than rendered as junk', () => {
   assert.deepEqual((out as typeof valid).issues, ['Aphids']);
 });
 
-test('an empty issues array survives — healthy plants have no issues', () => {
+test('an empty issues array survives - healthy plants have no issues', () => {
   const healthy = { ...valid, condition: 'healthy', conditionLabel: 'Healthy', issues: [] };
   assert.equal(isHealthAssessment(normalizeAssessment(healthy)), true);
 });
 
-test('normalize repairs shape only — it never invents missing fields', () => {
+test('normalize repairs shape only - it never invents missing fields', () => {
   // Fabricating a `condition` would put a diagnosis in a pathologist's mouth
   // that the model never made. Missing fields must still fail the guard.
   const noCondition = { conditionLabel: 'X', issues: [{ name: 'Y' }], treatments: [], description: '', canBeSaved: true };
@@ -96,7 +96,7 @@ test('a bogus condition value is still rejected after normalizing', () => {
   assert.equal(isHealthAssessment(normalizeAssessment(bad)), false);
 });
 
-test('malformed treatments are not rescued — only issues are repaired', () => {
+test('malformed treatments are not rescued - only issues are repaired', () => {
   const bad = { ...valid, treatments: [{ title: 'X' }] };
   assert.equal(isHealthAssessment(normalizeAssessment(bad)), false);
 });
@@ -116,7 +116,7 @@ test('non-objects pass through without throwing', () => {
 
 const carePlan = {
   soil: 'Well-draining aroid mix, peat and perlite',
-  light: 'Bright indirect — no direct midday sun',
+  light: 'Bright indirect - no direct midday sun',
   water: 'Every 7-10 days, when the top 2cm is dry',
 };
 
@@ -152,7 +152,7 @@ test('a malformed care plan is dropped, never fatal', () => {
 test('a malformed care plan alone does not fail the guard directly', () => {
   // isHealthAssessment is also called on un-normalized input in tests and by
   // any future caller, so it rejects the malformed shape rather than ignoring
-  // it — normalize is what turns that rejection into a dropped field.
+  // it - normalize is what turns that rejection into a dropped field.
   assert.equal(isHealthAssessment({ ...valid, carePlan: { soil: 'Loam' } }), false);
 });
 
@@ -165,7 +165,7 @@ test('issue flattening and care-plan dropping compose in one pass', () => {
 
   const out = normalizeAssessment(drifted) as Record<string, unknown>;
   assert.equal(isHealthAssessment(out), true);
-  assert.deepEqual(out.issues, ['Aphids — Clusters on new growth.']);
+  assert.deepEqual(out.issues, ['Aphids - Clusters on new growth.']);
   assert.equal('carePlan' in out, false);
 });
 
@@ -250,4 +250,27 @@ test('bad prose with a good number is still dropped entirely', () => {
   }) as Record<string, unknown>;
   assert.equal('carePlan' in out, false);
   assert.equal(isHealthAssessment(out), true);
+});
+
+test('a named variety passes untouched', () => {
+  const withVariety = { ...valid, variety: 'Thai Constellation' };
+  assert.equal(isHealthAssessment(withVariety), true);
+  assert.equal(normalizeAssessment(withVariety), withVariety, 'nothing to fix → same object back');
+});
+
+test('an empty-string variety is dropped, not fatal', () => {
+  const out = normalizeAssessment({ ...valid, variety: '' }) as Record<string, unknown>;
+  assert.equal('variety' in out, false);
+  assert.equal(isHealthAssessment(out), true);
+});
+
+test('a non-string variety is dropped, not fatal', () => {
+  const out = normalizeAssessment({ ...valid, variety: 42 }) as Record<string, unknown>;
+  assert.equal('variety' in out, false);
+  assert.equal(isHealthAssessment(out), true);
+});
+
+test('the guard rejects a non-string variety directly', () => {
+  assert.equal(isHealthAssessment({ ...valid, variety: 42 }), false);
+  assert.equal(isHealthAssessment({ ...valid, variety: '' }), false);
 });

@@ -4,7 +4,7 @@
  *   - dashboard/server.ts        (interactive query dashboard)
  *   - scripts/scrape-nurseries.ts (offline nurseries.json builder)
  *
- * Node-only (uses fs + global fetch). Not bundled into the RN app — see the
+ * Node-only (uses fs + global fetch). Not bundled into the RN app - see the
  * tsconfig `exclude` list. Pure functions (detectPlatform / searchUrlsFor /
  * scoreMarkdown / priceFocusedExcerpt) are unit-tested in core.test.ts.
  *
@@ -28,7 +28,7 @@ export type Platform = 'shopify' | 'woo' | 'wix' | 'unknown';
  *
  * A REAL ENVIRONMENT VARIABLE ALWAYS WINS. This used to overwrite, which meant
  * `GATE_MODE=enforce node server/index.ts` silently ran in log mode because
- * .env said log — the flag you set to protect the API was the one thing that
+ * .env said log - the flag you set to protect the API was the one thing that
  * could not take effect. It also matches dotenv's own default and how every
  * host works: the file is the fallback for local dev, the environment is the
  * truth in production.
@@ -63,7 +63,7 @@ export function loadEnv(envPath: string): void {
  *
  * The retry recursion lives HERE, one layer below the Tavily fallback in
  * scrapeUrl, so a retried Firecrawl call can never accidentally drop the
- * fallback key — the fallback decision is made once, after this resolves.
+ * fallback key - the fallback decision is made once, after this resolves.
  */
 async function firecrawlScrape(
   url: string,
@@ -92,7 +92,7 @@ async function firecrawlScrape(
 
 /*
  * Fallback scrape provider: Tavily Extract (https://api.tavily.com/extract).
- * URL in, markdown out — a direct analog of Firecrawl scrape. `extract_depth`
+ * URL in, markdown out - a direct analog of Firecrawl scrape. `extract_depth`
  * defaults to 'advanced' because Tavily is only ever reached after Firecrawl
  * already failed, so we spend the extra credit to maximize rescue odds.
  * `fetchImpl` is injectable so the parser can be unit-tested without network.
@@ -122,7 +122,7 @@ export async function tavilyExtract(
 
 /*
  * Pure scrape orchestration: try the primary provider, fall back to Tavily on
- * throw-OR-empty. "Empty" matters as much as "throw" — bot-walled sites
+ * throw-OR-empty. "Empty" matters as much as "throw" - bot-walled sites
  * (e.g. irism.co.il) return HTTP 200 with len=0 markdown rather than erroring,
  * so a throw-only fallback would miss the common failure. Both providers are
  * injected, so every branch is unit-testable without touching the network.
@@ -149,7 +149,7 @@ export async function resolveScrape(opts: {
   if (md) return md;
   if (!tavilyKey) {
     if (primaryErr) throw primaryErr;
-    return md; // '' — preserve today's empty-is-OK contract when no fallback configured
+    return md; // '' - preserve today's empty-is-OK contract when no fallback configured
   }
   try {
     return await fallback(url, tavilyKey);
@@ -160,7 +160,7 @@ export async function resolveScrape(opts: {
 
 /*
  * Scrape a URL to markdown, with an optional Tavily fallback. Pass
- * opts.tavilyKey ONLY for real product scrapes — not for identifyPlatform's
+ * opts.tavilyKey ONLY for real product scrapes - not for identifyPlatform's
  * detection probes, which return '' by design for the wrong platform and would
  * waste Tavily credits. Firecrawl retry/timeout config is forwarded unchanged.
  */
@@ -182,7 +182,7 @@ export async function scrapeUrl(
 
 /*
  * Detect the store platform from page content (markdown or raw HTML).
- * Order matters — check Shopify before Woo. Shopify uses /products/ (plural)
+ * Order matters - check Shopify before Woo. Shopify uses /products/ (plural)
  * and /collections/; Woo uses /product/ (singular) and /product-category/,
  * so the Woo `/product/` test never matches a Shopify /products/ link.
  *
@@ -354,23 +354,23 @@ export async function identifyPlatform(
 ): Promise<string> {
   const { scrape = scrapeUrl, openaiKey, learnedFile, classify } = opts;
 
-  // L1 — fast static homepage.
+  // L1 - fast static homepage.
   const home0 = await safeScrape(scrape, origin, firecrawlKey, 0);
   let p: string = detectPlatform(home0);
   if (p !== 'unknown') return p;
 
-  // L2 — rendered homepage (client-rendered storefronts).
+  // L2 - rendered homepage (client-rendered storefronts).
   const home = await safeScrape(scrape, origin, firecrawlKey, 4000);
   p = detectPlatform(home);
   if (p !== 'unknown') return p;
 
-  // L3 — platform-specific endpoints (content-independent tells).
+  // L3 - platform-specific endpoints (content-independent tells).
   const shopify = await safeScrape(scrape, `${origin}/products.json`, firecrawlKey, 0);
   if (/"handle"\s*:|"variants"\s*:|"product_type"\s*:/.test(shopify)) return 'shopify';
   const wp = await safeScrape(scrape, `${origin}/wp-json/`, firecrawlKey, 0);
   if (/wp\/v2|"namespace"|"routes"/.test(wp)) return 'woo';
 
-  // L4 — LLM classifies whatever homepage content we have, and teaches us the
+  // L4 - LLM classifies whatever homepage content we have, and teaches us the
   // search template for platforms we don't yet know.
   const content = home || home0;
   if (openaiKey && content) {
@@ -438,7 +438,7 @@ export function scoreMarkdown(markdown: string | null, query: string): number {
  * boilerplate + base64 images. Strip images, then keep only product-ish lines
  * (headings, ILS prices, product permalinks) so the model sees a clean
  * name->price catalog. Themes vary: `##### [Name](url)`, plain `# Name`,
- * `- [**Name** ₪price](url)` — all are kept.
+ * `- [**Name** ₪price](url)` - all are kept.
  */
 export function priceFocusedExcerpt(markdown: string, max = 18000): string {
   const kept = markdown
@@ -454,7 +454,7 @@ export function priceFocusedExcerpt(markdown: string, max = 18000): string {
 
 /* Call the OpenAI model in JSON mode and return the parsed object. Throws on
  * non-2xx or unparseable content so callers can decide how to degrade. */
-export const OPENAI_MODEL = 'gpt-5.5';
+export const OPENAI_MODEL = 'gpt-5.6-luna';
 
 export async function callOpenAIJson(
   prompt: string,
@@ -507,7 +507,7 @@ export interface VerificationReport {
 export interface PipelineResult {
   plants: Plant[];
   report: VerificationReport;
-  engines: { extractor: 'gpt-5.5' | 'none'; verifier: 'gpt-5.5' | 'none' };
+  engines: { extractor: 'gpt-5.6-luna' | 'none'; verifier: 'gpt-5.6-luna' | 'none' };
 }
 
 function coercePlants(items: any): Plant[] {
@@ -553,7 +553,7 @@ export async function verifyPlantsWithGPT(
   site: string,
   openaiKey: string
 ): Promise<VerificationReport> {
-  const prompt = `You are a strict data auditor for a plant nursery scraper (${site}). The data below was extracted in a separate pass. Your only job is to verify it against the SOURCE TEXT — do not extract anything new.
+  const prompt = `You are a strict data auditor for a plant nursery scraper (${site}). The data below was extracted in a separate pass. Your only job is to verify it against the SOURCE TEXT - do not extract anything new.
 The user searched for: "${query}". The source is mostly Hebrew.
 Cross-reference every field of the extracted JSON against the SOURCE TEXT and check:
 - Plant name: is it actually present in the source and accurately captured (not hallucinated, not a blog/category)?
@@ -605,7 +605,7 @@ export async function extractAndVerifyPlants(opts: {
     engines: { extractor: 'none', verifier: 'none' },
   });
 
-  if (!excerpt.trim()) return empty('empty excerpt — no product/price lines matched');
+  if (!excerpt.trim()) return empty('empty excerpt - no product/price lines matched');
   if (!openaiKey) return empty('no OpenAI key available');
 
   // --- Extraction pass -----------------------------------------------------
@@ -622,7 +622,7 @@ export async function extractAndVerifyPlants(opts: {
     );
   }
 
-  return { plants: verified, report, engines: { extractor: 'gpt-5.5', verifier: 'gpt-5.5' } };
+  return { plants: verified, report, engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' } };
 }
 
 // --- availability inference (informational / no-shop sites) -----------------
@@ -650,7 +650,7 @@ const clampConfidence = (n: unknown): number => {
 
 /* Estimate, from a nursery's website text, how likely it stocks `query`.
  * Used only as a fallback when structured extraction found nothing. Never
- * throws — returns a 0-confidence estimate on empty input or any LLM failure. */
+ * throws - returns a 0-confidence estimate on empty input or any LLM failure. */
 export async function inferAvailabilityLLM(
   siteText: string,
   query: string,
@@ -662,14 +662,14 @@ export async function inferAvailabilityLLM(
     return { confidence: 0, reasoning: 'no reachable site content' };
   }
   const excerpt = siteText.slice(0, 12000); // homepage/about text is plenty
-  const prompt = `You estimate whether a plant nursery (${site}) likely sells a given plant, from its website text (mostly Hebrew). A structured product search already found nothing — the site may have no online shop, or its search failed, so judge from the general text.
+  const prompt = `You estimate whether a plant nursery (${site}) likely sells a given plant, from its website text (mostly Hebrew). A structured product search already found nothing - the site may have no online shop, or its search failed, so judge from the general text.
 The user wants: "${query}" (match English or Hebrew, including translations / related plant types).
 Consider: does the nursery deal in this plant's category (herbs, perennials, houseplants, succulents, trees, flowers)? Is it a general nursery that would plausibly carry a common plant? Does the text explicitly mention it?
 Return ONLY JSON: { "confidence": <0-100>, "reasoning": "<short, one sentence>" }
 Scale: 0 = clearly does not sell this type; 50 = general nursery, could plausibly have it; 85+ = the text strongly implies or names it.
 Website text:\n${excerpt}`;
   try {
-    // 1500: gpt-5.5 spends completion tokens on hidden reasoning first, so a
+    // 1500: gpt-5.6-luna spends completion tokens on hidden reasoning first, so a
     // tight cap (200/500) returns empty content → JSON.parse fails → false
     // "unavailable". 1500 reliably clears reasoning + the tiny JSON output.
     const out = await classify(prompt, openaiKey, 1500);
@@ -744,13 +744,13 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
       }
     });
 
-    // All probes came back empty/failed — try Tavily once on the top candidate.
+    // All probes came back empty/failed - try Tavily once on the top candidate.
     if (best.score <= 0 && opts.tavilyKey) {
       try {
         const md = await tavilyExtract(urls[0], opts.tavilyKey);
         if (md) best = { md, platform, picked: urls[0], score: scoreMarkdown(md, query) };
       } catch {
-        /* keep best (empty) — both providers failed for the probe set */
+        /* keep best (empty) - both providers failed for the probe set */
       }
     }
     return { md: best.md, platform, picked: best.picked };

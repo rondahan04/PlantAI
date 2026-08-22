@@ -5,7 +5,7 @@ import { createPhotoStore, photoExtension, PHOTO_DIR_NAME, type PhotoDeps } from
 /*
  * The failure this module exists to prevent is silent: a saved plant keeps its
  * record and loses its picture, weeks later, on a schedule iOS controls. So the
- * tests are mostly about what happens when the copy does NOT work — a purged
+ * tests are mostly about what happens when the copy does NOT work - a purged
  * source, a throwing copy, a copy that reports success without writing bytes.
  * In every one of those the plant must survive with a usable answer, never a
  * URI pointing at nothing.
@@ -16,7 +16,7 @@ const DIR = `${DOC}${PHOTO_DIR_NAME}/`;
 
 function fakeFs(seed: string[] = []) {
   const files = new Set(seed);
-  // A seeded file implies its directory exists — the real filesystem cannot
+  // A seeded file implies its directory exists - the real filesystem cannot
   // hold a file inside a directory that does not.
   const dirs = new Set<string>(seed.map((f) => f.slice(0, f.lastIndexOf('/') + 1)));
   let copyMode: 'ok' | 'throw' | 'silent' = 'ok';
@@ -194,7 +194,7 @@ test('sweep does nothing when every photo is claimed', () => {
 
 /*
  * A library that failed to load reports zero plants. Sweeping on that would
- * delete every photo the user has — the exact data loss the quarantine in
+ * delete every photo the user has - the exact data loss the quarantine in
  * plantStore was written to avoid. The caller must pass `ok`, and sweep refuses
  * when it is false.
  */

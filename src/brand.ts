@@ -6,8 +6,8 @@
  * `app.json` ships as the iOS/Android app icon, so the badge in the header is
  * literally the icon on the user's home screen.
  *
- * `LOGO_GLYPH` is the Android monochrome layer — the same leaf as alpha on a
- * transparent canvas — reused here because a tintable silhouette is what a
+ * `LOGO_GLYPH` is the Android monochrome layer - the same leaf as alpha on a
+ * transparent canvas - reused here because a tintable silhouette is what a
  * placeholder needs. A full-colour logo behind a photo slot competes with the
  * photo; the glyph recedes at whatever `tintColor` the caller passes. It is
  * drawn with the adaptive-icon safe zone around it, so render it larger than

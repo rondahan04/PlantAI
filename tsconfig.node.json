@@ -3,7 +3,7 @@
   // and *.test.ts wherever it lives.
   //
   // This exists because tsconfig.json covers the app only, which meant the
-  // entire server was never typechecked — a call with the wrong arity shipped
+  // entire server was never typechecked - a call with the wrong arity shipped
   // to production undetected on 2026-08-18. Node 26 runs these .ts files
   // directly, so nothing is emitted; this config only ever reports.
   "compilerOptions": {

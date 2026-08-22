@@ -14,8 +14,8 @@ import type { PlantDiagnosis } from '../types/index.ts';
 
 /*
  * The store is the retention spine: everything a user comes back for lives
- * behind it. These tests are mostly about the two ways it can lose a library —
- * a write that silently doesn't land, and a blob that won't parse — because
+ * behind it. These tests are mostly about the two ways it can lose a library -
+ * a write that silently doesn't land, and a blob that won't parse - because
  * both fail invisibly in production and both look like "you have no plants".
  */
 
@@ -56,7 +56,7 @@ function fakeStorage(seed: Record<string, string> = {}) {
   };
 }
 
-/* Deterministic clock and ids — assertions on saved order need both fixed. */
+/* Deterministic clock and ids - assertions on saved order need both fixed. */
 function fixedOpts(startMs = 1_700_000_000_000) {
   let tick = 0;
   let seq = 0;
@@ -89,7 +89,7 @@ test('an empty store loads as an empty library, not an error', () => {
   assert.deepEqual(r.plants, []);
 });
 
-test('newest plant comes first — a just-saved plant is what the user looks for', () => {
+test('newest plant comes first - a just-saved plant is what the user looks for', () => {
   const s = fakeStorage();
   const store = createPlantStore(s.deps, fixedOpts());
   store.save({ photoUri: 'a', diagnosis });
@@ -106,7 +106,7 @@ test('the persisted blob is versioned from the first write', () => {
   assert.equal(JSON.parse(s.data.get(LIBRARY_KEY)!).version, LIBRARY_VERSION);
 });
 
-test('50 plants all survive — the library is not silently capped', () => {
+test('50 plants all survive - the library is not silently capped', () => {
   const s = fakeStorage();
   const store = createPlantStore(s.deps, fixedOpts());
   for (let i = 0; i < 50; i++) store.save({ photoUri: `p${i}`, diagnosis });
@@ -271,7 +271,7 @@ test('a library written by a NEWER app version is quarantined, not mangled', () 
 
 // ─── The D8 requirement ───────────────────────────────────────────────────────
 
-test('load is synchronous — the adaptive Home reads it before first paint', () => {
+test('load is synchronous - the adaptive Home reads it before first paint', () => {
   // D8 (adaptive Home) shows marketing content on first run and the library
   // afterwards. If the read were async, a returning user would see a frame of
   // marketing copy before their plants appeared.
@@ -290,7 +290,7 @@ test('load is synchronous — the adaptive Home reads it before first paint', ()
 // ─── Migration chain (item 6) ─────────────────────────────────────────────────
 
 /*
- * There are no real migrations yet — v1 is current. A no-op chain cannot be
+ * There are no real migrations yet - v1 is current. A no-op chain cannot be
  * proven to work by running it, so these inject fake steps and assert on the
  * mechanism. The point is that when v2 arrives the runner is already trusted.
  */
@@ -318,7 +318,7 @@ test('steps chain v1 → v2 → v3 in order, not skipping the middle', () => {
   assert.equal(out.version, 3);
 });
 
-test('a blob with no version is treated as v1 — it predates versioning', () => {
+test('a blob with no version is treated as v1 - it predates versioning', () => {
   const steps = { 1: (l: any) => ({ ...l, migrated: true }) };
   const out = runMigrations({ plants: [] } as any, steps, 2);
   assert.equal((out as any).migrated, true);
@@ -365,7 +365,7 @@ test('a throwing migration quarantines rather than leaving half-migrated data', 
 // `markWatered` is the only write a user makes to a plant after saving it, and
 // it is the anchor the whole reminder hangs off. A watering that does not land
 // means the app keeps telling someone their plant is overdue after they watered
-// it — so it goes through the same confirmed persist as everything else here.
+// it - so it goes through the same confirmed persist as everything else here.
 
 test('logging a watering persists and survives a relaunch', () => {
   const s = fakeStorage();
@@ -382,7 +382,7 @@ test('logging a watering persists and survives a relaunch', () => {
   assert.equal(reloaded.plants[0].lastWateredAt, '2026-08-18T09:00:00.000Z');
 });
 
-test('a fresh plant has no watering date — the app must not invent one', () => {
+test('a fresh plant has no watering date - the app must not invent one', () => {
   // Defaulting to savedAt would claim the user watered the plant the day they
   // photographed it, and the entire schedule would rest on that invention.
   const s = fakeStorage();
@@ -513,7 +513,7 @@ test('a plant saved before watering existed still loads', () => {
 // ─── Watering history ────────────────────────────────────────────────────────
 //
 // The log is what the calendar draws. It is append-only from the app's side, so
-// the failure that matters is a lost or duplicated entry — both show up as a
+// the failure that matters is a lost or duplicated entry - both show up as a
 // calendar that quietly disagrees with what the user remembers doing.
 
 test('every watering is appended, newest first', () => {
@@ -536,7 +536,7 @@ test('every watering is appended, newest first', () => {
 
 test('two waterings on the same day count once', () => {
   // The calendar draws one square either way, so a duplicate is invisible
-  // there and surfaces only as a wrong total — the quietest kind of wrong.
+  // there and surfaces only as a wrong total - the quietest kind of wrong.
   const s = fakeStorage();
   const store = createPlantStore(s.deps, fixedOpts());
   const saved = store.save({ photoUri: 'file:///a.jpg', diagnosis });

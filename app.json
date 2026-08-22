@@ -10,6 +10,7 @@
       "backgroundColor": "#F0FDF4"
     },
     "ios": {
+      "bundleIdentifier": "com.rondahan.PlantAI",
       "supportsTablet": true,
       "infoPlist": {
         "CFBundleLocalizations": ["en", "he"],
@@ -20,6 +21,7 @@
       }
     },
     "android": {
+      "package": "com.rondahan.PlantAI",
       "adaptiveIcon": {
         "backgroundColor": "#38D5C1",
         "foregroundImage": "./assets/android-icon-foreground.png",

@@ -53,7 +53,7 @@ export default function App() {
   }, [fontsLoaded, fontError]);
 
   /*
-   * Read once, during the first render, and never again — the same synchronous
+   * Read once, during the first render, and never again - the same synchronous
    * requirement the adaptive Home has. Resolving this in an effect would mount
    * Home and then push Onboarding over it, so a first-time user's very first
    * frame would be a screen they are not meant to see yet.

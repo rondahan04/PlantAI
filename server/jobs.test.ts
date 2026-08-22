@@ -27,7 +27,7 @@ function deferred<T>() {
 
 const tick = () => new Promise<void>((r) => setImmediate(r));
 
-test('start returns immediately with a running job — it does not await the work', async () => {
+test('start returns immediately with a running job - it does not await the work', async () => {
   const store = createJobStore<string[]>(clock().now, ids());
   const d = deferred<string[]>();
 
@@ -109,7 +109,7 @@ test('a recently finished job is reused as a result cache', async () => {
   assert.equal(again.state, 'done');
 });
 
-test('a FAILED job is retried rather than cached — a retry must be able to work', async () => {
+test('a FAILED job is retried rather than cached - a retry must be able to work', async () => {
   const store = createJobStore<string[]>(clock().now, ids());
   let runs = 0;
   const run = () => {

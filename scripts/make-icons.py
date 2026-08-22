@@ -34,7 +34,7 @@ def fit_gradient(img):
     """Least-squares fit colour = a + b*x + c*y over the opaque pixels.
 
     The backgrounds are linear diagonal gradients, so three coefficients per
-    channel reproduce them almost exactly — and unlike sampling a single
+    channel reproduce them almost exactly - and unlike sampling a single
     colour, extending the fit into the transparent corners is seamless.
     """
     arr = np.asarray(img, dtype=np.float64)
@@ -112,7 +112,7 @@ grad_and.save(OUT + 'android-icon-background.png')
 mask = leaf_mask(src_and)
 build_foreground(mask, (255, 255, 255, 255)).save(OUT + 'android-icon-foreground.png')
 # Monochrome (themed icons, Android 13+): the silhouette only. The system
-# recolours it, so the fill colour is irrelevant — the alpha is the icon.
+# recolours it, so the fill colour is irrelevant - the alpha is the icon.
 build_foreground(mask, (0, 0, 0, 255)).save(OUT + 'android-icon-monochrome.png')
 
 # ── Web favicon ──────────────────────────────────────────────────────────────

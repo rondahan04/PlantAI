@@ -129,7 +129,7 @@ test('checkSecret still rejects a wrong secret in enforce mode', () => {
   assert.equal(d.status, 401);
 });
 
-test('readGateConfig defaults to log mode — enforcing is always an explicit act', () => {
+test('readGateConfig defaults to log mode - enforcing is always an explicit act', () => {
   assert.equal(readGateConfig(() => undefined).mode, 'log');
   assert.equal(readGateConfig((k) => (k === 'GATE_MODE' ? 'enforce' : undefined)).mode, 'enforce');
   // Anything that is not exactly "enforce" is log. A typo must fail safe.

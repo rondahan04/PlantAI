@@ -87,14 +87,14 @@ test('identifyPlatform L2: empty static, rendered homepage reveals platform', as
   assert.equal(calls, 2); // tried static then rendered
 });
 
-test('identifyPlatform L3: endpoint fallback — Shopify /products.json', async () => {
+test('identifyPlatform L3: endpoint fallback - Shopify /products.json', async () => {
   const scrape = fakeScrape({
     '/products.json': '{"products":[{"handle":"mint","variants":[]}]}',
   });
   assert.equal(await identifyPlatform('https://x.co.il', 'k', { scrape }), 'shopify');
 });
 
-test('identifyPlatform L3: endpoint fallback — WordPress /wp-json/', async () => {
+test('identifyPlatform L3: endpoint fallback - WordPress /wp-json/', async () => {
   const scrape = fakeScrape({ '/wp-json/': '{"namespace":"wp/v2","routes":{}}' });
   assert.equal(await identifyPlatform('https://x.co.il', 'k', { scrape }), 'woo');
 });

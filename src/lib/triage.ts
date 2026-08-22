@@ -6,11 +6,11 @@ import type { StoredPlant } from '../services/plantStore';
  * `PlantDiagnosis.condition` already carries the five-step scale, so grouping
  * by health costs nothing and matches why someone opens the app: a plant is in
  * trouble. Chronological order was the alternative and was rejected because a
- * critical plant sinks out of view as the library grows — the one record that
+ * critical plant sinks out of view as the library grows - the one record that
  * needs acting on becomes the hardest to find.
  *
  * Three buckets, not five. Five sections for a library of four plants is more
- * chrome than content, and the actionable split is really binary — needs help
+ * chrome than content, and the actionable split is really binary - needs help
  * now, or does not.
  */
 
@@ -36,7 +36,7 @@ const TITLES: Record<TriageKey, string> = {
   healthy: 'Healthy',
 };
 
-/* Severity first, then newest — the order within a bucket still matters. */
+/* Severity first, then newest - the order within a bucket still matters. */
 const SEVERITY: Record<string, number> = {
   critical: 0,
   severe: 1,

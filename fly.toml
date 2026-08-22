@@ -13,7 +13,7 @@
 # own API. See server/gate.ts.
 
 app = "plantai-api"
-primary_region = "cdg"   # Paris — closest Fly region to Israel with full capacity
+primary_region = "cdg"   # Paris - closest Fly region to Israel with full capacity
 
 [build]
   dockerfile = "Dockerfile"
@@ -41,7 +41,7 @@ primary_region = "cdg"   # Paris — closest Fly region to Israel with full capa
   min_machines_running = 1
 
   # One machine, and a long scrape holds a slot for minutes. Keep the ceiling
-  # low so the daily cap — not the process — is what limits spend.
+  # low so the daily cap - not the process - is what limits spend.
   [http_service.concurrency]
     type = "requests"
     soft_limit = 20

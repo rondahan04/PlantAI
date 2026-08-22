@@ -4,8 +4,8 @@ import { createPhotoStore, type PhotoDeps } from './photoStore';
 /*
  * The one place `expo-file-system` is bound to the photo store, mirroring
  * `plantLibrary.ts`. Keeping it out of `photoStore.ts` is what allows the
- * interesting cases — a purged source, a full disk, a copy that writes nothing
- * — to be tested by `node --test` rather than hoped for on a device.
+ * interesting cases - a purged source, a full disk, a copy that writes nothing
+ * - to be tested by `node --test` rather than hoped for on a device.
  *
  * expo-file-system 56 (`File`/`Directory`, not the deprecated functional API):
  * `copy` is async, everything else here is synchronous.
@@ -44,7 +44,7 @@ const deviceFs: PhotoDeps = {
       const file = new File(uri);
       if (file.exists) file.delete();
     } catch {
-      /* best effort — a file we cannot delete is a leak, not a user-facing error */
+      /* best effort - a file we cannot delete is a leak, not a user-facing error */
     }
   },
 };

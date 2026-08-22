@@ -7,7 +7,7 @@ import { I18nManager } from 'react-native';
  * the app has to survive being run in a right-to-left locale even while its own
  * copy is still English.
  *
- * Yoga mirrors the layout for us — `flexDirection: 'row'` reverses, and any
+ * Yoga mirrors the layout for us - `flexDirection: 'row'` reverses, and any
  * `start`/`end` edge follows the writing direction. What it does NOT mirror is
  * `left`/`right`, which is why those were replaced across the screens, and it
  * cannot mirror an icon: a back chevron pointing left in a mirrored layout is
@@ -19,7 +19,7 @@ export const isRTL = I18nManager.isRTL;
 
 /*
  * Apply to chevrons and arrows that mean "back" / "forward" / "previous" /
- * "next" — never to icons whose shape is not directional (a leaf, a droplet), and
+ * "next" - never to icons whose shape is not directional (a leaf, a droplet), and
  * never to text, which the platform handles.
  *
  * An empty array rather than `undefined` so it composes inside a style array

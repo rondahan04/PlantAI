@@ -102,7 +102,7 @@ const hostOf = (u: string): string => {
 
 async function handleScrape(query: string, urls: string[] = readUrls()): Promise<Row[]> {
   const t0 = Date.now();
-  console.log(`\n🔍 SEARCH "${query}" — ${urls.length} sites @ ${new Date().toISOString()}`);
+  console.log(`\n🔍 SEARCH "${query}" - ${urls.length} sites @ ${new Date().toISOString()}`);
   const results = await Promise.all(
     urls.map(async (url): Promise<Row[]> => {
       const site = new URL(url).hostname.replace(/^www\./, '');
@@ -140,19 +140,19 @@ async function handleScrape(query: string, urls: string[] = readUrls()): Promise
           /* both providers failed → no signal; inferAvailabilityLLM('') → ~0% unreachable */
         }
         const est = await inferAvailabilityLLM(homeMd, query, site, OPENAI_KEY!);
-        console.log(`   [${site}] ~${est.confidence}% likely — ${est.reasoning}`);
+        console.log(`   [${site}] ~${est.confidence}% likely - ${est.reasoning}`);
         return [
           {
             site,
             name: `${query} (estimated)`,
-            price: '—',
+            price: '-',
             availability: `~${est.confidence}% · ${est.reasoning}`,
             estimate: true,
           },
         ];
       } catch (err: any) {
         console.log(`   [${site}] ❌ ${err.message} (${Date.now() - ts}ms)`);
-        return [{ site, name: `ERROR: ${err.message}`, price: '—', availability: '—', error: true }];
+        return [{ site, name: `ERROR: ${err.message}`, price: '-', availability: '-', error: true }];
       }
     })
   );
@@ -164,7 +164,7 @@ async function handleScrape(query: string, urls: string[] = readUrls()): Promise
     seen.add(k);
     return true;
   });
-  console.log(`✔ DONE "${query}" — ${flat.length} rows in ${Date.now() - t0}ms\n`);
+  console.log(`✔ DONE "${query}" - ${flat.length} rows in ${Date.now() - t0}ms\n`);
   return flat;
 }
 
@@ -244,14 +244,14 @@ f.addEventListener('submit', async (e) => {
       const ship = rows.filter((r) => r.shipsToHome).length;
       const local = rows.length - ship;
       status.textContent = ship
-        ? local + ' local result(s), no exact local match — ' + ship + ' ship-to-home option(s) below.'
+        ? local + ' local result(s), no exact local match - ' + ship + ' ship-to-home option(s) below.'
         : rows.length + ' item(s) found.';
       tbl.hidden = false;
       let shipDivider = false;
       for (const r of rows) {
         if (r.shipsToHome && !shipDivider) {
           const dr = document.createElement('tr');
-          dr.innerHTML = '<td colspan="4" class="shipbar">🚚 No local match — these nurseries ship to your home</td>';
+          dr.innerHTML = '<td colspan="4" class="shipbar">🚚 No local match - these nurseries ship to your home</td>';
           tbody.appendChild(dr);
           shipDivider = true;
         }
@@ -299,7 +299,7 @@ const server = http.createServer(async (req, res) => {
         if (!GOOGLE_KEY) throw new Error('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY not set');
         const [lat, lng] = loc.split(',').map((n) => Number(n.trim()));
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-          throw new Error(`bad loc "${loc}" — expected "lat,lng"`);
+          throw new Error(`bad loc "${loc}" - expected "lat,lng"`);
         }
         const found = await discoverNurseries(lat, lng, GOOGLE_KEY, { radiusM: radius });
         console.log(
@@ -320,7 +320,7 @@ const server = http.createServer(async (req, res) => {
         if (!hasLocalMatch) {
           const localHosts = new Set((urls ?? []).map(hostOf));
           const natUrls = NATIONAL_NURSERIES.filter((nu) => !localHosts.has(hostOf(nu)));
-          console.log(`🚚 No local match for "${query}" — national fallback: ${natUrls.length} sites`);
+          console.log(`🚚 No local match for "${query}" - national fallback: ${natUrls.length} sites`);
           const natRows = (await handleScrape(query, natUrls)).map((r) => ({ ...r, shipsToHome: true }));
           rows = rows.concat(natRows);
         }

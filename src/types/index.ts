@@ -14,12 +14,18 @@ export interface PlantDiagnosis {
   confidence: number;
   description: string;
   /*
-   * Ongoing species care — distinct from `treatments`, which fix what is wrong
+   * Ongoing species care - distinct from `treatments`, which fix what is wrong
    * today. Optional because it is advisory server-side (a model that omits it
    * must not fail the diagnosis) and because every plant saved before this
    * field existed has none. Absent means the section is not rendered.
    */
   carePlan?: CarePlan;
+  /*
+   * Cultivar/variety, e.g. "Thai Constellation" - present only when the model
+   * could actually tell from the photo. Absent means generic species, not a
+   * failure; never render an empty label for it.
+   */
+  variety?: string;
 }
 
 export interface CarePlan {
@@ -52,7 +58,7 @@ export interface Nursery {
   distanceKm: number; // Infinity when coordinates are unknown (fallback list)
   hasPlant: boolean; // a real in-stock product was scraped
   inStockKnown: boolean; // exact listing (vs an LLM estimate)
-  plantPrice: string; // '₪XX' or '—'
+  plantPrice: string; // '₪XX' or '-'
   availabilityNote?: string; // estimate text when inStockKnown is false
   shipsToHome: boolean; // national ship-to-home option (vs local store)
   rating?: number;

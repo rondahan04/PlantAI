@@ -1,5 +1,5 @@
 /**
- * PlantAI design system — Organic Biophilic.
+ * PlantAI design system - Organic Biophilic.
  *
  * Single source of design tokens for the whole app. Style: nature green +
  * sun accent, rounded organic corners, calm. Light + dark are designed
@@ -11,7 +11,7 @@
  *   <View style={{ backgroundColor: t.color.background, padding: t.space.lg }} />
  *
  * Spacing is an 8pt rhythm (4 = half-step). Radius/typography/shadow are
- * scales — never hardcode raw values in screens.
+ * scales - never hardcode raw values in screens.
  */
 import { useColorScheme } from 'react-native';
 
@@ -23,7 +23,7 @@ const light = {
   onPrimary: '#FFFFFF',
   primaryWash: '#E7F6EC', // tonal primary surface (active toggles, price tags)
   secondary: '#059669',
-  accent: '#D97706', // sun — reserve for the single primary CTA / highlights
+  accent: '#D97706', // sun - reserve for the single primary CTA / highlights
   onAccent: '#FFFFFF',
 
   background: '#F0FDF4', // soft green-tinted canvas
@@ -44,7 +44,7 @@ const light = {
   onDanger: '#FFFFFF',
 
   /*
-   * Water — the ONE blue in a green system, and the exception is earned: a
+   * Water - the ONE blue in a green system, and the exception is earned: a
    * watering action reads as water, and running it in the nature green would
    * make it the second primary CTA on a screen that already has one. Sky-700
    * rather than a brighter blue so white text clears 4.5:1 on the filled
@@ -55,7 +55,7 @@ const light = {
   onWater: '#FFFFFF',
   waterWash: '#E0F2FE',
 
-  // Plant condition scale — badge/dot/bar accents (>=3:1 on light surfaces).
+  // Plant condition scale - badge/dot/bar accents (>=3:1 on light surfaces).
   conditionHealthy: '#15803D',
   conditionMild: '#0F766E',
   conditionModerate: '#B45309',
@@ -69,7 +69,7 @@ const dark = {
   primary: '#34D399', // lighter tonal variant for dark surfaces
   primaryPressed: '#2BBA86',
   onPrimary: '#04231A',
-  primaryWash: '#16382A', // deep green tint — primary text reads on it
+  primaryWash: '#16382A', // deep green tint - primary text reads on it
   secondary: '#6EE7B7',
   accent: '#FBBF24',
   onAccent: '#231603',
@@ -91,13 +91,13 @@ const dark = {
   danger: '#F87171',
   onDanger: '#1A0606',
 
-  // Water — lighter tonal variant, dark text on the fill (see the light note).
+  // Water - lighter tonal variant, dark text on the fill (see the light note).
   water: '#38BDF8',
   waterPressed: '#22A3DC',
   onWater: '#04212E',
   waterWash: '#0F2E3E',
 
-  // Plant condition scale — lighter tonal variants for dark surfaces.
+  // Plant condition scale - lighter tonal variants for dark surfaces.
   conditionHealthy: '#34D399',
   conditionMild: '#2DD4BF',
   conditionModerate: '#FBBF24',
@@ -130,10 +130,10 @@ export const radius = {
   pill: 999,
 } as const;
 
-/* Type scale — Lora (display/headings) + Raleway (text). fontFamily names must
+/* Type scale - Lora (display/headings) + Raleway (text). fontFamily names must
  * match the keys registered in useFonts() in App.tsx. Note: with static custom
  * fonts iOS binds weight to the family, so an inline fontWeight override does
- * not change weight — switch fontFamily for a heavier/lighter cut. */
+ * not change weight - switch fontFamily for a heavier/lighter cut. */
 export const type = {
   display: { fontFamily: 'Lora_700Bold', fontSize: 32, lineHeight: 38, fontWeight: '700' as const, letterSpacing: -0.8 },
   title: { fontFamily: 'Lora_700Bold', fontSize: 22, lineHeight: 28, fontWeight: '700' as const, letterSpacing: -0.4 },
@@ -144,7 +144,7 @@ export const type = {
   caption: { fontFamily: 'Raleway_500Medium', fontSize: 12, lineHeight: 16, fontWeight: '500' as const },
 } as const;
 
-/* Elevation scale — consistent shadow tokens for cards/sheets/CTAs. */
+/* Elevation scale - consistent shadow tokens for cards/sheets/CTAs. */
 export const elevation = {
   none: {},
   card: {

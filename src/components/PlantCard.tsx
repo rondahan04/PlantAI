@@ -49,7 +49,7 @@ export default function PlantCard({
 
   /*
    * Thirst is the one thing on this card the user can act on TODAY, so it gets
-   * its own line rather than being folded into the meta row — condition is why
+   * its own line rather than being folded into the meta row - condition is why
    * the plant is in the library, watering is why they opened the app now.
    */
   const water = wateringState(plant.diagnosis.carePlan, plant.lastWateredAt, Date.now());
@@ -69,10 +69,10 @@ export default function PlantCard({
     >
       {/*
         The photo may be gone. Item 9 copies it into the document directory on
-        save, but a plant saved before that shipped — or one whose copy was
-        interrupted — still points at the camera cache, which iOS purges on its
+        save, but a plant saved before that shipped - or one whose copy was
+        interrupted - still points at the camera cache, which iOS purges on its
         own schedule. Image renders nothing on a dead URI, so the app mark sits
-        underneath rather than leaving a blank square that reads as a broken card. Tinted muted on purpose — it is a
+        underneath rather than leaving a blank square that reads as a broken card. Tinted muted on purpose - it is a
         placeholder, and a full-colour logo in every row would compete with the
         condition dot that the card exists to surface.
       */}

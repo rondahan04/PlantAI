@@ -47,7 +47,7 @@ export default function HomeScreen({ navigation }: Props) {
   /*
    * The name from onboarding, read synchronously for the same reason the
    * library is: the header would otherwise render "Plant Doctor" and then swap
-   * to the greeting a frame later. Read once — it cannot change while the app
+   * to the greeting a frame later. Read once - it cannot change while the app
    * is running, since onboarding only precedes Home.
    */
   const [profileName] = useState(() => onboarding.load()?.name);
@@ -63,7 +63,7 @@ export default function HomeScreen({ navigation }: Props) {
    * Photo housekeeping (TODOS item 9), once per launch and off the render path.
    *
    * Two jobs. First, RETRY: a plant whose `photoUri` still points at the cache
-   * directory had its copy interrupted — by a kill, a full disk, a removal that
+   * directory had its copy interrupted - by a kill, a full disk, a removal that
    * raced it. The cache file often survives long enough for a second attempt to
    * work, and the alternative is a photo that is lost for good.
    *
@@ -99,7 +99,7 @@ export default function HomeScreen({ navigation }: Props) {
 
       if (repaired) setLibrary(current);
     })();
-    // Launch-time housekeeping, not a reaction to the library changing — the
+    // Launch-time housekeeping, not a reaction to the library changing - the
     // focus effect above re-reads it constantly and this must not run each time.
   }, []);
 
@@ -116,7 +116,7 @@ export default function HomeScreen({ navigation }: Props) {
       Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
     ]).start();
 
-    // Ambient CTA pulse — respect reduced-motion (a11y: reduced-motion).
+    // Ambient CTA pulse - respect reduced-motion (a11y: reduced-motion).
     let loop: Animated.CompositeAnimation | undefined;
     AccessibilityInfo.isReduceMotionEnabled().then((reduced) => {
       if (reduced) return;
@@ -134,7 +134,7 @@ export default function HomeScreen({ navigation }: Props) {
   /*
    * Returning-user layout. The design review's "do not touch Home" rule was
    * about not degrading the first-run screen, which is why that branch below
-   * is untouched — this is a second layout holding the same tokens on purpose
+   * is untouched - this is a second layout holding the same tokens on purpose
    * rather than by inheritance.
    */
   if (hasPlants || library.ok === false) {
@@ -159,7 +159,7 @@ export default function HomeScreen({ navigation }: Props) {
               </View>
 
               {/*
-                A damaged library must never be reported as an empty one —
+                A damaged library must never be reported as an empty one -
                 "you have no plants" is indistinguishable from a deletion the
                 user never performed. The store preserved the bytes, so the
                 copy says recoverable, not lost.
@@ -199,7 +199,7 @@ export default function HomeScreen({ navigation }: Props) {
               style={({ pressed }) => [s.ctaBtn, s.libCta, pressed && s.ctaBtnPressed]}
               onPress={() => navigation.navigate('Camera')}
               accessibilityRole="button"
-              accessibilityLabel="Diagnose another plant — open the camera"
+              accessibilityLabel="Diagnose another plant - open the camera"
             >
               <Ionicons name="camera" size={22} color={t.color.onPrimary} />
               <Text style={s.ctaText}>Diagnose Another Plant</Text>
@@ -239,7 +239,7 @@ export default function HomeScreen({ navigation }: Props) {
             style={({ pressed }) => [s.ctaBtn, pressed && s.ctaBtnPressed]}
             onPress={() => navigation.navigate('Camera')}
             accessibilityRole="button"
-            accessibilityLabel="Diagnose my plant — open the camera"
+            accessibilityLabel="Diagnose my plant - open the camera"
           >
             <Ionicons name="camera" size={22} color={t.color.onPrimary} />
             <Text style={s.ctaText}>Diagnose My Plant</Text>
@@ -281,7 +281,7 @@ function makeStyles(t: Theme) {
     // ── Returning-user library layout ──────────────────────────────────────
     libScroll: { paddingBottom: t.space['2xl'], paddingHorizontal: t.space.xl },
     libTitle: { ...t.type.title, color: t.color.foreground, marginTop: t.space.lg, marginBottom: t.space.sm },
-    // Sections carry the grouping, so headers stay quiet — the condition
+    // Sections carry the grouping, so headers stay quiet - the condition
     // colour on each card is what should draw the eye.
     sectionHeader: {
       ...t.type.caption,

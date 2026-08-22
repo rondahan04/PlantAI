@@ -5,7 +5,7 @@ import type { PlantDiagnosis } from '../types';
  *
  * This is the retention spine. Diagnosis acquires a user and the marketplace
  * transacts, but the library is the only reason anyone opens the app a second
- * time — so the bar here is not "usually works", it is "never loses a plant
+ * time - so the bar here is not "usually works", it is "never loses a plant
  * without saying so".
  *
  * Two failure modes drive the whole design, because both are invisible in
@@ -16,7 +16,7 @@ import type { PlantDiagnosis } from '../types';
  *      read back and compared before it is reported as saved.
  *   2. A blob that will not parse. The library is quarantined rather than
  *      overwritten, and load() reports `corrupt` rather than returning an empty
- *      list — "you have no plants" is indistinguishable from a deletion the
+ *      list - "you have no plants" is indistinguishable from a deletion the
  *      user never performed.
  *
  * Everything is SYNCHRONOUS on purpose. D8 chose an adaptive Home that shows
@@ -41,8 +41,8 @@ export interface StoredPlant {
   savedAt: string;
   /*
    * Normally a file in the app's document directory, copied there on save by
-   * `photoStore` (item 9). It can still be a camera cache URI — a plant saved
-   * before that shipped, or one whose copy was interrupted — and iOS purges
+   * `photoStore` (item 9). It can still be a camera cache URI - a plant saved
+   * before that shipped, or one whose copy was interrupted - and iOS purges
    * that directory on its own schedule, so a reader must tolerate a dead URI.
    * Home repairs what it can on launch.
    */
@@ -50,7 +50,7 @@ export interface StoredPlant {
   diagnosis: PlantDiagnosis;
   /*
    * ISO-8601, set when the user logs a watering. Absent means the schedule has
-   * not been started — deliberately NOT defaulted to `savedAt`, because "you
+   * not been started - deliberately NOT defaulted to `savedAt`, because "you
    * watered this plant the day you photographed it" is a fact the app would be
    * inventing, and the whole reminder would then be built on it.
    */
@@ -62,7 +62,7 @@ export interface StoredPlant {
    * present, or intact. The log is history for the calendar; the field is the
    * one fact the reminder is built on.
    *
-   * Absent on plants watered before the log existed — read it through
+   * Absent on plants watered before the log existed - read it through
    * `wateringHistory()`, which folds `lastWateredAt` back in.
    */
   wateringLog?: string[];
@@ -83,7 +83,7 @@ interface Library {
 
 /*
  * The seam that keeps this module testable without a device, mirroring
- * `PipelineDeps` in the scraper. Sync by requirement, not by convenience — see
+ * `PipelineDeps` in the scraper. Sync by requirement, not by convenience - see
  * the note on D8 above.
  */
 export interface StorageDeps {
@@ -141,7 +141,7 @@ function sameDay(a: string, b: string): boolean {
  * Every watering this plant has, newest first.
  *
  * Folds `lastWateredAt` back in because plants watered before the log existed
- * hold that field alone — without this they would open a calendar with nothing
+ * hold that field alone - without this they would open a calendar with nothing
  * on it, which reads as data loss rather than as a feature that arrived late.
  * Junk entries are dropped instead of reaching the calendar as `Invalid Date`.
  */
@@ -167,7 +167,7 @@ function isTreatmentish(v: unknown): boolean {
 }
 
 /*
- * Validate a single stored record. Deliberately stricter than "it parsed" — a
+ * Validate a single stored record. Deliberately stricter than "it parsed" - a
  * plant missing its diagnosis renders a card with no condition, no issues and
  * no treatments, which looks like a bug in the diagnosis rather than damaged
  * storage.
@@ -198,14 +198,14 @@ export type Migration = (library: any) => any;
 export type Migrations = Record<number, Migration>;
 
 /*
- * The real migration table. Empty today because v1 is current — the chain
+ * The real migration table. Empty today because v1 is current - the chain
  * exists before it is needed on purpose: the first blob written without a
  * migration path is a permanent problem, and by the time v2 is required there
  * is live user data that cannot be re-created.
  *
  * Adding v2 is two edits in one commit: `MIGRATIONS[1] = fn` (keyed by the
  * version it upgrades FROM) and `LIBRARY_VERSION = 2`. They must move together
- * — a bump without a step makes load() throw, and a step without a bump never
+ * - a bump without a step makes load() throw, and a step without a bump never
  * runs.
  */
 export const MIGRATIONS: Migrations = {};
@@ -216,7 +216,7 @@ export const MIGRATIONS: Migrations = {};
  * Deliberately steps rather than jumping: a v1 blob on a v4 app must pass
  * through every intermediate shape, because each step is only written to
  * understand the one immediately before it. A missing step throws instead of
- * skipping — handing later code a shape no migration ever produced is worse
+ * skipping - handing later code a shape no migration ever produced is worse
  * than refusing to load, and the caller quarantines on throw.
  */
 export function runMigrations(library: any, steps: Migrations, target: number): any {
@@ -246,7 +246,7 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
    * Move the unreadable value aside instead of deleting it. The FIRST
    * quarantine wins: the earliest corrupt blob is the one closest to the user's
    * real data, so later garbage must not overwrite the better recovery
-   * candidate. Failure to quarantine is not fatal — the read already failed and
+   * candidate. Failure to quarantine is not fatal - the read already failed and
    * the user is better served by a working app than by a second error.
    */
   function quarantine(raw: string): void {
@@ -365,7 +365,7 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
    *
    * Narrow by design: the two fields the watering schedule owns, plus
    * `photoUri` once item 9's copy into the document directory finishes. A
-   * general `update(id, patch)` would let a caller overwrite a diagnosis — the
+   * general `update(id, patch)` would let a caller overwrite a diagnosis - the
    * one thing in a stored plant that came from a paid call and cannot be
    * re-derived.
    */
@@ -381,7 +381,7 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
     if (!target) return { ok: false, reason: 'not_found' };
 
     /*
-     * `undefined` in the patch CLEARS the field rather than being skipped —
+     * `undefined` in the patch CLEARS the field rather than being skipped -
      * clearing `reminderId` after cancelling a notification is the common case,
      * and a patch that silently ignored it would leave a dangling handle.
      */
@@ -391,7 +391,7 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
     }
     /*
      * `photoUri` is required, so unlike the optional fields above it cannot be
-     * cleared — spreading an explicit `undefined` over it would write a record
+     * cleared - spreading an explicit `undefined` over it would write a record
      * that fails `isStoredPlant` and vanishes from the library on the next
      * load. A patch that omits a photo keeps the one already there.
      */
@@ -406,7 +406,7 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
    * Log a watering. Clears the reminder handle along with it: the notification
    * that handle points at was scheduled for a due date this watering has just
    * moved, so keeping it would fire a reminder for a plant already watered.
-   * Scheduling the replacement is the caller's job — it needs the OS.
+   * Scheduling the replacement is the caller's job - it needs the OS.
    */
   function markWatered(id: string, at: number = now()): UpdateResult {
     const current = load().plants;
@@ -418,7 +418,7 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
     /*
      * A double tap must not become two waterings on the same day. The calendar
      * would show one dot either way, so a duplicate is invisible there and only
-     * shows up as a wrong count — the quietest kind of wrong.
+     * shows up as a wrong count - the quietest kind of wrong.
      */
     const log = history[0] && sameDay(history[0], stamp) ? history.slice(1) : history;
 

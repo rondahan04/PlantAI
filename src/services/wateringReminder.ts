@@ -6,7 +6,7 @@ import * as Notifications from 'expo-notifications';
  * The in-app schedule in `lib/watering.ts` is the source of truth; this is a
  * nudge on top of it. That ordering is the whole design: the user may decline
  * the permission prompt, the OS may drop a scheduled notification, and Expo Go
- * limits what can be scheduled at all — in every one of those cases the plant
+ * limits what can be scheduled at all - in every one of those cases the plant
  * detail screen still says "3 days overdue" when they open it. Nothing here is
  * allowed to fail loudly, because none of it is load-bearing.
  *
@@ -31,7 +31,7 @@ Notifications.setNotificationHandler({
  * Ask once, and only when the user has actually opted in by logging a watering.
  *
  * `getPermissionsAsync` first so a previous "no" is not re-prompted on every
- * tap — iOS only ever shows the system dialog once anyway, and re-asking a user
+ * tap - iOS only ever shows the system dialog once anyway, and re-asking a user
  * who declined just burns a call and returns the same answer.
  */
 export async function ensureNotificationPermission(): Promise<boolean> {
@@ -51,7 +51,7 @@ export async function ensureNotificationPermission(): Promise<boolean> {
 
 /*
  * Schedule one reminder for a due date. Returns the OS identifier to store, or
- * null if nothing was scheduled — no permission, a past due date, or a runtime
+ * null if nothing was scheduled - no permission, a past due date, or a runtime
  * that cannot schedule. Null is a normal outcome, not an error.
  */
 export async function scheduleWateringReminder(args: {
@@ -72,7 +72,7 @@ export async function scheduleWateringReminder(args: {
         title: `Time to water ${args.plantName}`,
         // The care plan's own instruction, not a command: the interval is an
         // estimate and the soil is the actual test.
-        body: 'Check the soil — if the top is dry, give it a drink.',
+        body: 'Check the soil - if the top is dry, give it a drink.',
         data: { kind: 'watering' },
       },
       trigger: {

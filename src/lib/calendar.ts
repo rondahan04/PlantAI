@@ -5,7 +5,7 @@
  * reason this is its own module with its own tests: a watering is stored as an
  * instant (ISO-8601, UTC) but read as a DAY, and the two disagree for anyone
  * east or west of Greenwich. Watering a plant at 2am in Tel Aviv is 23:00 the
- * previous day in UTC — comparing the raw strings would light up the wrong
+ * previous day in UTC - comparing the raw strings would light up the wrong
  * square, every time, for every user in the country this app was built in.
  * Everything below therefore goes through `new Date(...)` accessors, which are
  * local, and never through `toISOString().slice(0, 10)`, which is not.

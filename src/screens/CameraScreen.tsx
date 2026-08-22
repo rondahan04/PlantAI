@@ -31,7 +31,7 @@ type IconName = keyof typeof Ionicons.glyphMap;
 
 /*
  * What the user is shown when something fails. `retryUri` is set only when
- * retrying could plausibly work — offering "try again" for a build with no API
+ * retrying could plausibly work - offering "try again" for a build with no API
  * keys would be a lie.
  */
 interface Failure {
@@ -72,7 +72,7 @@ function describeFailure(err: unknown, uri: string): Failure {
   return {
     icon: 'cloud-offline-outline',
     title: "We couldn't finish the diagnosis",
-    body: 'The plant service did not answer. Your photo is fine — this one is on us.',
+    body: 'The plant service did not answer. Your photo is fine - this one is on us.',
     retryUri: uri,
   };
 }
@@ -89,7 +89,7 @@ export default function CameraScreen({ navigation }: Props) {
 
   /*
    * Failures render as an in-screen StatusView, never an OS alert and never an
-   * exception string — DiagnosisServiceError logs its provider detail and hands
+   * exception string - DiagnosisServiceError logs its provider detail and hands
    * this layer only a stable code. There is no fabricated fallback: if we cannot
    * diagnose the plant we say so (TODOS A5, E9).
    *
@@ -246,7 +246,7 @@ export default function CameraScreen({ navigation }: Props) {
       <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} />
 
       <SafeAreaView style={s.overlay}>
-        {/* Top bar — dark pills over the live camera feed (correct for camera UI) */}
+        {/* Top bar - dark pills over the live camera feed (correct for camera UI) */}
         <View style={s.topBar}>
           <Pressable style={s.iconPill} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Close camera">
             <Ionicons name="close" size={24} color="#fff" />
@@ -368,7 +368,7 @@ function makeStyles(t: Theme) {
       marginBottom: t.space.xl,
     },
     // The logo carries its own ground, so this is a clipping frame with no fill
-    // — same treatment as the Home header badge.
+    // - same treatment as the Home header badge.
     analyzeLogo: {
       width: 72,
       height: 72,

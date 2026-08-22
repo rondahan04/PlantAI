@@ -2,7 +2,7 @@
  * Species-identification confidence.
  *
  * `PlantDiagnosis.confidence` is PlantNet's score for the SPECIES MATCH. It says
- * nothing about how sick the plant is — those are two unrelated numbers, and the
+ * nothing about how sick the plant is - those are two unrelated numbers, and the
  * UI used to paint the confidence bar with the *condition* color, which read as
  * "48% severity" rather than "48% sure what this is".
  *

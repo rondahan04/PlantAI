@@ -183,12 +183,12 @@
 
 ### Additional Forbidden Patterns
 
-- ❌ **Emojis as icons** — Use SVG icons (Heroicons, Lucide, Simple Icons)
-- ❌ **Missing cursor:pointer** — All clickable elements must have cursor:pointer
-- ❌ **Layout-shifting hovers** — Avoid scale transforms that shift layout
-- ❌ **Low contrast text** — Maintain 4.5:1 minimum contrast ratio
-- ❌ **Instant state changes** — Always use transitions (150-300ms)
-- ❌ **Invisible focus states** — Focus states must be visible for a11y
+- ❌ **Emojis as icons** - Use SVG icons (Heroicons, Lucide, Simple Icons)
+- ❌ **Missing cursor:pointer** - All clickable elements must have cursor:pointer
+- ❌ **Layout-shifting hovers** - Avoid scale transforms that shift layout
+- ❌ **Low contrast text** - Maintain 4.5:1 minimum contrast ratio
+- ❌ **Instant state changes** - Always use transitions (150-300ms)
+- ❌ **Invisible focus states** - Focus states must be visible for a11y
 
 ---
 

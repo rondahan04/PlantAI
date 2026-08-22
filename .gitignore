@@ -34,7 +34,7 @@ yarn-error.*
 # Claude Code project config (local only)
 .claude/
 
-# CodeGraph index — rebuilt from source, machine-local
+# CodeGraph index - rebuilt from source, machine-local
 .codegraph/
 
 # Screen recordings and demo captures. "PlantAI POC.mov" is 138 MB; GitHub
@@ -43,7 +43,7 @@ yarn-error.*
 *.mov
 *.mp4
 
-# local env files. Ignore EVERY .env variant and allow the example back in —
+# local env files. Ignore EVERY .env variant and allow the example back in -
 # `.env*.local` plus a bare `.env` left `.env.production` and `.env.staging`
 # tracked, which are the two most likely to hold live keys.
 .env*
@@ -61,7 +61,7 @@ yarn-error.*
 coverage/
 .nyc_output/
 
-# archives — the assignment was submitted as a zip containing a live .env, and
+# archives - the assignment was submitted as a zip containing a live .env, and
 # nothing in this repo should ever be a build artifact you committed by accident
 *.zip
 *.tar
@@ -72,7 +72,7 @@ coverage/
 /ios
 /android
 
-# caveman-compress backups — TODOS.md is the tracked file; these two are the
+# caveman-compress backups - TODOS.md is the tracked file; these two are the
 # human-readable original and its English rendering, regenerated on demand
 TODOS.original.md
 TODOS.english.md

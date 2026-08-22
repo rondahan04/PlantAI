@@ -23,7 +23,7 @@ import { plantLibrary } from '../services/plantLibrary';
 import { plantPhotos } from '../services/photos';
 import { identityConfidence } from '../lib/confidence';
 
-// Tel Aviv center — used as fallback when location permission is denied
+// Tel Aviv center - used as fallback when location permission is denied
 const FALLBACK_LAT = 32.1624;
 const FALLBACK_LNG = 34.8443;
 
@@ -79,7 +79,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
 
   // Resolve the user's location and PREFETCH the nursery scrape as soon as the
   // diagnosis is shown, so the (30-60s) scrape is already in flight by the time
-  // the user taps "Find" — the nurseries screen then loads with minimal wait.
+  // the user taps "Find" - the nurseries screen then loads with minimal wait.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -168,7 +168,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
      * write and deliberately not awaited.
      *
      * `imageUri` points into the cache directory, which iOS empties whenever it
-     * wants the space — so the record would outlive its picture. The copy is
+     * wants the space - so the record would outlive its picture. The copy is
      * async in expo-file-system 56, and putting an await in front of the save
      * would trade a guaranteed record for a nicer photo: killed mid-copy, the
      * plant itself would be gone. This way the worst case is a plant whose
@@ -184,7 +184,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
     if (!savedId) return;
     const result = plantLibrary.remove(savedId);
     if (!result.ok) return;
-    // Only after the record is gone — a failed removal must not cost the photo
+    // Only after the record is gone - a failed removal must not cost the photo
     // of a plant that is still in the library.
     plantPhotos.discard(savedId);
     setSaved(false);
@@ -245,6 +245,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
           >
             {diagnosis.plantName}
           </Text>
+          {!!diagnosis.variety && <Text style={s.variety}>{diagnosis.variety}</Text>}
           <View style={s.confidenceRow}>
             <View style={s.confidenceBar}>
               <View
@@ -258,7 +259,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
           </View>
         </Animated.View>
 
-        {/* Uncertainty caveat — a card, not a color, so it cannot be scanned past
+        {/* Uncertainty caveat - a card, not a color, so it cannot be scanned past
             and does not depend on color vision. */}
         {identity.needsCaveat && (
           <Animated.View style={[s.caveatCard, { opacity: fadeAnim }]}>
@@ -422,6 +423,7 @@ function makeStyles(t: Theme) {
     plantInfo: { paddingTop: t.space.lg, paddingBottom: t.space.sm },
     plantName: { ...t.type.title, fontSize: 26, lineHeight: 32, color: t.color.foreground, marginBottom: t.space.sm, writingDirection: 'auto' },
     namePrefix: { ...t.type.label, color: t.color.textMuted, marginBottom: 2 },
+    variety: { ...t.type.body, color: t.color.textSecondary, marginTop: -t.space.sm / 2, marginBottom: t.space.sm, writingDirection: 'auto' },
     caveatCard: {
       backgroundColor: t.color.warningWash,
       borderRadius: t.radius.lg,

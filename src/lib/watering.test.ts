@@ -6,7 +6,7 @@ import type { CarePlan } from '../types/index.ts';
 /*
  * The schedule is the one part of the care plan the app makes a claim about
  * rather than quoting. "3 days overdue" is the app's own sentence, and a wrong
- * one tells the user their plant is fine on the day it dries out — so the
+ * one tells the user their plant is fine on the day it dries out - so the
  * boundaries below (the hour it becomes due, the hour it becomes late) are
  * pinned rather than left to whatever the arithmetic happens to do.
  */
@@ -25,7 +25,7 @@ const range: CarePlan = {
 const single: CarePlan = { ...range, waterEveryDays: 14, waterEveryDaysMax: undefined };
 const proseOnly: CarePlan = { soil: 'Loam', light: 'Bright', water: 'When dry' };
 
-test('no interval means no schedule — the prose still stands on its own', () => {
+test('no interval means no schedule - the prose still stands on its own', () => {
   const s = wateringState(proseOnly, ago(30), NOW);
   assert.equal(s.status, 'unscheduled');
   assert.equal(s.nextDueAt, null);
@@ -72,11 +72,11 @@ test('the window opens at the near end of the range', () => {
   const s = wateringState(range, ago(7), NOW);
   assert.equal(s.status, 'due');
   assert.equal(s.daysUntilDue, 0);
-  assert.equal(s.label, 'Due now — check the soil');
+  assert.equal(s.label, 'Due now - check the soil');
   assert.equal(needsWater(s), true);
 });
 
-test('the whole range is due, not late — 10 days is still inside "every 7-10"', () => {
+test('the whole range is due, not late - 10 days is still inside "every 7-10"', () => {
   for (const d of [7, 8, 9, 10]) {
     assert.equal(wateringState(range, ago(d), NOW).status, 'due', `${d} days`);
   }

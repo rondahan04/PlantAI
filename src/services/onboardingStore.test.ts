@@ -86,7 +86,7 @@ test('skipping the name step completes without one', () => {
   createOnboardingStore(s.deps).complete();
   const state = createOnboardingStore(s.deps).load();
   assert.ok(state);
-  // Absent, never a placeholder — an invented greeting reads as a bug.
+  // Absent, never a placeholder - an invented greeting reads as a bug.
   assert.equal(state.name, undefined);
 });
 

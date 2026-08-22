@@ -10,10 +10,10 @@
  *
  * Every billable route goes through the gate (A1): shared secret, per-IP burst
  * limit, hard daily cap. Read server/gate.ts before changing anything about it
- * — in particular, the shared secret is NOT authentication.
+ * - in particular, the shared secret is NOT authentication.
  *
  * Keys are read from server env (plain names preferred, EXPO_PUBLIC_* fallback
- * for local dev only — nothing here should ship to a phone).
+ * for local dev only - nothing here should ship to a phone).
  *
  * Run:  node server/index.ts   (or npm run server)
  */
@@ -39,6 +39,7 @@ import {
   diagnose,
   openAiAssessHealth,
   plantNetIdentify,
+  stubAssessHealth,
   type DiagnosisDeps,
 } from './diagnose.ts';
 
@@ -104,9 +105,18 @@ const deps: PipelineDeps = {
   nationalUrls: NATIONAL_NURSERIES,
 };
 
+// Temporary: the lecturer's shared OpenAI key has no credits (2026-08-22).
+// DIAGNOSIS_SKIP_OPENAI swaps the real health assessment for a labelled stub
+// so identify + gating + the client UI stay testable in the meantime. See
+// TODOS.md "Restore OpenAI health assessment" - unset this once credits return.
+const SKIP_OPENAI_DIAGNOSIS = env('DIAGNOSIS_SKIP_OPENAI') === 'true';
+if (SKIP_OPENAI_DIAGNOSIS) {
+  console.warn('[diagnose] DIAGNOSIS_SKIP_OPENAI=true - serving a stub health assessment, not a real diagnosis.');
+}
+
 const diagnosisDeps: DiagnosisDeps = {
   identify: plantNetIdentify(PLANTNET_KEY!),
-  assessHealth: openAiAssessHealth(OPENAI_KEY!),
+  assessHealth: SKIP_OPENAI_DIAGNOSIS ? stubAssessHealth : openAiAssessHealth(OPENAI_KEY!),
 };
 
 // ─── HTTP plumbing ────────────────────────────────────────────────────────────
@@ -161,7 +171,7 @@ function json(res: http.ServerResponse, status: number, body: unknown) {
  */
 /*
  * Recent failures, kept in memory so a deployed instance can be debugged
- * without shell access to its logs. Bounded — this is a debugging aid, not a
+ * without shell access to its logs. Bounded - this is a debugging aid, not a
  * log store, and an unbounded array on a 512 MB box is a slow leak.
  *
  * Exposed ONLY to a caller holding the shared secret (see /health). The detail
@@ -206,7 +216,7 @@ const server = http.createServer(async (req, res) => {
 
   // ── GET /health ─────────────────────────────────────────────────────────────
   // Public liveness. `?errors=1` additionally returns the recent-failure ring,
-  // but only for a caller holding the shared secret — provider error bodies are
+  // but only for a caller holding the shared secret - provider error bodies are
   // internal detail and this endpoint is otherwise unauthenticated.
   if (u.pathname === '/health') {
     const body: Record<string, unknown> = { ok: true, gate: gate.stats(), jobs: jobs.size() };
@@ -377,6 +387,6 @@ server.listen(PORT, () => {
   console.log(`PlantAI API → http://localhost:${PORT}`);
   console.log(`gate: ${gate.mode} mode · ${s.cap} requests/day · ${readGateConfig(env).perMinutePerIp}/min per IP`);
   if (gate.mode === 'log') {
-    console.log('gate is LOG-ONLY — nothing is blocked yet. Set GATE_MODE=enforce once the app ships with the secret.');
+    console.log('gate is LOG-ONLY - nothing is blocked yet. Set GATE_MODE=enforce once the app ships with the secret.');
   }
 });

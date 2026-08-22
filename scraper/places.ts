@@ -1,5 +1,5 @@
 /*
- * Google Places API (New) — Text Search nursery discovery.
+ * Google Places API (New) - Text Search nursery discovery.
  *
  * One POST returns name + location + website for nurseries near a point. The
  * websiteUri comes back inline, so there is NO separate Place Details call
@@ -45,7 +45,7 @@ const PLACES_PHOTO_BASE = 'https://places.googleapis.com/v1/';
 /* Resolve a Places photo resource name to a keyless googleusercontent CDN URL.
  * Uses skipHttpRedirect=true so the endpoint returns { photoUri } as JSON
  * instead of a 302; that URI needs no API key and is safe to send to clients.
- * Never throws — returns undefined so the card falls back to a placeholder. */
+ * Never throws - returns undefined so the card falls back to a placeholder. */
 export async function resolvePhotoUrl(
   photoName: string,
   apiKey: string,

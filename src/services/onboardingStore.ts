@@ -1,6 +1,6 @@
 import type { StorageDeps } from './plantStore';
 
-/* Same storage seam as the library — re-exported so callers bind one shape. */
+/* Same storage seam as the library - re-exported so callers bind one shape. */
 export type { StorageDeps } from './plantStore';
 
 /*
@@ -10,7 +10,7 @@ export type { StorageDeps } from './plantStore';
  * them"), stored the same way and for the same reason as the plant library:
  * SYNCHRONOUSLY. App.tsx picks the initial route from this during its first
  * render, so an async read would mount Home and then push Onboarding on top of
- * it — a visible flash of the wrong screen on every cold start.
+ * it - a visible flash of the wrong screen on every cold start.
  *
  * Deliberately NOT part of the plant library blob. The library is re-read on
  * every render of Home and every focus of a card; onboarding is read once at
@@ -39,7 +39,7 @@ export interface OnboardingState {
   completedAt: string;
   /*
    * Optional because the name step is skippable. Absent means "never asked or
-   * declined" — never defaulted to a placeholder, because a greeting the app
+   * declined" - never defaulted to a placeholder, because a greeting the app
    * invented reads as a bug the first time the user sees it.
    */
   name?: string;
@@ -105,7 +105,7 @@ export function createOnboardingStore(storage: StorageDeps, opts: OnboardingOpti
 
     /*
      * A blob from a newer build. The user HAS onboarded, so returning null
-     * would restart an intro they already finished — and the `complete()` that
+     * would restart an intro they already finished - and the `complete()` that
      * followed would overwrite whatever the newer version wrote. Honour it and
      * leave the bytes alone.
      */
@@ -116,12 +116,12 @@ export function createOnboardingStore(storage: StorageDeps, opts: OnboardingOpti
     };
   }
 
-  /* Damaged bytes hold nothing worth recovering — no quarantine, unlike the library. */
+  /* Damaged bytes hold nothing worth recovering - no quarantine, unlike the library. */
   function discard(): void {
     try {
       storage.removeItem(ONBOARDING_KEY);
     } catch {
-      /* best effort — load() already decided to show onboarding */
+      /* best effort - load() already decided to show onboarding */
     }
   }
 
@@ -149,7 +149,7 @@ export function createOnboardingStore(storage: StorageDeps, opts: OnboardingOpti
   }
 
   /*
-   * Change the stored name without re-stamping `completedAt` — editing a name
+   * Change the stored name without re-stamping `completedAt` - editing a name
    * later must not make the app think onboarding happened today.
    */
   function setName(name?: string): CompleteResult {
@@ -170,7 +170,7 @@ export function createOnboardingStore(storage: StorageDeps, opts: OnboardingOpti
     return { ok: true, state: next };
   }
 
-  /* Replay onboarding — for a settings action or a manual test on device. */
+  /* Replay onboarding - for a settings action or a manual test on device. */
   function reset(): void {
     discard();
   }

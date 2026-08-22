@@ -86,7 +86,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
         <Text style={s.title}>Watering history</Text>
         <Text style={s.subtitle}>
           {history.length === 0
-            ? 'No waterings logged yet — tap Water now on the plant to start.'
+            ? 'No waterings logged yet - tap Water now on the plant to start.'
             : `${history.length} watering${history.length === 1 ? '' : 's'} logged`}
         </Text>
 
@@ -195,7 +195,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
             <Text style={s.recentTitle}>Recent</Text>
             {/*
               A short list under the grid, because a calendar shows THAT a day
-              was watered and this shows WHEN — the time of day is the part a
+              was watered and this shows WHEN - the time of day is the part a
               grid square physically cannot hold.
             */}
             {history.slice(0, 8).map((entry) => (

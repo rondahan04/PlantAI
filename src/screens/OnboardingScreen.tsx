@@ -35,7 +35,7 @@ type Props = {
  *
  * ONE screen with internal steps rather than four stack routes. The hardware
  * back gesture must step backwards *inside* onboarding, and stack routes would
- * make it pop out to whatever is underneath — which, on a first run, is nothing.
+ * make it pop out to whatever is underneath - which, on a first run, is nothing.
  *
  * Three beats and out: who you are (name) → what the app does (slides) → the
  * one permission the very next screen needs (camera). The greeting leads so the
@@ -102,7 +102,7 @@ export default function OnboardingScreen({ navigation }: Props) {
   );
 
   /*
-   * Straight to Home when the camera is already granted — a user who reinstalls
+   * Straight to Home when the camera is already granted - a user who reinstalls
    * and re-allows should never be asked to allow what they already allowed.
    */
   const afterSlides = useCallback(() => {
@@ -129,12 +129,8 @@ export default function OnboardingScreen({ navigation }: Props) {
         style={s.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {/* Header: identity on every step, plus the escape hatch. */}
+        {/* Header: escape hatch only. */}
         <View style={s.header}>
-          <View style={s.brand}>
-            <Image source={APP_LOGO} style={s.logoIcon} accessibilityIgnoresInvertColors />
-            <Text style={s.brandText}>PlantAI</Text>
-          </View>
           <Pressable
             onPress={() => finish(name)}
             hitSlop={12}
@@ -156,7 +152,7 @@ export default function OnboardingScreen({ navigation }: Props) {
               showsHorizontalScrollIndicator={false}
               onScroll={onScroll}
               scrollEventThrottle={16}
-              /* Fixed page width — the pager must not guess at layout time. */
+              /* Fixed page width - the pager must not guess at layout time. */
               getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
               renderItem={({ item }) => (
                 <View style={[s.slide, { width }]}>
@@ -196,13 +192,9 @@ export default function OnboardingScreen({ navigation }: Props) {
           <>
             <View style={s.step}>
               <View style={s.slideIcon}>
-                <Ionicons name="happy-outline" size={48} color={t.color.primary} />
+                <Image source={APP_LOGO} style={s.slideLogo} accessibilityIgnoresInvertColors />
               </View>
               <Text style={s.slideTitle}>Hello,{'\n'}what should we call you?</Text>
-              <Text style={s.slideBlurb}>
-                Only used to greet you in the app. It stays on this device — there is no account
-                and nothing is sent anywhere.
-              </Text>
 
               <TextInput
                 style={s.input}
@@ -223,7 +215,7 @@ export default function OnboardingScreen({ navigation }: Props) {
             <View style={s.footer}>
               <PrimaryButton t={t} s={s} label="Continue" onPress={() => setStep('slides')} />
               <Pressable
-                /* Discards anything half-typed — "not now" means no name, not
+                /* Discards anything half-typed - "not now" means no name, not
                    whatever was left in the field. */
                 onPress={() => {
                   setName('');
@@ -314,14 +306,10 @@ function makeStyles(t: Theme) {
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
+      justifyContent: 'flex-end',
       paddingHorizontal: t.space.xl,
       paddingTop: t.space.lg,
     },
-    brand: { flexDirection: 'row', alignItems: 'center', gap: t.space.sm },
-    /* The logo carries its own ground — a clipping frame, not a tile. */
-    logoIcon: { width: 32, height: 32, borderRadius: t.radius.sm, overflow: 'hidden' },
-    brandText: { ...t.type.heading, color: t.color.foreground },
     skip: { ...t.type.label, color: t.color.textSecondary },
 
     /* Pages are laid out at the measured window width, set inline. */
@@ -346,6 +334,7 @@ function makeStyles(t: Theme) {
       justifyContent: 'center',
       marginBottom: t.space.xl,
     },
+    slideLogo: { width: 48, height: 48, borderRadius: t.radius.sm },
     slideTitle: {
       ...t.type.display,
       color: t.color.foreground,

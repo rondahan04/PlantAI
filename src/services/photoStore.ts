@@ -2,7 +2,7 @@
  * Photo persistence (TODOS item 9).
  *
  * `expo-camera` and `expo-image-picker` both hand back a URI in the CACHE
- * directory. iOS empties that directory whenever it feels pressure for space —
+ * directory. iOS empties that directory whenever it feels pressure for space -
  * on a timeline nobody controls and long after the user has forgotten saving
  * the plant. The record survives, the image does not, and the library fills up
  * with grey rectangles. So on save the file is copied into the document
@@ -16,7 +16,7 @@
  * `plantStore` / `plantLibrary`.
  *
  * One asymmetry worth naming: `copy` is async in expo-file-system 56 while
- * everything else here is sync. That is why saving does NOT wait on the copy —
+ * everything else here is sync. That is why saving does NOT wait on the copy -
  * the plant is persisted synchronously with its cache URI first (so a kill
  * mid-copy can only cost the picture, never the plant) and the document URI is
  * patched in afterwards.
@@ -36,7 +36,7 @@ export interface PhotoDeps {
   /* File names (not URIs) directly inside `uri`; empty when it does not exist. */
   list(uri: string): string[];
   copy(from: string, to: string): Promise<void>;
-  /* Best effort, never throws — a file we cannot delete is a leak, not a bug
+  /* Best effort, never throws - a file we cannot delete is a leak, not a bug
    * the user can act on. */
   remove(uri: string): void;
 }
@@ -72,7 +72,7 @@ export interface SweepOptions {
   /*
    * Whether the library the `keep` list came from actually loaded. A corrupt or
    * future-version library reports zero plants, and sweeping on that would
-   * delete every photo the user owns — precisely the loss plantStore's
+   * delete every photo the user owns - precisely the loss plantStore's
    * quarantine exists to prevent.
    */
   libraryReadable?: boolean;
@@ -104,7 +104,7 @@ export function createPhotoStore(deps: PhotoDeps) {
   /*
    * Copy `sourceUri` into the document directory under `id`.
    *
-   * Returns the new URI, or `null` when the photo could not be rescued — an
+   * Returns the new URI, or `null` when the photo could not be rescued - an
    * already-purged source, a full disk, a copy that reported success without
    * writing bytes. `null` is not an error the user should see: the plant is
    * saved either way, and the caller simply leaves the record pointing at
@@ -120,7 +120,7 @@ export function createPhotoStore(deps: PhotoDeps) {
     const destination = `${dir}${fileNameFor(id, photoExtension(sourceUri))}`;
     try {
       deps.ensureDir(dir);
-      // Clear anything already sitting under this id — a re-diagnosis of the
+      // Clear anything already sitting under this id - a re-diagnosis of the
       // same plant, or a leftover from a failed adopt. `copy` rejects rather
       // than overwriting unless told otherwise, and the binding cannot know
       // which of the two it is looking at.

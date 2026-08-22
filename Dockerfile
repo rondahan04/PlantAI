@@ -1,11 +1,11 @@
 # PlantAI API server (TODOS A2).
 #
-# The server and the scraper import nothing from npm — only node: builtins — so
+# The server and the scraper import nothing from npm - only node: builtins - so
 # there is no install step and no node_modules in the image. If that ever stops
 # being true, add a `npm ci --omit=dev` layer above the source copy.
 #
 # Node 26 strips TypeScript types natively, which is why `node server/index.ts`
-# runs a .ts entrypoint with no build step. Do not drop below Node 23.6 — type
+# runs a .ts entrypoint with no build step. Do not drop below Node 23.6 - type
 # stripping is behind a flag before that and the container will exit on start.
 FROM node:26-alpine
 
@@ -13,7 +13,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 # Only what the server actually reads at runtime. src/ (React Native), assets/,
-# dashboard/ and scripts/ are deliberately absent — see .dockerignore.
+# dashboard/ and scripts/ are deliberately absent - see .dockerignore.
 COPY package.json ./
 COPY server ./server
 COPY scraper ./scraper

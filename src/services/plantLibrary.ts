@@ -5,7 +5,7 @@ import { createPlantStore, type StorageDeps } from './plantStore';
  * The one place `expo-sqlite` is bound to the plant store.
  *
  * It lives apart from plantStore.ts so that module stays free of native
- * imports and can be exercised by `node --test` without an Expo runtime — the
+ * imports and can be exercised by `node --test` without an Expo runtime - the
  * same reason the scraper keeps `PipelineDeps` separate from its providers.
  *
  * The *Sync accessors are required, not preferred: D8's adaptive Home decides
@@ -21,7 +21,7 @@ const deviceStorage: StorageDeps = {
 };
 
 /*
- * A single shared instance. The store holds no cache — every call reads
- * storage — so this is a convenience, not a singleton with state to corrupt.
+ * A single shared instance. The store holds no cache - every call reads
+ * storage - so this is a convenience, not a singleton with state to corrupt.
  */
 export const plantLibrary = createPlantStore(deviceStorage);

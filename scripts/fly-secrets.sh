@@ -3,7 +3,7 @@
 #
 # The app is the only reason those vars carry an EXPO_PUBLIC_ prefix locally
 # (dashboard/server.ts and scripts/scrape-nurseries.ts still read the prefixed
-# names — TODOS H1). Nothing on the server wants the prefix: server/index.ts
+# names - TODOS H1). Nothing on the server wants the prefix: server/index.ts
 # reads the plain name first and only falls back to EXPO_PUBLIC_* for local dev.
 #
 # Values are never printed. `fly secrets set` reads them from this process's

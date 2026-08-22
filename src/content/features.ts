@@ -5,7 +5,7 @@ import type { Ionicons } from '@expo/vector-icons';
  *
  * Onboarding tells it to a first-time user and Home's first-run layout repeats
  * it to anyone who skipped. Two copies of this list would drift the moment a
- * feature is renamed, and the drift is invisible — the two screens are never
+ * feature is renamed, and the drift is invisible - the two screens are never
  * on-screen together.
  *
  * `blurb` is the onboarding voice (second person, one full sentence, room to
@@ -39,6 +39,6 @@ export const FEATURES: Feature[] = [
     icon: 'storefront-outline',
     title: 'Find Replacements',
     desc: 'Locate healthy plants at nurseries near you',
-    blurb: 'When a plant is past saving, we find a healthy one at a nursery near you — delivered or ready to collect.',
+    blurb: 'When a plant is past saving, we find a healthy one at a nursery near you - delivered or ready to collect.',
   },
 ];

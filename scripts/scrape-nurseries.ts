@@ -6,7 +6,7 @@
  * Env:  EXPO_PUBLIC_FIRECRAWL_API_KEY, EXPO_PUBLIC_OPENAI_API_KEY (from .env)
  *
  * Safe to run on a schedule (e.g. GitHub Actions weekly cron).
- * Only updates `plants` and `inStock` fields — other fields are preserved.
+ * Only updates `plants` and `inStock` fields - other fields are preserved.
  */
 
 import * as fs from 'fs';
@@ -36,7 +36,7 @@ interface PlantEntry {
 // catch-all (houseplants, trees, shrubs, flowers) rather than a species search.
 const HARVEST_QUERY =
   'any plant product for sale: houseplant, tree, shrub, flower, succulent / ' +
-  'כל מוצר צמחי למכירה — צמחי בית, עצים, שיחים, פרחים, עציצים';
+  'כל מוצר צמחי למכירה - צמחי בית, עצים, שיחים, פרחים, עציצים';
 
 interface NurseryEntry {
   nurseryId: string;
@@ -73,7 +73,7 @@ async function main() {
 
   for (const nursery of nurseries) {
     if (!nursery.website) {
-      console.log(`⚪ ${nursery.name} — no website, skipping`);
+      console.log(`⚪ ${nursery.name} - no website, skipping`);
       continue;
     }
     try {
@@ -84,12 +84,12 @@ async function main() {
       if (plants.length > 0) {
         nursery.plants = plants;
         updated++;
-        console.log(`✅ ${nursery.name} — ${plants.length} plants extracted`);
+        console.log(`✅ ${nursery.name} - ${plants.length} plants extracted`);
       } else {
-        console.log(`⚠️  ${nursery.name} — no plants found, keeping existing data`);
+        console.log(`⚠️  ${nursery.name} - no plants found, keeping existing data`);
       }
     } catch (err: unknown) {
-      console.error(`❌ ${nursery.name} — ${err instanceof Error ? err.message : String(err)}`);
+      console.error(`❌ ${nursery.name} - ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

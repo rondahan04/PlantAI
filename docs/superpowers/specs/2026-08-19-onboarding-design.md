@@ -1,10 +1,10 @@
-# Onboarding — design
+# Onboarding - design
 
 Date: 2026-08-19. Status: implemented.
 
 ## Decision
 
-Onboarding only. **No accounts** — no email, no phone, no server user table, no
+Onboarding only. **No accounts** - no email, no phone, no server user table, no
 sessions. The app's data is device-local and the server is a stateless diagnose
 API behind a shared secret; real auth would mean a user store, a mail or SMS
 provider, token refresh, and plant sync, none of which the product needs to
@@ -16,12 +16,12 @@ a migration, so the door stays open.
 One screen, three internal steps. Not four stack routes: the back gesture must
 step backwards *inside* onboarding, and stack routes would pop out to nothing.
 
-1. **Name** — "Hello, what should we call you?", skippable. Stated plainly as
+1. **Name** - "Hello, what should we call you?", skippable. Stated plainly as
    device-local with no account. Leads so the rest of onboarding can address the
    user by name instead of opening on a pitch.
-2. **Slides** — three swipeable pages (Snap & Diagnose / Track & Water / Find
+2. **Slides** - three swipeable pages (Snap & Diagnose / Track & Water / Find
    Replacements), dots, `Next` → `Get Started`.
-3. **Camera priming** — why the camera is needed, then the OS prompt. Skipped
+3. **Camera priming** - why the camera is needed, then the OS prompt. Skipped
    entirely when permission is already granted.
 
 `Skip` in the header exits from any step. No step can dead-end: denial of the
@@ -35,7 +35,7 @@ first watering reminder.
 ## Storage
 
 `src/services/onboardingStore.ts` (pure, dependency-injected) +
-`src/services/onboarding.ts` (binds `expo-sqlite/kv-store`) — the same split as
+`src/services/onboarding.ts` (binds `expo-sqlite/kv-store`) - the same split as
 `plantStore` ↔ `plantLibrary`, so `node --test` runs the logic without an Expo
 runtime.
 
@@ -46,7 +46,7 @@ runtime.
   every watering write, and onboarding is read once per launch.
 - Writes are **read back and compared**. An unconfirmed write means onboarding
   replays on every launch.
-- Every unreadable case resolves to "not onboarded" — replaying a 30-second
+- Every unreadable case resolves to "not onboarded" - replaying a 30-second
   intro beats stranding a first-time user on an empty Home. The one exception
   is a blob from a **newer** build, which is honoured rather than overwritten.
 
@@ -54,7 +54,7 @@ runtime.
 
 `FEATURES` moved from `HomeScreen` into `src/content/features.ts`, with two
 voices per feature: `blurb` for onboarding, `desc` for the Home card row. Two
-copies would drift invisibly — the screens are never on-screen together.
+copies would drift invisibly - the screens are never on-screen together.
 
 The name, when given, greets on Home: `Hello, <name>` on the first-run layout,
 `<name>'s plants` on the library layout.

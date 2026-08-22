@@ -5,12 +5,12 @@
  * `EXPO_PUBLIC_OPENAI_API_KEY` were compiled into the app bundle, which means
  * they shipped in the submitted assignment zip and in every Expo Go build ever
  * shared. That is the root cause behind the P0 key rotation: anyone with the
- * bundle can extract the key and spend it. Holding them here is the fix — the
+ * bundle can extract the key and spend it. Holding them here is the fix - the
  * app now sends a photo and gets a diagnosis, and never sees a provider key.
  *
  * The trade this makes: diagnosis used to work whenever the phone had internet,
  * and now it also needs this server to be up. Accepted deliberately (see the A3
- * note in TODOS.md). The failure is honest either way — the app says the
+ * note in TODOS.md). The failure is honest either way - the app says the
  * service did not answer, never invents a diagnosis.
  *
  * The validators and named error types below were written client-side in
@@ -33,7 +33,7 @@ export type Condition = 'healthy' | 'mild' | 'moderate' | 'severe' | 'critical';
 /*
  * Ongoing care for the SPECIES, as opposed to `treatments`, which target what is
  * wrong in this photo right now. A healthy plant has an empty issue list and no
- * urgent treatment, and the user still needs to know how to keep it that way —
+ * urgent treatment, and the user still needs to know how to keep it that way -
  * that gap is what this fills.
  *
  * Optional the whole way down (here, on the wire, and in the client type). A
@@ -55,7 +55,7 @@ export interface CarePlan {
    * of them schedules a reminder for the wrong week, which is worse than none.
    *
    * `waterEveryDaysMax` is the far end of a range and may be absent even when
-   * the minimum is present — plenty of species get a single number.
+   * the minimum is present - plenty of species get a single number.
    */
   waterEveryDays?: number;
   waterEveryDaysMax?: number;
@@ -76,6 +76,7 @@ export interface PlantDiagnosis {
   confidence: number;
   description: string;
   carePlan?: CarePlan;
+  variety?: string;
 }
 
 export interface Identification {
@@ -92,6 +93,13 @@ export interface HealthAssessment {
   description: string;
   canBeSaved: boolean;
   carePlan?: CarePlan;
+  /*
+   * Cultivar/variety, e.g. "Thai Constellation" for a Monstera deliciosa - only
+   * the vision model can name this, PlantNet identifies species, not cultivar.
+   * Optional and visual-evidence-only: a model that cannot tell from the photo
+   * must omit it rather than guess a variety onto a plain species.
+   */
+  variety?: string;
 }
 
 /*
@@ -119,13 +127,13 @@ export class NotAPlantError extends Error {
  * Thrown when a provider fails or answers in a shape we can't use.
  *
  * `detail` is for the log ONLY and must never leave this process. Provider
- * bodies echo request payloads and account state — a live 429 read "You have no
+ * bodies echo request payloads and account state - a live 429 read "You have no
  * credits remaining. Add credits to continue...", which is a sentence about our
  * billing that a user with a sick plant should never read.
  */
 /*
  * The uploaded bytes are not a format the identifier accepts. Worth its own
- * type because the honest sentence is about the file, not about our service —
+ * type because the honest sentence is about the file, not about our service -
  * reporting a format problem as "the plant service did not answer" is exactly
  * the dishonest-error pattern E9 exists to remove.
  */
@@ -169,13 +177,14 @@ export async function diagnose(image: Buffer, deps: DiagnosisDeps): Promise<Plan
     // Omitted rather than sent as undefined: JSON.stringify drops it either
     // way, and an absent key is what the client's optional field expects.
     ...(health.carePlan ? { carePlan: health.carePlan } : {}),
+    ...(health.variety ? { variety: health.variety } : {}),
   };
 }
 
 // ─── PlantNet ─────────────────────────────────────────────────────────────────
 
 /*
- * PlantNet accepts JPEG and PNG only, and it checks the bytes — not the
+ * PlantNet accepts JPEG and PNG only, and it checks the bytes - not the
  * filename or the declared content type. Sniffing the magic number is what
  * turns "400 Unsupported file type for image[0]" into a sentence about the
  * photo. WebP in particular reaches here easily: the repo's own test fixtures
@@ -239,8 +248,8 @@ export function plantNetIdentify(apiKey: string) {
 
 /*
  * PlantNet has already named the species; we trust that name and send the
- * user's actual photo to GPT-5.5 (vision) so it diagnoses THIS plant — visible
- * disease, pests, deficiency — rather than reciting generic by-name care tips.
+ * user's actual photo to GPT-5.5 (vision) so it diagnoses THIS plant - visible
+ * disease, pests, deficiency - rather than reciting generic by-name care tips.
  */
 export function openAiAssessHealth(apiKey: string) {
   return async function assessHealth(image: Buffer, id: Identification): Promise<HealthAssessment> {
@@ -248,7 +257,7 @@ export function openAiAssessHealth(apiKey: string) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: 'gpt-5.5',
+        model: 'gpt-5.6-luna',
         messages: [
           {
             role: 'user',
@@ -300,7 +309,7 @@ export function openAiAssessHealth(apiKey: string) {
     }
 
     // Repair known model shape-drift before validating. The guard below still
-    // rejects anything genuinely unusable — this only rescues responses whose
+    // rejects anything genuinely unusable - this only rescues responses whose
     // content is right and whose structure is not.
     const normalized = normalizeAssessment(parsed);
     if (!isHealthAssessment(normalized)) {
@@ -314,8 +323,32 @@ export function openAiAssessHealth(apiKey: string) {
   };
 }
 
+/*
+ * Stand-in for `openAiAssessHealth` when the OpenAI account has no credits
+ * (the lecturer's shared key, in this case) and testing everything else -
+ * identify, gating, the client UI - shouldn't have to wait on billing. Wired
+ * in behind DIAGNOSIS_SKIP_OPENAI (see server/index.ts); never the default.
+ * See TODOS.md "Restore OpenAI health assessment" for the revert.
+ */
+export async function stubAssessHealth(_image: Buffer, _id: Identification): Promise<HealthAssessment> {
+  return {
+    condition: 'healthy',
+    conditionLabel: 'Diagnosis skipped (dev stub)',
+    issues: [],
+    treatments: [
+      {
+        title: 'OpenAI call skipped',
+        description: 'DIAGNOSIS_SKIP_OPENAI is set - this is not a real diagnosis.',
+        urgent: false,
+      },
+    ],
+    description: 'OpenAI credits are exhausted, so this response is a placeholder, not a real health assessment.',
+    canBeSaved: true,
+  };
+}
+
 function prompt(id: Identification): string {
-  return `You are a plant pathologist. The plant in this photo has been identified as ${id.commonName} (${id.scientificName}) — trust that identification and do NOT re-identify the species. Examine the photo and diagnose the health of THIS specific plant: look for disease, pests, nutrient deficiency, over/under-watering, or damage visible in the image. Base every issue on what you can actually see. If the plant looks healthy, say so. Return a JSON health assessment in this exact shape:
+  return `You are a plant pathologist. The plant in this photo has been identified as ${id.commonName} (${id.scientificName}) - trust that identification and do NOT re-identify the species. Examine the photo and diagnose the health of THIS specific plant: look for disease, pests, nutrient deficiency, over/under-watering, or damage visible in the image. Base every issue on what you can actually see. If the plant looks healthy, say so. Return a JSON health assessment in this exact shape:
 {
   "condition": "healthy",
   "conditionLabel": "Healthy",
@@ -325,6 +358,7 @@ function prompt(id: Identification): string {
   ],
   "description": "string (max 180 chars)",
   "canBeSaved": true,
+  "variety": "string (max 60 chars), omit entirely if not visually determinable",
   "carePlan": {
     "soil": "string (max 90 chars)",
     "light": "string (max 90 chars)",
@@ -333,11 +367,13 @@ function prompt(id: Identification): string {
     "waterEveryDaysMax": 10
   }
 }
-condition must be one of: healthy, mild, moderate, severe, critical, reflecting what you see in the photo. "issues" must be an array of PLAIN STRINGS — one short sentence per visible problem, never objects. Use [] if the plant is healthy. Provide 2-3 treatments targeting those problems (or general care tips if healthy).
+condition must be one of: healthy, mild, moderate, severe, critical, reflecting what you see in the photo. "issues" must be an array of PLAIN STRINGS - one short sentence per visible problem, never objects. Use [] if the plant is healthy. Provide 2-3 treatments targeting those problems (or general care tips if healthy).
 
-"carePlan" is ongoing care for this SPECIES, not a fix for what is wrong today — a healthy plant still gets one. "soil": the potting mix and its drainage. "light": state explicitly whether the plant wants DIRECT or INDIRECT light, how bright, and any exposure to avoid. "water": how often, plus the physical check that says it is time (e.g. top 2cm of soil dry). Those three are required and each must be one short concrete phrase, never a paragraph.
+"variety" is the specific cultivar or variety of ${id.commonName}, e.g. "Thai Constellation" for a Monstera deliciosa, named ONLY from what the photo actually shows - variegation pattern, leaf shape or color distinct from the typical species. Do not guess a popular cultivar name onto a plain, unremarkable specimen. Omit the field entirely (do not include the key) when the photo gives no visual evidence of a specific variety.
 
-"waterEveryDays" is the SAME interval as a whole number of days, because the app schedules a watering reminder from it — it must agree with the "water" sentence. Give "waterEveryDaysMax" as well when the interval is a range ("every 7-10 days" is 7 and 10); omit it for a single figure. Both are between 1 and 90. Adjust the interval for the season and the plant's condition only if the photo justifies it. Return ONLY valid JSON.`;
+"carePlan" is ongoing care for this SPECIES, not a fix for what is wrong today - a healthy plant still gets one. "soil": the potting mix and its drainage. "light": state explicitly whether the plant wants DIRECT or INDIRECT light, how bright, and any exposure to avoid. "water": how often, plus the physical check that says it is time (e.g. top 2cm of soil dry). Those three are required and each must be one short concrete phrase, never a paragraph.
+
+"waterEveryDays" is the SAME interval as a whole number of days, because the app schedules a watering reminder from it - it must agree with the "water" sentence. Give "waterEveryDaysMax" as well when the interval is a range ("every 7-10 days" is 7 and 10); omit it for a single figure. Both are between 1 and 90. Adjust the interval for the season and the plant's condition only if the photo justifies it. Return ONLY valid JSON.`;
 }
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -358,11 +394,11 @@ function isTreatment(value: unknown): value is Treatment {
  * Flatten one `issues` element to a string.
  *
  * The prompt asks for plain strings, but the model periodically returns richly
- * shaped objects instead — `{name, evidence, likelyCause}` and similar. That is
+ * shaped objects instead - `{name, evidence, likelyCause}` and similar. That is
  * not an error worth failing a paid diagnosis over: the information the user
  * needs is present, just nested. This lost a live request on 2026-08-18 (r68)
  * while the identical photo had succeeded locally minutes earlier, which is
- * exactly how non-deterministic shape drift shows up — as a phantom
+ * exactly how non-deterministic shape drift shows up - as a phantom
  * environment bug.
  *
  * Prefer the descriptive field over the label when both exist, since `name`
@@ -379,7 +415,7 @@ function issueToString(value: unknown): string | null {
   const label = pick('name', 'issue', 'title', 'problem');
   const detail = pick('evidence', 'description', 'detail', 'observation', 'likelyCause', 'cause');
 
-  if (label && detail) return `${label.replace(/[.:]\s*$/, '')} — ${detail}`;
+  if (label && detail) return `${label.replace(/[.:]\s*$/, '')} - ${detail}`;
   return (detail ?? label ?? null)?.trim() || null;
 }
 
@@ -405,7 +441,7 @@ export function isCarePlan(value: unknown): value is CarePlan {
   if (c.waterEveryDays !== undefined && !isWaterDays(c.waterEveryDays)) return false;
   if (c.waterEveryDaysMax !== undefined && !isWaterDays(c.waterEveryDaysMax)) return false;
   /*
-   * A max below the minimum is a contradiction — the reminder would be
+   * A max below the minimum is a contradiction - the reminder would be
    * scheduled off whichever end the client read first. A max EQUAL to the
    * minimum is not wrong, just not a range, and carrying it renders as "every
    * 7-7 days"; normalizeCarePlan drops it, so the guard rejects it here rather
@@ -459,7 +495,7 @@ function normalizeCarePlan(value: unknown): CarePlan | null {
 
 /*
  * Coerce a parsed OpenAI response toward HealthAssessment without inventing
- * anything. Only `issues` is repaired and only `carePlan` is dropped — every
+ * anything. Only `issues` is repaired and only `carePlan` is dropped - every
  * other field is either present and correct or genuinely wrong, and quietly
  * fabricating a `condition` would put words in a pathologist's mouth. Returns
  * the input untouched when there is nothing to fix.
@@ -487,6 +523,13 @@ export function normalizeAssessment(value: unknown): unknown {
     else delete out.carePlan;
   }
 
+  // Same treatment as carePlan: advisory and easy for a model to answer with
+  // an empty string instead of omitting the key. Drop rather than fail.
+  if ('variety' in a && (typeof a.variety !== 'string' || !a.variety.trim())) {
+    out = { ...out };
+    delete out.variety;
+  }
+
   return out;
 }
 
@@ -505,6 +548,7 @@ export function isHealthAssessment(value: unknown): value is HealthAssessment {
     typeof a.canBeSaved === 'boolean' &&
     // Advisory: absent is valid, malformed is not. normalizeAssessment has
     // already dropped the malformed case, so this only bites a direct caller.
-    (a.carePlan === undefined || isCarePlan(a.carePlan))
+    (a.carePlan === undefined || isCarePlan(a.carePlan)) &&
+    (a.variety === undefined || (typeof a.variety === 'string' && a.variety.trim() !== ''))
   );
 }

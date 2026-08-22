@@ -5,7 +5,7 @@ import { apiFetch, apiHeaders, readApiError } from '../lib/api';
  * Live nursery lookup (TODOS E12).
  *
  * WHY THIS IS A JOB AND NOT A REQUEST. The scrape was measured at 480,187 ms
- * end-to-end — eight minutes — against the 90,000 ms abort this file used to
+ * end-to-end - eight minutes - against the 90,000 ms abort this file used to
  * set. The client gave up at 90s and showed a failure screen; the scrape then
  * finished five and a half minutes later into nothing, having spent real money.
  * No host timeout setting fixes that, and an eight-minute open socket dies the
@@ -20,14 +20,14 @@ import { apiFetch, apiHeaders, readApiError } from '../lib/api';
  */
 
 /* How long we are willing to wait before telling the user it did not come back.
- * Matches the server's job retention — waiting past that would poll a job that
+ * Matches the server's job retention - waiting past that would poll a job that
  * has already been swept. */
 const MAX_WAIT_MS = 10 * 60_000;
 const START_TIMEOUT_MS = 15_000;
 const POLL_TIMEOUT_MS = 10_000;
 
 /* Poll fast at first (a cached/deduped job can answer immediately), then back
- * off — an eight-minute scrape does not need 160 round trips. */
+ * off - an eight-minute scrape does not need 160 round trips. */
 const POLL_MIN_MS = 1_500;
 const POLL_MAX_MS = 5_000;
 
@@ -54,7 +54,7 @@ interface NurseryResultJSON {
 
 /*
  * Named so NurseriesScreen's describeFailure can tell "took too long" apart
- * from "service did not answer" — two different sentences to the user, and only
+ * from "service did not answer" - two different sentences to the user, and only
  * one of them is worth a retry.
  */
 export class NurserySearchTimeout extends Error {
@@ -132,8 +132,8 @@ async function startJob(plantName: string, lat: number, lng: number): Promise<st
 }
 
 /*
- * Poll until the job finishes. A single failed poll is survivable — the job is
- * still running on the server — so transient errors are tolerated and only a
+ * Poll until the job finishes. A single failed poll is survivable - the job is
+ * still running on the server - so transient errors are tolerated and only a
  * run of them gives up. Losing a poll should not throw away an eight-minute
  * scrape the user already paid for.
  */
@@ -257,7 +257,7 @@ export function fetchNearbyNurseries(
 /*
  * Fire-and-forget warm-up: start the scrape early (e.g. on the diagnosis
  * screen) so the result is ready when the user opens the nurseries screen.
- * Errors are swallowed here — fetchNearbyNurseries surfaces them when the
+ * Errors are swallowed here - fetchNearbyNurseries surfaces them when the
  * screen awaits. This matters far more now than it did: the job keeps running
  * whether or not anyone is watching, so a prefetch started on the diagnosis
  * screen is genuinely minutes of head start rather than a doomed 90s race.

@@ -1,8 +1,8 @@
 /*
  * Async job store for the nursery scrape (TODOS E12).
  *
- * WHY THIS EXISTS. The scrape was measured end-to-end at 480,187 ms — eight
- * minutes — against a 90,000 ms client abort. There is no host timeout setting
+ * WHY THIS EXISTS. The scrape was measured end-to-end at 480,187 ms - eight
+ * minutes - against a 90,000 ms client abort. There is no host timeout setting
  * that rescues that: Fly, Cloud Run, Render and Railway all cap a single HTTP
  * request well below it, and even if they didn't, an eight-minute open socket
  * dies the moment the user backgrounds the app. The request/response shape was
@@ -79,7 +79,7 @@ export function createJobStore<T>(
       byKey.set(key, job.id);
 
       // Deliberately not awaited: the HTTP handler returns the id immediately.
-      // The catch is exhaustive — an unhandled rejection here would take the
+      // The catch is exhaustive - an unhandled rejection here would take the
       // whole server down and every other in-flight job with it.
       run().then(
         (result) => {

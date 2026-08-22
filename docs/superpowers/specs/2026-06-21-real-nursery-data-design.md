@@ -1,4 +1,4 @@
-# Real Nursery Data — Backend Pipeline + Live App Integration
+# Real Nursery Data - Backend Pipeline + Live App Integration
 
 **Date:** 2026-06-21
 **Status:** Approved (design), pending implementation plan
@@ -18,7 +18,7 @@ backend service so API keys never ship in the app bundle.
    endpoint. Keys stay on the server.
 2. **Card data: real Places + drop fabricated fields.** Widen the Places field
    mask to pull real rating, reviews, hours, phone, photo. Show real scraped
-   price + in-stock. **Remove `deliveryTime`/`deliveryFee`** — they were
+   price + in-stock. **Remove `deliveryTime`/`deliveryFee`** - they were
    fabricated in the JSON and have no real source.
 3. **Toggle reframed to real signal.** `Pick Up` = local Places-discovered
    nurseries that stock the plant. `Deliver` = national ship-to-home nurseries
@@ -36,7 +36,7 @@ DiagnosisScreen → GPS → navigate Nurseries { plantName, lat, lng, mode }
 NurseriesScreen → fetch GET {API_BASE}/api/nurseries?plant=&lat=&lng=
         ↓  backend, keys server-side
   runNurserySearch({ plantName, lat, lng })
-    1. discoverNurseries() — Places Text Search, radius = 10km, WIDE field mask
+    1. discoverNurseries() - Places Text Search, radius = 10km, WIDE field mask
        (+ rating, userRatingCount, regularOpeningHours, nationalPhoneNumber, photos)
        → if 0 nurseries with a website are found within 10km, fall back to the
          curated URL list in `nurseries_scraping_testing` (offline seed set)
@@ -56,7 +56,7 @@ NurseriesScreen → fetch GET {API_BASE}/api/nurseries?plant=&lat=&lng=
 Extract the orchestration currently inline in `dashboard/server.ts` into a
 reusable `runNurserySearch({ plantName, lat, lng, radius? })` that returns
 **nursery-grouped** results (not flat product rows). `radius` defaults to
-**10000m (10km)**. Both `dashboard/server.ts` and the new API server import it —
+**10000m (10km)**. Both `dashboard/server.ts` and the new API server import it -
 no duplicated logic. Encapsulates: Places discovery, **empty-discovery fallback
 to the `nurseries_scraping_testing` URL list** (when Places finds 0 sites within
 the radius), per-site scrape, ship-to-home fallback (no stock), dedup, mode
@@ -70,7 +70,7 @@ Minimal Node `http` server (same style as the existing dashboard):
 - Reads keys from server `.env` with **plain names** (`FIRECRAWL_API_KEY`,
   `OPENAI_API_KEY`, `GOOGLE_MAPS_API_KEY`), falling back to the existing
   `EXPO_PUBLIC_*` names for local dev convenience.
-- `PORT` from env (default 4000). No framework — keeps it AWS-portable.
+- `PORT` from env (default 4000). No framework - keeps it AWS-portable.
 - Ships with a `Dockerfile` (node:22-slim, `CMD node server/index.ts`).
 
 ### 3. `scraper/places.ts` (extend)
@@ -109,7 +109,7 @@ at runtime.
 
 ### 6. `src/screens/DiagnosisScreen.tsx` (trim)
 `handleFindReplacement` resolves GPS (existing logic) then navigates with
-`{ plantName, lat, lng, mode }`. The synchronous static data load is removed —
+`{ plantName, lat, lng, mode }`. The synchronous static data load is removed -
 fetching now lives in `NurseriesScreen`.
 
 ## Type changes (`src/types/index.ts` `Nursery`)
@@ -119,7 +119,7 @@ fetching now lives in `NurseriesScreen`.
   `availabilityNote?: string` (LLM-estimate text when stock isn't exact),
   `inStockKnown: boolean`.
 - **Make optional:** `image?`, `rating?`, `reviewCount?`, `hours?`, `phone?`
-  (Places may omit) — UI renders graceful placeholders / hides the row.
+  (Places may omit) - UI renders graceful placeholders / hides the row.
 - **Remove** `deliveryAvailable` / `pickupAvailable`. Mode is derived solely from
   `shipsToHome`: the Pick Up tab shows `!shipsToHome` nurseries, the Deliver tab
   shows `shipsToHome` nurseries. A single boolean is the only real signal we have.
@@ -135,7 +135,7 @@ testing/demo. Bounded size (LRU or simple map with periodic prune).
 ## Security
 
 - Secrets (`FIRECRAWL_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_MAPS_API_KEY`) live in
-  the server `.env` only — never in the app bundle.
+  the server `.env` only - never in the app bundle.
 - App bundle holds only `EXPO_PUBLIC_API_BASE_URL` (a URL, non-secret).
 - Google Maps key restricted (HTTP referrer / IP allowlist) on the host.
 - Places photo resolved server-side so no key appears in any client-loaded URL.
@@ -152,7 +152,7 @@ testing/demo. Bounded size (LRU or simple map with periodic prune).
 ## Testing
 
 - `scraper/pipeline.test.ts` (new): `runNurserySearch` with injected `fetch`
-  (no network) — asserts nursery assembly, host dedup, mode classification
+  (no network) - asserts nursery assembly, host dedup, mode classification
   (local vs ship-to-home), and ship-to-home fallback trigger.
 - `scraper/places.test.ts` (extend): widened field-mask request shape + rich
   field parsing (rating/hours/phone/photo).
@@ -164,7 +164,7 @@ testing/demo. Bounded size (LRU or simple map with periodic prune).
 - **Dev:** backend on the Mac (`npm run server`); app points at the Mac LAN IP
   or a `cloudflared` tunnel via `EXPO_PUBLIC_API_BASE_URL`.
 - **Prod (now):** Render free web service or DigitalOcean (Student Pack $200).
-- **Prod (future):** AWS — the `Dockerfile` + vanilla Node mean App Runner / ECS
+- **Prod (future):** AWS - the `Dockerfile` + vanilla Node mean App Runner / ECS
   Fargate / Lambda-container with no code change; only `EXPO_PUBLIC_API_BASE_URL`
   and the host env vars change.
 

@@ -40,7 +40,7 @@ export class UnsupportedImageError extends Error {
 }
 
 /*
- * This build cannot reach a diagnosis backend at all — no API base URL. Nothing
+ * This build cannot reach a diagnosis backend at all - no API base URL. Nothing
  * is wrong with the user's photo and retrying will not help; the build is wrong.
  */
 export class DiagnosisUnavailableError extends Error {
@@ -55,7 +55,7 @@ export class DiagnosisUnavailableError extends Error {
  *
  * `detail` is for the log ONLY and must NEVER be shown to the user. The server
  * already strips provider text before answering (H3), so `detail` here is our
- * own status code — but the rule stands at this layer too, because it is the
+ * own status code - but the rule stands at this layer too, because it is the
  * rule that stopped "You have no credits remaining" from being shown to a
  * person whose plant was dying.
  */
@@ -128,5 +128,5 @@ export async function diagnosePlant(imageUri: string): Promise<PlantDiagnosis> {
  * real diagnosis, which meant an outage showed a real person fabricated medical
  * advice about their actual plant. Removed 2026-08-16 (TODOS A5).
  *
- * If diagnosis is unavailable, throw — never invent one.
+ * If diagnosis is unavailable, throw - never invent one.
  */

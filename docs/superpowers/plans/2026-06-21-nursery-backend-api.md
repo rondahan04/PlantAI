@@ -1,8 +1,8 @@
-# Nursery Backend API — Implementation Plan (Plan 1 of 2)
+# Nursery Backend API - Implementation Plan (Plan 1 of 2)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a curl-testable `GET /api/nurseries?plant=&lat=&lng=` endpoint that discovers real nurseries near a point (Google Places, 10km), scrapes each for the plant's price + stock, enriches with Places identity, and returns a `NurseryResult[]` — with keys held server-side.
+**Goal:** Build a curl-testable `GET /api/nurseries?plant=&lat=&lng=` endpoint that discovers real nurseries near a point (Google Places, 10km), scrapes each for the plant's price + stock, enriches with Places identity, and returns a `NurseryResult[]` - with keys held server-side.
 
 **Architecture:** A new `scraper/pipeline.ts` extracts the orchestration currently inline in `dashboard/server.ts` into a reusable, **dependency-injected** `runNurserySearch()` (so it unit-tests without network). `scraper/places.ts` gains a wide field mask + photo URL resolution. A new framework-free `server/index.ts` (Node `http`) exposes the endpoint and is containerized for later AWS migration. The existing dashboard is refactored to consume the same `runNurserySearch`, so logic lives in exactly one place.
 
@@ -17,12 +17,12 @@
 | File | Responsibility |
 |---|---|
 | `scraper/places.ts` (modify) | Places discovery; add `richFields` wide mask + `resolvePhotoUrl()`; extend `DiscoveredNursery`. |
-| `scraper/pipeline.ts` (create) | `runNurserySearch()` — discovery → scrape → enrich → assemble `NurseryResult[]`; DI seam; haversine; fallbacks. |
+| `scraper/pipeline.ts` (create) | `runNurserySearch()` - discovery → scrape → enrich → assemble `NurseryResult[]`; DI seam; haversine; fallbacks. |
 | `server/index.ts` (create) | Node `http` server: `GET /api/nurseries`, `GET /health`, CORS. Reads server-side keys. |
 | `dashboard/server.ts` (modify) | Refactor `/api/scrape` to call `runNurserySearch` (no duplicated orchestration). |
 | `scraper/places.test.ts` (modify) | Tests for wide mask request shape + rich-field parsing. |
 | `scraper/pipeline.test.ts` (create) | Tests for `runNurserySearch` with injected deps: assembly, fallbacks, mode, dedup. |
-| `Dockerfile` (create) | `node:22-slim`, `CMD ["node","server/index.ts"]` — AWS-portable. |
+| `Dockerfile` (create) | `node:22-slim`, `CMD ["node","server/index.ts"]` - AWS-portable. |
 | `.env.example` (modify) | Document server-side key names. |
 | `package.json` (modify) | Add `server` + `test` scripts. |
 
@@ -36,7 +36,7 @@ Test runner is Node's built-in: `node --test <file>` (already used by `scraper/c
 - Modify: `scraper/places.ts`
 - Test: `scraper/places.test.ts`
 
-- [ ] **Step 1: Write the failing test** — append to `scraper/places.test.ts`:
+- [ ] **Step 1: Write the failing test** - append to `scraper/places.test.ts`:
 
 ```ts
 import { test } from 'node:test';
@@ -85,9 +85,9 @@ test('richFields widens the field mask and parses rating/hours/phone/photo', asy
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test scraper/places.test.ts`
-Expected: FAIL — `out[0].rating` is `undefined` (mask not widened, fields not parsed).
+Expected: FAIL - `out[0].rating` is `undefined` (mask not widened, fields not parsed).
 
-- [ ] **Step 3: Implement** — in `scraper/places.ts`, extend the interface and options, widen the mask, parse the fields.
+- [ ] **Step 3: Implement** - in `scraper/places.ts`, extend the interface and options, widen the mask, parse the fields.
 
 Replace the `DiscoveredNursery` interface:
 
@@ -154,7 +154,7 @@ git commit -m "feat(scraper): Places rich field mask (rating/hours/phone/photo)"
 
 Resolves a Places photo resource name to a keyless `googleusercontent.com` CDN URL by reading the media endpoint's redirect `Location` header server-side (so no API key reaches the client).
 
-- [ ] **Step 1: Write the failing test** — append to `scraper/places.test.ts`:
+- [ ] **Step 1: Write the failing test** - append to `scraper/places.test.ts`:
 
 ```ts
 import { resolvePhotoUrl } from './places.ts';
@@ -184,9 +184,9 @@ test('resolvePhotoUrl returns undefined on failure', async () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test scraper/places.test.ts`
-Expected: FAIL — `resolvePhotoUrl` is not exported.
+Expected: FAIL - `resolvePhotoUrl` is not exported.
 
-- [ ] **Step 3: Implement** — add to `scraper/places.ts`. The Places media endpoint with `skipHttpRedirect=true` returns JSON `{ photoUri }` pointing at the keyless CDN URL:
+- [ ] **Step 3: Implement** - add to `scraper/places.ts`. The Places media endpoint with `skipHttpRedirect=true` returns JSON `{ photoUri }` pointing at the keyless CDN URL:
 
 ```ts
 const PLACES_PHOTO_BASE = 'https://places.googleapis.com/v1/';
@@ -194,7 +194,7 @@ const PLACES_PHOTO_BASE = 'https://places.googleapis.com/v1/';
 /* Resolve a Places photo resource name to a keyless googleusercontent CDN URL.
  * Uses skipHttpRedirect=true so the endpoint returns { photoUri } as JSON
  * instead of a 302; that URI needs no API key and is safe to send to clients.
- * Never throws — returns undefined so the card falls back to a placeholder. */
+ * Never throws - returns undefined so the card falls back to a placeholder. */
 export async function resolvePhotoUrl(
   photoName: string,
   apiKey: string,
@@ -224,12 +224,12 @@ Expected: PASS.
 
 ```bash
 git add scraper/places.ts scraper/places.test.ts
-git commit -m "feat(scraper): resolvePhotoUrl — keyless Places photo CDN URL"
+git commit -m "feat(scraper): resolvePhotoUrl - keyless Places photo CDN URL"
 ```
 
 ---
 
-## Task 3: `pipeline.ts` — `NurseryResult` type, haversine, and `runNurserySearch` core
+## Task 3: `pipeline.ts` - `NurseryResult` type, haversine, and `runNurserySearch` core
 
 **Files:**
 - Create: `scraper/pipeline.ts`
@@ -237,7 +237,7 @@ git commit -m "feat(scraper): resolvePhotoUrl — keyless Places photo CDN URL"
 
 `runNurserySearch` takes an injectable `deps` object so tests run with no network. Defaults wire the real `core.ts` / `places.ts` functions.
 
-- [ ] **Step 1: Write the failing test** — create `scraper/pipeline.test.ts`:
+- [ ] **Step 1: Write the failing test** - create `scraper/pipeline.test.ts`:
 
 ```ts
 import { test } from 'node:test';
@@ -255,7 +255,7 @@ function makeDeps(over: Partial<PipelineDeps> = {}): PipelineDeps {
     extract: async () => ({
       plants: [{ name: 'Monstera', price: '₪175', availability: 'in_stock' }],
       report: { is_valid: true, confidence_score: 90, feedback: '', corrected_output: [] },
-      engines: { extractor: 'gpt-5.5', verifier: 'gpt-5.5' },
+      engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
     }),
     scrapeHome: async () => 'homepage text',
     infer: async () => ({ confidence: 0, reasoning: '' }),
@@ -297,7 +297,7 @@ test('0 scraped products → estimate card (hasPlant false, availabilityNote set
   );
   assert.equal(out[0].hasPlant, false);
   assert.equal(out[0].inStockKnown, false);
-  assert.equal(out[0].plantPrice, '—');
+  assert.equal(out[0].plantPrice, '-');
   assert.match(out[0].availabilityNote ?? '', /72%/);
 });
 ```
@@ -305,9 +305,9 @@ test('0 scraped products → estimate card (hasPlant false, availabilityNote set
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test scraper/pipeline.test.ts`
-Expected: FAIL — cannot find module `./pipeline.ts`.
+Expected: FAIL - cannot find module `./pipeline.ts`.
 
-- [ ] **Step 3: Implement** — create `scraper/pipeline.ts`:
+- [ ] **Step 3: Implement** - create `scraper/pipeline.ts`:
 
 ```ts
 /*
@@ -337,7 +337,7 @@ export interface NurseryResult {
   hours?: string;
   phone?: string;
   image?: string;
-  plantPrice: string; // '₪XX' or '—'
+  plantPrice: string; // '₪XX' or '-'
   hasPlant: boolean; // a real in-stock product was scraped
   inStockKnown: boolean; // we have an exact listing (vs an LLM estimate)
   availabilityNote?: string; // estimate text when inStockKnown is false
@@ -405,7 +405,7 @@ async function scrapeOne(
     hours: n.hours,
     phone: n.phone,
     image: n.photoName ? await deps.resolvePhoto(n.photoName) : undefined,
-    plantPrice: '—',
+    plantPrice: '-',
     hasPlant: false,
     inStockKnown: false,
     shipsToHome,
@@ -495,12 +495,12 @@ git commit -m "feat(scraper): runNurserySearch pipeline (DI seam, haversine, est
 
 ---
 
-## Task 4: `pipeline.ts` — empty-discovery fallback + ship-to-home tests
+## Task 4: `pipeline.ts` - empty-discovery fallback + ship-to-home tests
 
 **Files:**
 - Test: `scraper/pipeline.test.ts` (the production code already implements these; this task locks them with tests)
 
-- [ ] **Step 1: Write the failing tests** — append to `scraper/pipeline.test.ts`:
+- [ ] **Step 1: Write the failing tests** - append to `scraper/pipeline.test.ts`:
 
 ```ts
 test('empty Places discovery falls back to the testing URL list', async () => {
@@ -539,7 +539,7 @@ test('no local stock → national ship-to-home options appended (shipsToHome tru
 - [ ] **Step 2: Run tests**
 
 Run: `node --test scraper/pipeline.test.ts`
-Expected: PASS — production code from Task 3 already satisfies these (this task proves the fallbacks).
+Expected: PASS - production code from Task 3 already satisfies these (this task proves the fallbacks).
 If either fails, fix `runNurserySearch` per the Task 3 implementation (do not edit the tests to pass).
 
 - [ ] **Step 3: Commit**
@@ -551,7 +551,7 @@ git commit -m "test(scraper): empty-discovery + ship-to-home fallbacks"
 
 ---
 
-## Task 5: `server/index.ts` — the API server
+## Task 5: `server/index.ts` - the API server
 
 **Files:**
 - Create: `server/index.ts`
@@ -559,7 +559,7 @@ git commit -m "test(scraper): empty-discovery + ship-to-home fallbacks"
 
 Wires the real `core.ts`/`places.ts` functions into `PipelineDeps`, reads keys from server env, serves JSON.
 
-- [ ] **Step 1: Implement** — create `server/index.ts`:
+- [ ] **Step 1: Implement** - create `server/index.ts`:
 
 ```ts
 #!/usr/bin/env node
@@ -668,7 +668,7 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => console.log(`Nursery API → http://localhost:${PORT}`));
 ```
 
-- [ ] **Step 2: Add scripts** — in `package.json` `"scripts"`, add:
+- [ ] **Step 2: Add scripts** - in `package.json` `"scripts"`, add:
 
 ```json
     "server": "node server/index.ts",
@@ -705,20 +705,20 @@ git commit -m "feat(server): nursery API (GET /api/nurseries, /health, CORS)"
 
 Keep the dashboard working but delete its duplicated orchestration, delegating to the shared pipeline. The dashboard's HTML table can render `NurseryResult[]` (name, plantPrice, availabilityNote, site=host).
 
-- [ ] **Step 1: Replace the `/api/scrape` handler body** — build the same `deps` object as `server/index.ts` (import `runNurserySearch`), and for the discovery path call `runNurserySearch({ plantName: query, lat, lng })`. Remove the now-unused `handleScrape`, `NATIONAL_NURSERIES`, and `Row` duplication from `dashboard/server.ts`; map `NurseryResult[]` to the existing table rows:
+- [ ] **Step 1: Replace the `/api/scrape` handler body** - build the same `deps` object as `server/index.ts` (import `runNurserySearch`), and for the discovery path call `runNurserySearch({ plantName: query, lat, lng })`. Remove the now-unused `handleScrape`, `NATIONAL_NURSERIES`, and `Row` duplication from `dashboard/server.ts`; map `NurseryResult[]` to the existing table rows:
 
 ```ts
 const rows = results.map((n) => ({
   site: n.id,
   name: n.hasPlant ? n.name : `${query} (estimate)`,
   price: n.plantPrice,
-  availability: n.inStockKnown ? 'in stock' : (n.availabilityNote ?? '—'),
+  availability: n.inStockKnown ? 'in stock' : (n.availabilityNote ?? '-'),
   estimate: !n.inStockKnown,
   shipsToHome: n.shipsToHome,
 }));
 ```
 
-(The non-discovery path — blank location — can keep reading `nurseries_scraping_testing` and pass those as a zero-coord discovery via a small local deps override, or simply require a location now. Choose the minimal change that keeps `node dashboard/server.ts` booting.)
+(The non-discovery path - blank location - can keep reading `nurseries_scraping_testing` and pass those as a zero-coord discovery via a small local deps override, or simply require a location now. Choose the minimal change that keeps `node dashboard/server.ts` booting.)
 
 - [ ] **Step 2: Verify the dashboard still boots**
 
@@ -760,7 +760,7 @@ EXPOSE 8080
 CMD ["node", "server/index.ts"]
 ```
 
-- [ ] **Step 2: Document server keys** — append to `.env.example`:
+- [ ] **Step 2: Document server keys** - append to `.env.example`:
 
 ```
 # --- Server-side only (NOT bundled into the app) ---
@@ -798,11 +798,11 @@ git commit -m "chore(server): Dockerfile + server-side env docs (AWS-portable)"
 - In-memory cache (TTL ~15min) → **deferred to Plan 2 integration or a follow-up** (noted; not required for a working API). ⚠️
 - App integration (types, service, screens) → **Plan 2** (out of scope here). ✅ by decomposition.
 
-**Placeholder scan:** No TBD/TODO; all code blocks are complete. The dashboard non-discovery path (Task 6 Step 1) intentionally allows a minimal choice — flagged, not a silent gap.
+**Placeholder scan:** No TBD/TODO; all code blocks are complete. The dashboard non-discovery path (Task 6 Step 1) intentionally allows a minimal choice - flagged, not a silent gap.
 
 **Type consistency:** `NurseryResult`, `PipelineDeps`, `SearchInput` defined in Task 3 and consumed unchanged in Tasks 4–6. `DiscoveredNursery` extended in Task 1 and used by `pipeline.ts`/`server`. `resolvePhotoUrl` signature consistent across Tasks 2, 3, 5.
 
-**Note on the deferred cache:** added as an explicit follow-up rather than silently dropped — `runNurserySearch` is a pure function of its inputs, so a memoizing wrapper in `server/index.ts` can be added later without touching the pipeline.
+**Note on the deferred cache:** added as an explicit follow-up rather than silently dropped - `runNurserySearch` is a pure function of its inputs, so a memoizing wrapper in `server/index.ts` can be added later without touching the pipeline.
 
 ---
 

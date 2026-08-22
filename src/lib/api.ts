@@ -6,7 +6,7 @@
  * server, which holds them.
  *
  * `EXPO_PUBLIC_API_SECRET` is the one value still compiled into the bundle. It
- * is a speed bump against casual abuse, NOT authentication — anyone with the
+ * is a speed bump against casual abuse, NOT authentication - anyone with the
  * app can extract it. What actually bounds the bill is the server's hard daily
  * cap (see server/gate.ts). Do not treat this value as a secret in any design
  * decision that follows.
@@ -23,7 +23,7 @@ export const apiHeaders = (extra?: Record<string, string>): Record<string, strin
 
 /*
  * Shape of every error body the server returns: a stable machine `error` code
- * plus neutral user-facing prose. Provider text never appears in either — that
+ * plus neutral user-facing prose. Provider text never appears in either - that
  * is deliberate and enforced server-side in `fail()` (TODOS H3).
  */
 export interface ApiError {
@@ -38,7 +38,7 @@ export async function readApiError(res: Response): Promise<ApiError> {
       return { error: body.error, message: typeof body.message === 'string' ? body.message : '' };
     }
   } catch {
-    /* non-JSON body — fall through to the status-only shape */
+    /* non-JSON body - fall through to the status-only shape */
   }
   return { error: `http_${res.status}`, message: '' };
 }

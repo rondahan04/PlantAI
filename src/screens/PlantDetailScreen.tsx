@@ -82,7 +82,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
   const color = t.color[CONDITION_COLOR[diagnosis.condition] ?? 'conditionModerate'];
   const water = wateringState(diagnosis.carePlan, plant.lastWateredAt, Date.now());
   /*
-   * Watered, and not due again yet — there is no watering to log. `ok` is the
+   * Watered, and not due again yet - there is no watering to log. `ok` is the
    * only status that means this: `due` and `overdue` are exactly when the
    * button has to work, and `never_watered` is the tap that starts everything.
    */
@@ -95,7 +95,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
    * written FIRST and the notification scheduled after. Storage is the source of
    * truth for the schedule, so a reminder scheduled against a watering that
    * failed to persist would fire for a date the app does not believe in. The
-   * reverse — a stored watering with no notification — is the degraded state
+   * reverse - a stored watering with no notification - is the degraded state
    * this whole feature is designed to survive, since the detail screen and the
    * library badge both read from storage, not from the OS.
    */
@@ -152,7 +152,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
             Alert.alert("Couldn't remove", 'Your device is out of storage space.');
             return;
           }
-          // The record is gone, so its photo is unreachable — leaving the file
+          // The record is gone, so its photo is unreachable - leaving the file
           // behind would grow the document directory forever. Deleted after
           // the write, never before: a failed removal must not cost the user a
           // picture of a plant that is still in their library.
@@ -200,6 +200,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
 
         <Text style={s.name}>{diagnosis.plantName}</Text>
         {!!diagnosis.scientificName && <Text style={s.sciName}>{diagnosis.scientificName}</Text>}
+        {!!diagnosis.variety && <Text style={s.sciName}>{diagnosis.variety}</Text>}
         {!!diagnosis.description && <Text style={s.desc}>{diagnosis.description}</Text>}
 
         {diagnosis.issues.length > 0 && (
@@ -234,7 +235,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
         {/*
           Absent for every plant saved before this field existed, and for any
           diagnosis where the model's care plan failed validation server-side.
-          Nothing is rendered in that case — a "Care plan" heading over three
+          Nothing is rendered in that case - a "Care plan" heading over three
           empty rows would read as a broken screen rather than as missing data.
         */}
         {!!diagnosis.carePlan && (
@@ -252,7 +253,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
               >
                 {/*
                   The water row is tinted blue so the eye connects it to the
-                  schedule card directly beneath — they are one idea split over
+                  schedule card directly beneath - they are one idea split over
                   two blocks, and the colour is what says so.
                 */}
                 <View style={[s.careIconWrap, key === 'water' && { backgroundColor: t.color.waterWash }]}>
@@ -270,7 +271,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
               own section: "every 7-10 days" and "next water in 3 days" are the
               same fact in two tenses, and splitting them makes the user read
               the interval twice. Absent entirely when the diagnosis carried no
-              number — a tap that promises a reminder the app cannot schedule is
+              number - a tap that promises a reminder the app cannot schedule is
               worse than no button.
             */}
             {water.status !== 'unscheduled' && (
@@ -322,7 +323,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
                   Nothing to do until the plant is due again, so the button
                   stops being a button: filled and blue while there is an action
                   to take, an outlined "Watered" receipt once the schedule is
-                  running. It comes back on its own the day watering is due —
+                  running. It comes back on its own the day watering is due -
                   the state is derived from the schedule, never from a flag
                   somebody has to remember to clear.
                 */}
@@ -340,7 +341,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
                    * off: a tap does nothing, but a hold still logs a watering.
                    * Someone who tops a plant up on day 3 of a 7-day interval is
                    * not making a mistake, and a schedule that refuses the real
-                   * event goes stale — but it takes a deliberate press, so the
+                   * event goes stale - but it takes a deliberate press, so the
                    * common case (already watered, nothing to do) stays inert.
                    */
                   onPress={settled ? undefined : handleWater}
@@ -375,7 +376,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
                   The date the plant was last watered was the wrong fact to end
                   on: it is history, and the only question a person opens this
                   card with is when the next watering is. That answer is the
-                  status line above, so this row carries only what it does not —
+                  status line above, so this row carries only what it does not -
                   whether the OS will actually remind them, and how to log an
                   early watering once the button has gone quiet.
                 */}
@@ -449,7 +450,7 @@ const makeStyles = (t: Theme) =>
 
     /*
      * Same card shell as a treatment, deliberately: both are advice about this
-     * plant. The icon column is what separates them at a glance — no urgency
+     * plant. The icon column is what separates them at a glance - no urgency
      * colour here, because ongoing care is never the thing to act on first.
      */
     careCard: {
@@ -518,7 +519,7 @@ const makeStyles = (t: Theme) =>
     },
     waterBtnPressed: { backgroundColor: t.color.waterPressed, transform: [{ scale: 0.98 }] },
     /*
-     * Outlined, unfilled, unlifted — a receipt rather than an action. Greying it
+     * Outlined, unfilled, unlifted - a receipt rather than an action. Greying it
      * out was the alternative and was rejected: a disabled grey control reads as
      * "broken" or "not available to you", when what actually happened is the
      * user succeeded.

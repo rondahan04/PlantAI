@@ -1,5 +1,5 @@
 /**
- * Unit tests for Places nursery discovery. No network — fetch is injected.
+ * Unit tests for Places nursery discovery. No network - fetch is injected.
  * Run: node --test scraper/places.test.ts
  */
 import { test } from 'node:test';

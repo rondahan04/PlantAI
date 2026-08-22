@@ -20,7 +20,7 @@ export interface NurseryResult {
   hours?: string;
   phone?: string;
   image?: string;
-  plantPrice: string; // '₪XX' or '—'
+  plantPrice: string; // '₪XX' or '-'
   hasPlant: boolean; // a real in-stock product was scraped
   inStockKnown: boolean; // we have an exact listing (vs an LLM estimate)
   availabilityNote?: string; // estimate text when inStockKnown is false
@@ -94,7 +94,7 @@ async function scrapeOne(
     hours: n.hours,
     phone: n.phone,
     image: n.photoName ? await deps.resolvePhoto(n.photoName) : undefined,
-    plantPrice: '—',
+    plantPrice: '-',
     hasPlant: false,
     inStockKnown: false,
     shipsToHome,

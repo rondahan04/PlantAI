@@ -5,7 +5,7 @@
  * It has to reach the app through `EXPO_PUBLIC_API_SECRET`, which is the exact
  * mechanism that leaked the OpenAI key: anyone holding the app bundle can
  * extract it in about a minute. Do not build anything on top of this assuming
- * the endpoint is authenticated — it is not, and it cannot be until per-device
+ * the endpoint is authenticated - it is not, and it cannot be until per-device
  * attestation lands (deferred: "Per-device quota / App Attest on the API").
  *
  * THE HARD DAILY CAP IS WHAT ACTUALLY BOUNDS THE BILL. Every allowed nursery
@@ -16,8 +16,8 @@
  *
  * DEPLOY ORDER MATTERS. Ship with GATE_MODE=log first, let the `eas update`
  * carrying the secret propagate to installed apps, THEN flip to
- * GATE_MODE=enforce. Enforcing first locks every existing build — including
- * yours — out of your own API.
+ * GATE_MODE=enforce. Enforcing first locks every existing build - including
+ * yours - out of your own API.
  */
 
 export type GateMode = 'log' | 'enforce';
@@ -107,17 +107,17 @@ export function createGate(config: GateConfig, now: () => number = Date.now) {
     if (config.mode === 'log') {
       wouldReject++;
       allowed++;
-      console.warn(`[gate] log-only: would reject ${ip} — ${verdict.reason}`);
+      console.warn(`[gate] log-only: would reject ${ip} - ${verdict.reason}`);
       return { ...OK, reason: verdict.reason };
     }
 
     rejected++;
-    console.warn(`[gate] reject ${ip} — ${verdict.reason}`);
+    console.warn(`[gate] reject ${ip} - ${verdict.reason}`);
     return verdict;
   }
 
   function evaluate(ip: string, secretHeader: string | undefined): GateDecision {
-    // 1. Daily cap first — it is the limit that actually protects the bill, and
+    // 1. Daily cap first - it is the limit that actually protects the bill, and
     //    it should hold even for a caller presenting a valid secret.
     if (allowed >= config.dailyCap) {
       return {
@@ -177,7 +177,7 @@ export function createGate(config: GateConfig, now: () => number = Date.now) {
   }
 
   /*
-   * Secret-only check for the free endpoints — job polling in particular. A
+   * Secret-only check for the free endpoints - job polling in particular. A
    * poll costs one map lookup, so it must not consume the daily cap and must
    * not count against the per-minute burst limit: an eight-minute scrape polled
    * every three seconds is ~160 requests, which the burst limit would kill
@@ -203,7 +203,7 @@ export function createGate(config: GateConfig, now: () => number = Date.now) {
         reason: secretHeader ? 'wrong x-plantai-key' : 'missing x-plantai-key',
       };
       if (config.mode === 'log') {
-        console.warn(`[gate] log-only: would reject ${ip} — ${d.reason}`);
+        console.warn(`[gate] log-only: would reject ${ip} - ${d.reason}`);
         return { ...OK, reason: d.reason };
       }
       return d;

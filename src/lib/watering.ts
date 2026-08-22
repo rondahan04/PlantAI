@@ -3,7 +3,7 @@ import type { CarePlan } from '../types';
 /*
  * The watering schedule.
  *
- * Pure on purpose — no storage, no clock, no notifications. Everything here is
+ * Pure on purpose - no storage, no clock, no notifications. Everything here is
  * (care plan, when it was last watered, now) → what to show. That is what makes
  * the interesting cases testable without a device: a plant three days overdue,
  * a plant never watered, a plant whose diagnosis carried no interval at all.
@@ -11,7 +11,7 @@ import type { CarePlan } from '../types';
  * TWO ENDS OF A RANGE, TWO MEANINGS. "Every 7-10 days" is not a deadline, it is
  * a window: watering is DUE at day 7 and OVERDUE after day 10. Picking a single
  * day out of that range would have meant choosing between nagging early and
- * warning late, and either choice is wrong for half the species — overwatering
+ * warning late, and either choice is wrong for half the species - overwatering
  * kills more houseplants than drought, and the care plan's own advice is to
  * check the soil rather than obey the calendar. So the window is shown as a
  * window, and "due" means "go check it", not "you are late".
@@ -20,7 +20,7 @@ import type { CarePlan } from '../types';
 export const DAY_MS = 86_400_000;
 
 export type WateringStatus =
-  /* No interval in the care plan — nothing to schedule, only prose to read. */
+  /* No interval in the care plan - nothing to schedule, only prose to read. */
   | 'unscheduled'
   /* Scheduled, but the user has never logged a watering, so there is no anchor. */
   | 'never_watered'
@@ -46,7 +46,7 @@ export function hasSchedule(carePlan: CarePlan | undefined): boolean {
   return typeof carePlan?.waterEveryDays === 'number';
 }
 
-/* "Every 7-10 days" / "Every 14 days" — the interval as the user reads it. */
+/* "Every 7-10 days" / "Every 14 days" - the interval as the user reads it. */
 export function intervalLabel(carePlan: CarePlan | undefined): string {
   const min = carePlan?.waterEveryDays;
   if (typeof min !== 'number') return '';
@@ -102,7 +102,7 @@ export function wateringState(
 
   const nextDueAt = last + min * DAY_MS;
   /*
-   * The window closes at the far end of the range, plus the rest of that day —
+   * The window closes at the far end of the range, plus the rest of that day -
    * a plant is not "1 day overdue" an hour after the window's last day begins.
    * With no range, the single figure gets the same one-day grace, so a schedule
    * never flips from on-time to late within the same day.
@@ -130,7 +130,7 @@ export function wateringState(
       status: 'due',
       nextDueAt,
       daysUntilDue,
-      label: max ? 'Due now — check the soil' : 'Due today',
+      label: max ? 'Due now - check the soil' : 'Due today',
     };
   }
 

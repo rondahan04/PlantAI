@@ -1,5 +1,5 @@
 /**
- * Unit tests for runNurserySearch. No network — every dependency is injected.
+ * Unit tests for runNurserySearch. No network - every dependency is injected.
  * Run: node --test scraper/pipeline.test.ts
  */
 import { test } from 'node:test';
@@ -26,7 +26,7 @@ function makeDeps(over: Partial<PipelineDeps> = {}): PipelineDeps {
     extract: async () => ({
       plants: [{ name: 'Monstera', price: '₪175', availability: 'in_stock' }],
       report: { is_valid: true, confidence_score: 90, feedback: '', corrected_output: [] },
-      engines: { extractor: 'gpt-5.5', verifier: 'gpt-5.5' },
+      engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
     }),
     scrapeHome: async () => 'homepage text',
     infer: async () => ({ confidence: 0, reasoning: '' }),
@@ -68,7 +68,7 @@ test('0 scraped products → estimate card (hasPlant false, availabilityNote set
   );
   assert.equal(out[0].hasPlant, false);
   assert.equal(out[0].inStockKnown, false);
-  assert.equal(out[0].plantPrice, '—');
+  assert.equal(out[0].plantPrice, '-');
   assert.match(out[0].availabilityNote ?? '', /72%/);
 });
 
@@ -127,7 +127,7 @@ test('in-stock nurseries sort before estimate-only ones', async () => {
           : {
               plants: [{ name: 'Monstera', price: '₪150', availability: 'in_stock' }],
               report: { is_valid: true, confidence_score: 90, feedback: '', corrected_output: [] },
-              engines: { extractor: 'gpt-5.5', verifier: 'gpt-5.5' },
+              engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
             };
       },
     })
