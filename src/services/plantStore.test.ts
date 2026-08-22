@@ -115,6 +115,42 @@ test('50 plants all survive - the library is not silently capped', () => {
   assert.equal(r.plants.length, 50);
 });
 
+test('a force-quit mid-write loses only the in-flight save, not the ones before it', () => {
+  // Item 11 (E10): the write that was interrupted is reported as failed by the
+  // read-back, but that must not touch the bytes already on disk from the
+  // saves that came before it.
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  for (let i = 0; i < 25; i++) store.save({ photoUri: `p${i}`, diagnosis });
+
+  s.breakWrites('throw'); // simulates the process dying mid setItem
+  const interrupted = store.save({ photoUri: 'p25-interrupted', diagnosis });
+  assert.equal(interrupted.ok, false);
+
+  s.fixWrites();
+  const afterRelaunch = createPlantStore(s.deps, fixedOpts()).load();
+  assert.equal(afterRelaunch.ok, true);
+  assert.equal(afterRelaunch.plants.length, 25, 'the 25 confirmed saves survive the crash');
+  assert.ok(!afterRelaunch.plants.some((p) => p.photoUri === 'p25-interrupted'));
+});
+
+test('saving resumes normally after a force-quit, reaching the full count', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  for (let i = 0; i < 25; i++) store.save({ photoUri: `p${i}`, diagnosis });
+
+  s.breakWrites('throw');
+  store.save({ photoUri: 'lost-to-crash', diagnosis });
+  s.fixWrites();
+
+  const resumed = createPlantStore(s.deps, fixedOpts());
+  for (let i = 25; i < 50; i++) resumed.save({ photoUri: `p${i}`, diagnosis });
+
+  const r = resumed.load();
+  assert.equal(r.ok, true);
+  assert.equal(r.plants.length, 50, 'all 50 intended saves are readable after resuming');
+});
+
 test('remove deletes only the named plant', () => {
   const s = fakeStorage();
   const store = createPlantStore(s.deps, fixedOpts());
@@ -207,6 +243,22 @@ test('corrupt data is quarantined, never destroyed', () => {
   const s = fakeStorage({ [LIBRARY_KEY]: raw });
   createPlantStore(s.deps, fixedOpts()).load();
   assert.equal(s.data.get(QUARANTINE_KEY), raw, 'the bytes must still exist somewhere');
+});
+
+test('truncated JSON is distinguishable from a real empty library', () => {
+  // Item 11 (E10): "you have no plants" and "your library broke" must not
+  // collapse into the same shape, or the UI cannot tell a new user from a
+  // corrupted one.
+  const truncated = createPlantStore(
+    fakeStorage({ [LIBRARY_KEY]: '{"version":1,"plants":[{"id":"x"' }).deps,
+    fixedOpts()
+  ).load();
+  const empty = createPlantStore(fakeStorage().deps, fixedOpts()).load();
+
+  assert.equal(truncated.ok, false);
+  assert.equal(truncated.ok === false && truncated.reason, 'corrupt');
+  assert.equal(empty.ok, true);
+  assert.notEqual(truncated.ok, empty.ok, 'the two cases must be told apart');
 });
 
 test('valid JSON of the wrong shape counts as corrupt', () => {

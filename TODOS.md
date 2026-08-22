@@ -140,13 +140,23 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
     directional glyphs, plist/manifest flags) already shipped and confirmed present in the
     prebuilt output; just never exercised under an actual RTL locale. Revisit before RTL is
     user-facing.
-11. **[M2] E10. Storage tests.** Needs 3 first.
-    - save 50, force-quit mid-write, relaunch → all 50 readable
-    - hand-write truncated JSON → recoverable error, not empty library
-12. **[M2] E9 follow-up. Confidence rendering.** Confirmed live 2026-08-17: the simulator run
-    rendered `Mini monstera` at **44%** with the same authority the old fabricated-87% mock had.
-    A confidently-wrong species is the fastest way to lose a user's trust in the whole product.
-    Thresholds can ship ahead of 12; real probabilities make them honest.
+11. ✅ **[M2] E10. Storage tests - done 2026-08-22.** `src/services/plantStore.test.ts`, 3 new
+    tests (226 total pass):
+    - force-quit mid-write (25 saved, 26th's `setItem` throws) → the 25 confirmed saves survive
+      a fresh `load()`, the interrupted one is absent, never half-written
+    - saving resumes after the crash and reaches the full intended count (50)
+    - truncated JSON asserted `ok:false` / `reason:'corrupt'`, explicitly distinguished from a
+      real empty library (`ok:true`) so the UI can't confuse "no plants" with "broken library"
+12. ✅ **[M2] E9 follow-up. Confidence rendering - already shipped 2026-08-16 (`c7b6986`), marked
+    done 2026-08-22.** `src/lib/confidence.ts` + `DiagnosisScreen.tsx` wiring: bar no longer
+    tinted with `condition.color` (was conflating species-match confidence with sickness
+    severity), `≥70%` renders plain, `40-69%` gets a "Probably" hedge + caveat card, `<40%` gets
+    "Possibly" + a stronger caveat and a retake affordance. Confirmed the species/confidence
+    number is PlantNet's alone (`server/diagnose.ts` prompts OpenAI to trust it and never
+    re-identify) - thresholds are built against that number, not a cross-checked one.
+    Added `src/lib/confidence.test.ts` 2026-08-22 (9 tests, 236 total pass): tier boundaries at
+    40/70, high tier has no hedge/caveat, moderate/low both hedge and caveat, the real 44-48%
+    run that motivated this stays non-plain, label always reflects the raw percent.
 13. **[M2] E1. Plant.id v3 disease classification, server-side.** `EXPO_PUBLIC_PLANTID_API_KEY`
     sits unused. Shape in learning `plantid-v3-response-shape`. Map: `is_healthy` → healthy;
     disease prob <0.3 mild, <0.6 moderate, <0.85 severe, ≥0.85 critical.
