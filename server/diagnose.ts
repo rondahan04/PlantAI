@@ -104,8 +104,7 @@ export interface HealthAssessment {
 
 /*
  * Mirrors `PipelineDeps` in scraper/pipeline.ts: real network calls are wired
- * in by the caller, tests pass stubs. Swapping PlantNet for Plant.id v3 (E1) is
- * a change to one dep, not a change to this module.
+ * in by the caller, tests pass stubs.
  */
 export interface DiagnosisDeps {
   identify(image: Buffer): Promise<Identification>;

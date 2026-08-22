@@ -9,6 +9,7 @@ import { RootStackParamList, Nursery, DeliveryMode } from '../types';
 import { Theme, useTheme } from '../theme';
 import { directionalIconStyle } from '../lib/rtl';
 import { fetchNearbyNurseries } from '../services/nurseryService';
+import { waMeLink } from '../lib/whatsapp';
 import StatusView from '../components/StatusView';
 
 type Styles = ReturnType<typeof makeStyles>;
@@ -243,7 +244,19 @@ export default function NurseriesScreen({ navigation, route }: Props) {
       Linking.openURL(nursery.website);
       return;
     }
-    Alert.alert(nursery.name, 'No website available for this nursery.');
+    // No site to send them to - a nursery scraped without one is exactly the
+    // case E5 exists for. Israeli nurseries answer WhatsApp, not web forms,
+    // so that beats a dead-ended "no website" alert.
+    const wa = nursery.phone && waMeLink(nursery.phone, `Hi, is ${plantName} available?`);
+    if (wa) {
+      Linking.openURL(wa);
+      return;
+    }
+    if (nursery.phone) {
+      Linking.openURL(`tel:${nursery.phone}`);
+      return;
+    }
+    Alert.alert(nursery.name, 'No website or phone number available for this nursery.');
   };
   const handleCall = (nursery: Nursery) => nursery.phone && Linking.openURL(`tel:${nursery.phone}`);
   const handleDirections = (nursery: Nursery) =>

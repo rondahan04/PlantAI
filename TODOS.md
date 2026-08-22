@@ -157,12 +157,18 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
     Added `src/lib/confidence.test.ts` 2026-08-22 (9 tests, 236 total pass): tier boundaries at
     40/70, high tier has no hedge/caveat, moderate/low both hedge and caveat, the real 44-48%
     run that motivated this stays non-plain, label always reflects the raw percent.
-13. **[M2] E1. Plant.id v3 disease classification, server-side.** `EXPO_PUBLIC_PLANTID_API_KEY`
-    sits unused. Shape in learning `plantid-v3-response-shape`. Map: `is_healthy` → healthy;
-    disease prob <0.3 mild, <0.6 moderate, <0.85 severe, ≥0.85 critical.
-14. **[M3] E5. WhatsApp `wa.me` + `tel:` handoff.** `phone` is already scraped; `onOrder` only
-    opens a site. This is the transact half of the thesis and the cheapest conversion win here -
-    Israeli nurseries answer WhatsApp, not web forms.
+13. ❌ **[M2] E1. Plant.id v3 disease classification, server-side - dropped 2026-08-22.** No free
+    tier and this project spends no real money, so a second paid provider for a signal PlantNet
+    (already free, already wired) covers isn't worth carrying. `EXPO_PUBLIC_PLANTID_API_KEY`
+    removed from `.env.example`; the local `.env` entry left empty and gitignored.
+14. ✅ **[M3] E5. WhatsApp `wa.me` + `tel:` handoff - done 2026-08-22.** `src/lib/whatsapp.ts`
+    (pure, 6 tests) normalizes `nursery.phone` (Google Places' local Israeli format, e.g.
+    `"050-123 4567"`) into a `wa.me` link with the leading 0 swapped for `972`, `+972` left
+    alone, and numbers too short to be real rejected rather than producing a dead link.
+    `NurseriesScreen.tsx` `handleOrder` was website-only and dead-ended nurseries without a
+    site in a "no website available" alert - it now falls through website → WhatsApp (prefilled
+    "Hi, is {plantName} available?") → `tel:` → alert, so a nursery scraped without a site is no
+    longer a transaction dead end. 242 tests pass, `tsc --noEmit` clean.
 15. **[M3] E4. Hebrew / RTL - layout half done 2026-08-19, copy still missing.**
     - ✅ **Mirroring.** Every physical edge in `src/` is now logical: `marginLeft/Right`,
       `paddingLeft/Right` and positional `left/right` → `marginStart/End`, `paddingStart/End`,
