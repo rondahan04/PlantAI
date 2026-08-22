@@ -3,6 +3,7 @@
     "name": "PlantAI",
     "slug": "PlantAI",
     "version": "1.0.0",
+    "scheme": "plantai",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",

@@ -1,4 +1,5 @@
 import * as Notifications from 'expo-notifications';
+import { notificationPrefs } from './notificationPrefs';
 
 /*
  * OS-level watering reminders.
@@ -63,6 +64,10 @@ export async function scheduleWateringReminder(args: {
   // A notification for a date that has passed either fires instantly or is
   // rejected outright, depending on the platform. Neither is a reminder.
   if (args.dueAt <= now) return null;
+
+  // Notifications screen toggle (issue #1 follow-up). Off means off - no OS
+  // permission prompt, no scheduling.
+  if (!notificationPrefs.load().wateringRemindersEnabled) return null;
 
   if (!(await ensureNotificationPermission())) return null;
 

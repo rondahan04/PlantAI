@@ -88,4 +88,13 @@ export type RootStackParamList = {
     lng: number;
     mode: DeliveryMode;
   };
+  Login: undefined;
+  Signup: undefined;
+  ForgotPassword: undefined;
+  ResetPasswordConfirm: undefined;
+  Settings: undefined;
+  EditProfileField: { field: 'full_name' | 'username'; current: string };
+  ManageAccount: undefined;
+  ChangePassword: undefined;
+  Notifications: undefined;
 };

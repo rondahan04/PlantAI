@@ -241,7 +241,8 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
 | - | Streaming partial nursery results | M | - |
 | - | Per-device quota / App Attest | M/L | Real protection vs a bundled secret. |
 | - | Home screen redesign | M | Scope undefined - what's changing and why. Conflicts with existing "do not touch Home" design-review rule; needs a design pass before code. |
-| - | Settings tab | M | New nav surface. Scope undefined - what lives there (notifications, language, account, data export?). |
+| - | Settings tab | M | Superseded by #1 (User Accounts + Settings/Profile) - scoped and filed 2026-08-22, eng-reviewed. Accounts are opt-in, no login wall on Home/diagnosis. |
+| - | Epic 3 - sync plant library to Supabase account | L | Deferred from #1 during eng review to keep the auth PR reviewable. Design: on first login on a device with local plants, one-shot opt-in prompt ("Import your N saved plants?") writes them into a `plants` table tagged with `user_id`, then clears local storage; declining leaves local storage untouched. Needs a `plants` table + cascade-delete-on-account-delete. Blocked on #1 shipping first. |
 
 ---
 

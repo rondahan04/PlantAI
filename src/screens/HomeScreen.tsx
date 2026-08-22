@@ -150,12 +150,21 @@ export default function HomeScreen({ navigation }: Props) {
             <>
               <View style={s.header}>
                 <Image source={APP_LOGO} style={s.logoIcon} accessibilityIgnoresInvertColors />
-                <View>
+                <View style={s.headerText}>
                   <Text style={s.logoText}>PlantAI</Text>
                   <Text style={s.logoSub}>
                     {profileName ? `${profileName}'s plants` : 'Plant Doctor'}
                   </Text>
                 </View>
+                <Pressable
+                  onPress={() => navigation.navigate('Settings')}
+                  accessibilityRole="button"
+                  accessibilityLabel="Account settings"
+                  style={s.settingsBtn}
+                  hitSlop={8}
+                >
+                  <Ionicons name="settings-outline" size={22} color={t.color.textSecondary} />
+                </Pressable>
               </View>
 
               {/*
@@ -216,10 +225,19 @@ export default function HomeScreen({ navigation }: Props) {
         {/* Header */}
         <Animated.View style={[s.header, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
           <Image source={APP_LOGO} style={s.logoIcon} accessibilityIgnoresInvertColors />
-          <View>
+          <View style={s.headerText}>
             <Text style={s.logoText}>PlantAI</Text>
             <Text style={s.logoSub}>{profileName ? `Hello, ${profileName}` : 'Plant Doctor'}</Text>
           </View>
+          <Pressable
+            onPress={() => navigation.navigate('Settings')}
+            accessibilityRole="button"
+            accessibilityLabel="Account settings"
+            style={s.settingsBtn}
+            hitSlop={8}
+          >
+            <Ionicons name="settings-outline" size={22} color={t.color.textSecondary} />
+          </Pressable>
         </Animated.View>
 
         {/* Hero */}
@@ -316,6 +334,8 @@ function makeStyles(t: Theme) {
     },
     logoText: { ...t.type.title, color: t.color.foreground },
     logoSub: { ...t.type.caption, color: t.color.secondary, writingDirection: 'auto' },
+    headerText: { flex: 1 },
+    settingsBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 
     heroCard: {
       marginTop: t.space.xl,
