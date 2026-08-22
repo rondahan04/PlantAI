@@ -241,7 +241,7 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
 ## ONGOING
 
 - ⚠️ **UPDATED — update the APIs site every time we change something in the architecture.**
-  Reference site (APIs/libraries/tools + request flow): https://claude.ai/code/artifact/3be7db1e-7822-4cce-8a4e-267b85d585b6
+  Site: https://plantai-api-docs.vercel.app (source: `docs/api-site/index.html`, deployed via `vercel --prod`).
   Trigger: adding/removing a provider, route, gate rule, or data flow. Mirrored on Trello.
 
 ---
