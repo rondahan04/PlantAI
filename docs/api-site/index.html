@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PlantAI Stack</title>
+<style>
+:root{
+  --bg:#f7f5ee;
+  --surface:#ffffff;
+  --ink:#1d2a1e;
+  --ink-soft:#5a655a;
+  --accent:#3f6b43;
+  --accent-strong:#264a2a;
+  --warn:#a85a22;
+  --line:#ddd8c9;
+  --diagram-bg:#1c2419;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#12160f;
+    --surface:#191f15;
+    --ink:#e7ede0;
+    --ink-soft:#a7b2a1;
+    --accent:#7fbf78;
+    --accent-strong:#a3d69b;
+    --warn:#e2965a;
+    --line:#2b3226;
+    --diagram-bg:#0e130c;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#12160f;
+  --surface:#191f15;
+  --ink:#e7ede0;
+  --ink-soft:#a7b2a1;
+  --accent:#7fbf78;
+  --accent-strong:#a3d69b;
+  --warn:#e2965a;
+  --line:#2b3226;
+  --diagram-bg:#0e130c;
+}
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:-apple-system,"Segoe UI",Arial,sans-serif;
+  line-height:1.6;
+}
+.wrap{max-width:780px;margin:0 auto;padding:48px 24px 80px;}
+h1{
+  font-family:"Iowan Old Style","Palatino Linotype",Georgia,serif;
+  font-size:1.9rem;
+  margin:0 0 6px;
+}
+.sub{color:var(--ink-soft);margin:0 0 40px;font-size:1rem;max-width:56ch;}
+h2{
+  font-size:1.1rem;
+  margin:0 0 14px;
+  border-bottom:1px solid var(--line);
+  padding-bottom:8px;
+}
+section{margin-bottom:44px;}
+code{
+  font-family:"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  font-size:0.86em;
+  background:var(--diagram-bg);
+  color:#e9ece7;
+  padding:0.1em 0.4em;
+  border-radius:4px;
+}
+
+/* diagram */
+figure{margin:0;background:var(--diagram-bg);border-radius:10px;padding:20px 16px 8px;}
+figure svg{width:100%;height:auto;display:block;color:#ffffff;}
+figure svg text{fill:#ffffff;font-size:15px;font-weight:600;}
+figure svg text.sub{font-size:12px;font-weight:500;fill:#d6dad2;}
+figure svg .accent{color:var(--accent);}
+figure svg text.accent{fill:var(--accent);}
+figure svg .warn{color:var(--warn);}
+figure svg text.warn{fill:var(--warn);}
+figcaption{font-size:0.8rem;color:var(--ink-soft);padding:10px 4px 4px;}
+
+/* tool list */
+ul.tools{list-style:none;margin:0;padding:0;display:grid;gap:10px;}
+ul.tools li{
+  display:flex;
+  gap:10px;
+  align-items:baseline;
+  background:var(--surface);
+  border:1px solid var(--line);
+  border-radius:8px;
+  padding:10px 14px;
+  font-size:0.94rem;
+}
+ul.tools li b{white-space:nowrap;color:var(--accent-strong);}
+ul.tools li span{color:var(--ink-soft);}
+
+/* flow steps */
+ol.flow{margin:0;padding:0 0 0 1.3em;}
+ol.flow li{margin-bottom:8px;max-width:62ch;}
+ol.flow code{color:var(--accent-strong);background:transparent;padding:0;}
+
+footer{color:var(--ink-soft);font-size:0.82rem;border-top:1px solid var(--line);padding-top:16px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>PlantAI Stack</h1>
+  <p class="sub">What's used, and which API gets called when.</p>
+
+  <section>
+    <h2>Diagram</h2>
+    <figure>
+      <svg viewBox="0 0 760 220" role="img" aria-label="Phone app talks to one Node server, which calls PlantNet and OpenAI for diagnosis, and Google Places, Firecrawl/Tavily, and OpenAI again for nursery search.">
+        <defs>
+          <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <g stroke-width="1.4" font-family="-apple-system,Segoe UI,sans-serif">
+          <rect x="10" y="80" width="130" height="60" rx="8" fill="none" stroke="currentColor"/>
+          <text x="75" y="115" text-anchor="middle">Expo app</text>
+
+          <line x1="140" y1="110" x2="204" y2="110" stroke="currentColor" marker-end="url(#a)"/>
+          <text x="172" y="96" text-anchor="middle" class="sub">HTTPS</text>
+
+          <rect x="204" y="70" width="150" height="80" rx="8" fill="none" stroke="currentColor" class="accent" stroke-width="1.8"/>
+          <text x="279" y="102" text-anchor="middle" class="accent">Node server</text>
+          <text x="279" y="122" text-anchor="middle" class="accent sub">gate + routes</text>
+
+          <line x1="354" y1="92" x2="410" y2="30" stroke="currentColor" marker-end="url(#a)"/>
+          <rect x="410" y="6" width="150" height="52" rx="8" fill="none" stroke="currentColor"/>
+          <text x="485" y="37" text-anchor="middle">PlantNet</text>
+
+          <line x1="354" y1="110" x2="410" y2="110" stroke="currentColor" marker-end="url(#a)"/>
+          <rect x="410" y="84" width="150" height="52" rx="8" fill="none" stroke="currentColor"/>
+          <text x="485" y="115" text-anchor="middle">OpenAI</text>
+
+          <line x1="354" y1="128" x2="410" y2="190" stroke="currentColor" marker-end="url(#a)"/>
+          <rect x="410" y="164" width="150" height="52" rx="8" fill="none" stroke="currentColor"/>
+          <text x="485" y="195" text-anchor="middle">Google Places</text>
+
+          <line x1="560" y1="110" x2="600" y2="110" stroke="currentColor" marker-end="url(#a)"/>
+          <rect x="600" y="84" width="150" height="52" rx="8" fill="none" stroke="currentColor"/>
+          <text x="675" y="107" text-anchor="middle" class="sub">Firecrawl</text>
+          <text x="675" y="124" text-anchor="middle" class="sub">(Tavily fallback)</text>
+        </g>
+      </svg>
+      <figcaption>One server, five providers. The app never talks to a provider directly.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>APIs, tools &amp; libraries</h2>
+    <ul class="tools">
+      <li><b>Expo / React Native</b><span>the phone app itself</span></li>
+      <li><b>Node <code>http</code></b><span>the backend - no framework, one process</span></li>
+      <li><b>PlantNet API</b><span>identifies the plant species from a photo</span></li>
+      <li><b>OpenAI (GPT-5.5, vision)</b><span>diagnoses health from the photo; also extracts product info from scraped text</span></li>
+      <li><b>Google Places API</b><span>finds nearby nurseries + their websites</span></li>
+      <li><b>Firecrawl</b><span>scrapes a nursery's site to markdown</span></li>
+      <li><b>Tavily</b><span>backup scraper if Firecrawl fails</span></li>
+      <li><b>expo-sqlite / kv-store</b><span>saves the plant library on-device</span></li>
+      <li><b>expo-file-system</b><span>saves plant photos on-device</span></li>
+      <li><b>expo-notifications</b><span>schedules watering reminders</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Flow 1 - diagnose a plant</h2>
+    <ol class="flow">
+      <li>App takes a photo, sends it to <code>POST /api/diagnose</code>.</li>
+      <li>Server calls <b>PlantNet</b> → gets the species.</li>
+      <li>Server calls <b>OpenAI</b> with the same photo + species → gets health, issues, care plan.</li>
+      <li>App saves the result locally and schedules a watering reminder.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Flow 2 - find a nursery</h2>
+    <ol class="flow">
+      <li>App sends location + plant name to <code>POST /api/nurseries</code> → gets a job id back right away (search can take minutes).</li>
+      <li>Server calls <b>Google Places</b> → nearby nurseries with websites.</li>
+      <li>For each one, server calls <b>Firecrawl</b> (or <b>Tavily</b> if that fails) to read the site, then <b>OpenAI</b> to pull out product + price.</li>
+      <li>App polls <code>GET /api/nurseries/job/:id</code> until it's done, then shows the results on a map.</li>
+    </ol>
+  </section>
+
+  <footer>Update this page whenever a provider, route, or flow changes.</footer>
+</div>
+</body>
+</html>

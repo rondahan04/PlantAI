@@ -197,7 +197,6 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
 
 | # | Item | Size | Note |
 |---|------|------|------|
-| B2.1 | Care schedule + `expo-notifications` | L | Config plugin + dev build. Permission prompt behind a flag — one-shot resource. Cancel on delete. |
 | P2 | In-app live nursery discovery | M | GPS → `scraper/places.ts` `discoverNurseries()` server-side. The real product goal. Gated on scrape speed. |
 | — | Scrape speed | M | Quality problem now, not correctness. Parallel fan-out, cheaper model, precomputed index. Best observed 47s (2026-08-17, 7 nurseries); worst seen 480s. |
 | — | Show "stock unknown" instead of dropping the row | S | The auditor rejects extractor rows whose page never states stock — e.g. `[decogarden.co.il] verification REJECTED (conf 92): the source text does not explicitly state stock status`. Correct call by the verifier, but the user loses a nursery that does stock the plant. Product decision: surface as `unknown` rather than drop. |
@@ -239,10 +238,19 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
 
 ---
 
+## ONGOING
+
+- ⚠️ **UPDATED — update the APIs site every time we change something in the architecture.**
+  Reference site (APIs/libraries/tools + request flow): https://claude.ai/code/artifact/3be7db1e-7822-4cce-8a4e-267b85d585b6
+  Trigger: adding/removing a provider, route, gate rule, or data flow. Mirrored on Trello.
+
+---
+
 ## SHIPPED
 
 | Item | What |
 |------|------|
+| B2.1 Care schedule | `expo-notifications` wired in `src/services/wateringReminder.ts` — 2026-08-19. Water-blue schedule card + watering history calendar on `PlantDetail`. Was still listed as backlog here; found shipped while building the Trello board. |
 | Plant library UI | Adaptive Home (D8/H2) + PlantDetail + triage grouping (D7). Library read synchronously during first render so a returning user never sees marketing content flash. Corrupt libraries warn rather than showing an empty state. |
 | PlantStore | Saved-plant persistence with read-back-confirmed writes and quarantine-on-corrupt. Plus `tsconfig.node.json`: `server/` and `scraper/` had never been typechecked, which is how a wrong-arity call reached production. `npm run typecheck` now gates both. |
 | M1 deploy | **https://plantai-api-eev0.onrender.com** (2026-08-18). Render free tier, no card, `render.yaml` Blueprint on `main`. Fly abandoned — will not provision without a credit card. Verified live: gate 401/415, `422 not_a_plant`, real diagnosis, real nursery scrape. |
