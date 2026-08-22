@@ -188,6 +188,17 @@ footer{color:var(--ink-soft);font-size:0.82rem;border-top:1px solid var(--line);
     </ol>
   </section>
 
+  <section>
+    <h2>How the scraper adapts to each site</h2>
+    <p>Every nursery's website is built on one of a handful of platforms, and each platform has its own search URL and its own markup. Rather than one scraper trying to parse every possible layout, the pipeline first figures out which platform a site is running, then uses the URL pattern that platform already supports.</p>
+    <ol class="flow">
+      <li><b>Fingerprint the homepage.</b> The scraped markdown/HTML is checked for tells: <code>cdn.shopify.com</code> or <code>/products/</code> means Shopify, <code>wp-content</code> or <code>/product-category/</code> means WooCommerce, <code>wixstatic.com</code> means Wix.</li>
+      <li><b>Reuse a known search pattern.</b> Each platform maps to a search-URL template - Shopify is <code>/search?q=</code>, WooCommerce is <code>/?s=&amp;post_type=product</code>, Wix is <code>/search?q=</code>. Recognizing the platform means the scraper already knows the right URL to hit, no guessing per site.</li>
+      <li><b>Retry with the rendered page.</b> Some storefronts build their markup client-side, so a static fetch shows nothing recognizable. If the first pass comes back <code>unknown</code>, the scraper re-fetches with JS rendering turned on.</li>
+      <li><b>Ask OpenAI as a last resort.</b> If the platform is still unrecognized, the page's scripts/CDN hints are handed to OpenAI to classify and to guess a search URL. That answer is saved to disk, so the same unfamiliar platform is never paid to classify twice.</li>
+    </ol>
+  </section>
+
   <footer>Update this page whenever a provider, route, or flow changes.</footer>
 </div>
 </body>
