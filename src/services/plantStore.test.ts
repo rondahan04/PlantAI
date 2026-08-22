@@ -175,6 +175,37 @@ test('removing an unknown id is a no-op, not a failure', () => {
   assert.equal(r.plants.length, 1);
 });
 
+test('replace() overwrites the whole library and persists it', () => {
+  const { deps, data } = fakeStorage();
+  const store = createPlantStore(deps, fixedOpts());
+
+  const first = store.save({ photoUri: 'a.jpg', diagnosis }).ok
+    ? store.load().plants
+    : [];
+  assert.equal(first.length, 1);
+
+  const incoming = [
+    { id: 'cloud-1', savedAt: '2026-08-01T00:00:00.000Z', photoUri: 'b.jpg', diagnosis },
+    { id: 'cloud-2', savedAt: '2026-08-02T00:00:00.000Z', photoUri: 'c.jpg', diagnosis },
+  ];
+  const result = store.replace(incoming);
+  assert.equal(result, true);
+
+  const reloaded = store.load();
+  assert.equal(reloaded.ok, true);
+  assert.deepEqual(reloaded.plants.map((p) => p.id), ['cloud-1', 'cloud-2']);
+  assert.ok(data.get(LIBRARY_KEY)?.includes('cloud-1'));
+});
+
+test('replace() returns false and does not persist when the write does not land', () => {
+  const { deps, breakWrites } = fakeStorage();
+  const store = createPlantStore(deps, fixedOpts());
+  breakWrites('throw');
+
+  const result = store.replace([{ id: 'x', savedAt: '2026-08-01T00:00:00.000Z', photoUri: 'a.jpg', diagnosis }]);
+  assert.equal(result, false);
+});
+
 // ─── Failure: the write that doesn't land ─────────────────────────────────────
 
 test('a write that throws is reported, never silently swallowed', () => {

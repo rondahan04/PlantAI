@@ -448,7 +448,18 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
     return { ok: true, plants: next };
   }
 
-  return { load, save, update, markWatered, remove };
+  /*
+   * Overwrite the whole library with `plants` as given - no id/timestamp
+   * generation, no merge with what is already stored. For a store standing in
+   * as a read cache of an external source of truth (the Supabase mirror),
+   * where the caller already has the authoritative list and generating new
+   * identity for it here would desync it from the source it mirrors.
+   */
+  function replace(plants: StoredPlant[]): boolean {
+    return persist(plants);
+  }
+
+  return { load, save, update, markWatered, remove, replace };
 }
 
 export type PlantStore = ReturnType<typeof createPlantStore>;
