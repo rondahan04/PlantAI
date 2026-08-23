@@ -8,7 +8,7 @@ import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
 import { directionalIconStyle } from '../lib/rtl';
 import { LOGO_GLYPH } from '../brand';
-import { plantLibrary } from '../services/plantLibrary';
+import { plantRepo } from '../services/plantRepoInstance';
 import { plantPhotos } from '../services/photos';
 import { intervalLabel, wateringState } from '../lib/watering';
 import { cancelWateringReminder, scheduleWateringReminder } from '../services/wateringReminder';
@@ -56,7 +56,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
   const { plantId } = route.params;
 
   const [plant, setPlant] = useState(() =>
-    plantLibrary.load().plants.find((p) => p.id === plantId) ?? null
+    plantRepo.loadLocal().plants.find((p) => p.id === plantId) ?? null
   );
   const [watering, setWatering] = useState(false);
 
@@ -108,13 +108,15 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
       await cancelWateringReminder(plant.reminderId);
 
       const at = Date.now();
-      const logged = plantLibrary.markWatered(plant.id, at);
+      const logged = await plantRepo.markWatered(plant.id, at);
       if (!logged.ok) {
         Alert.alert(
           "Couldn't record that",
           logged.reason === 'not_found'
             ? 'This plant is no longer saved.'
-            : 'Your device is out of storage space, so the watering was not saved.'
+            : logged.reason === 'network'
+              ? "Couldn't reach your account. Check your connection and try again."
+              : 'Your device is out of storage space, so the watering was not saved.'
         );
         return;
       }
@@ -133,7 +135,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
       });
       if (!reminderId) return;
 
-      const stored = plantLibrary.update(plant.id, { reminderId });
+      const stored = await plantRepo.update(plant.id, { reminderId });
       if (stored.ok) setPlant(stored.plant);
     } finally {
       setWatering(false);
@@ -146,10 +148,15 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
       {
         text: 'Remove',
         style: 'destructive',
-        onPress: () => {
-          const result = plantLibrary.remove(plant.id);
+        onPress: async () => {
+          const result = await plantRepo.remove(plant.id);
           if (!result.ok) {
-            Alert.alert("Couldn't remove", 'Your device is out of storage space.');
+            Alert.alert(
+              "Couldn't remove",
+              result.reason === 'network'
+                ? "Couldn't reach your account. Check your connection and try again."
+                : 'Your device is out of storage space.'
+            );
             return;
           }
           // The record is gone, so its photo is unreachable - leaving the file
