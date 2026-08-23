@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { plantRepo } from './plantRepoInstance';
 import { isUniqueViolation } from '../lib/authErrors';
 import type { Session } from '@supabase/supabase-js';
 
@@ -73,6 +74,9 @@ export async function signIn(email: string, password: string): Promise<Session> 
 export async function signOut(): Promise<void> {
   const { error } = await supabase.auth.signOut();
   if (error) throw new AuthServiceError(error.message);
+  // The mirror is a cache of the account being signed out of - it must not
+  // leak into a next login on a shared device.
+  plantRepo.wipeMirror();
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {
@@ -120,6 +124,7 @@ export async function deleteAccount(): Promise<void> {
   const { error } = await supabase.rpc('delete_own_account');
   if (error) throw new AuthServiceError(error.message);
   await supabase.auth.signOut();
+  plantRepo.wipeMirror();
 }
 
 export interface Profile {
