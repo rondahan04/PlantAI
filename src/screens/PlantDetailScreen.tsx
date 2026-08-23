@@ -59,6 +59,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
     plantRepo.loadLocal().plants.find((p) => p.id === plantId) ?? null
   );
   const [watering, setWatering] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
   /*
    * The plant is gone. Reachable if it was removed in another tab of the
@@ -149,22 +150,28 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
         text: 'Remove',
         style: 'destructive',
         onPress: async () => {
-          const result = await plantRepo.remove(plant.id);
-          if (!result.ok) {
-            Alert.alert(
-              "Couldn't remove",
-              result.reason === 'network'
-                ? "Couldn't reach your account. Check your connection and try again."
-                : 'Your device is out of storage space.'
-            );
-            return;
+          if (removing) return;
+          setRemoving(true);
+          try {
+            const result = await plantRepo.remove(plant.id);
+            if (!result.ok) {
+              Alert.alert(
+                "Couldn't remove",
+                result.reason === 'network'
+                  ? "Couldn't reach your account. Check your connection and try again."
+                  : 'Your device is out of storage space.'
+              );
+              return;
+            }
+            // The record is gone, so its photo is unreachable - leaving the file
+            // behind would grow the document directory forever. Deleted after
+            // the write, never before: a failed removal must not cost the user a
+            // picture of a plant that is still in their library.
+            plantPhotos.discard(plant.id);
+            navigation.goBack();
+          } finally {
+            setRemoving(false);
           }
-          // The record is gone, so its photo is unreachable - leaving the file
-          // behind would grow the document directory forever. Deleted after
-          // the write, never before: a failed removal must not cost the user a
-          // picture of a plant that is still in their library.
-          plantPhotos.discard(plant.id);
-          navigation.goBack();
         },
       },
     ]);
@@ -186,6 +193,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
           <Pressable
             style={s.removeBtn}
             onPress={confirmRemove}
+            disabled={removing}
             accessibilityRole="button"
             accessibilityLabel={`Remove ${diagnosis.plantName} from my plants`}
             hitSlop={8}
