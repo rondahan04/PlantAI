@@ -2,6 +2,23 @@ import type { PlantDiagnosis } from '../types';
 import type { StoredPlant } from './plantStore';
 
 /*
+ * Cloud sync for the plant library (Epic 3a).
+ *
+ * This module owns the network orchestration - upload-then-insert, fetch,
+ * update, delete, and one-shot import - behind the `CloudDeps` seam, the same
+ * pattern `plantStore.ts` and `photoStore.ts` use to stay testable without a
+ * live network or a real Supabase client. The real binding lives in
+ * `supabasePlantCloud.ts`; everything here treats rows and paths as opaque
+ * data it round-trips, not something it interprets.
+ *
+ * "Not found" is deliberately not a case this module reports: a plant that
+ * doesn't exist is detected one layer up, by `plantRepo` checking its local
+ * mirror before ever calling into `cloud`. By the time `updatePlant()` /
+ * `removePlant()` are called here, the id is assumed findable, so the only
+ * failure this layer can observe is the network call itself not landing.
+ */
+
+/*
  * Lowercased extension without the dot, or `jpg` when the source has none we
  * can trust. Duplicated from `photoStore.ts`'s identical helper rather than
  * imported from it - a cross-module runtime import from a `node --test`-run
@@ -66,7 +83,7 @@ export type CloudSaveResult =
   | { ok: true; plant: StoredPlant }
   | { ok: false; reason: 'network' };
 
-export type CloudMutateResult = { ok: true } | { ok: false; reason: 'network' | 'not_found' };
+export type CloudMutateResult = { ok: true } | { ok: false; reason: 'network' };
 
 export interface ImportBatchResult {
   imported: string[];
