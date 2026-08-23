@@ -18,11 +18,15 @@ const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
 async function resolvePhotoUrl(path: string | null): Promise<string | null> {
   if (!path) return null;
-  const { data, error } = await supabase.storage
-    .from('plant-photos')
-    .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
-  if (error || !data) return null;
-  return data.signedUrl;
+  try {
+    const { data, error } = await supabase.storage
+      .from('plant-photos')
+      .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
+    if (error || !data) return null;
+    return data.signedUrl;
+  } catch {
+    return null;
+  }
 }
 
 const deps: CloudDeps = {
