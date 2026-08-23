@@ -64,9 +64,11 @@ export function createPlantRepo(deps: RepoDeps) {
     const cloudResult = await cloud.updatePlant(id, { lastWateredAt: stamp, reminderId: null, wateringLog: log });
     if (!cloudResult.ok) return { ok: false, reason: cloudResult.reason };
 
-    const updated: StoredPlant = { ...current, lastWateredAt: stamp, wateringLog: log };
+    const fresh = mirror.load().plants;
+    const latest = fresh.find((p) => p.id === id) ?? current;
+    const updated: StoredPlant = { ...latest, lastWateredAt: stamp, wateringLog: log };
     delete updated.reminderId;
-    mirror.replace(mirror.load().plants.map((p) => (p.id === id ? updated : p)));
+    mirror.replace(fresh.map((p) => (p.id === id ? updated : p)));
     return { ok: true, plant: updated };
   }
 
@@ -82,12 +84,15 @@ export function createPlantRepo(deps: RepoDeps) {
     const current = mirror.load().plants.find((p) => p.id === id);
     if (!current) return { ok: false, reason: 'not_found' };
 
-    const cloudResult = await cloud.updatePlant(id, { reminderId: patch.reminderId ?? null });
+    const reminderPatch = 'reminderId' in patch ? { reminderId: patch.reminderId ?? null } : {};
+    const cloudResult = await cloud.updatePlant(id, reminderPatch);
     if (!cloudResult.ok) return { ok: false, reason: cloudResult.reason };
 
-    const updated: StoredPlant = { ...current, ...patch };
+    const fresh = mirror.load().plants;
+    const latest = fresh.find((p) => p.id === id) ?? current;
+    const updated: StoredPlant = { ...latest, ...patch };
     if ('reminderId' in patch && patch.reminderId === undefined) delete updated.reminderId;
-    mirror.replace(mirror.load().plants.map((p) => (p.id === id ? updated : p)));
+    mirror.replace(fresh.map((p) => (p.id === id ? updated : p)));
     return { ok: true, plant: updated };
   }
 

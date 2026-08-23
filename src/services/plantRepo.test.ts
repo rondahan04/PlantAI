@@ -26,7 +26,9 @@ function memoryStorage(): StorageDeps {
   };
 }
 
-function fakeCloudDeps(fail: { insert?: boolean; upload?: boolean; insertIds?: Set<string> } = {}) {
+function fakeCloudDeps(
+  fail: { insert?: boolean; upload?: boolean; insertIds?: Set<string>; update?: boolean; delete?: boolean } = {}
+) {
   const rows = new Map<string, CloudRow>();
   const deps: CloudDeps = {
     fetchPlants: async () => [...rows.values()],
@@ -37,18 +39,25 @@ function fakeCloudDeps(fail: { insert?: boolean; upload?: boolean; insertIds?: S
       return true;
     },
     updatePlant: async (id, patch) => {
+      if (fail.update) return false;
       const existing = rows.get(id);
       if (!existing) return false;
       rows.set(id, { ...existing, ...patch });
       return true;
     },
-    deletePlant: async (id) => rows.delete(id),
+    deletePlant: async (id) => {
+      if (fail.delete) return false;
+      return rows.delete(id);
+    },
   };
   return { deps, rows };
 }
 
 function makeRepo(
-  opts: { hint?: boolean; cloudFail?: { insert?: boolean; upload?: boolean; insertIds?: Set<string> } } = {}
+  opts: {
+    hint?: boolean;
+    cloudFail?: { insert?: boolean; upload?: boolean; insertIds?: Set<string>; update?: boolean; delete?: boolean };
+  } = {}
 ) {
   let hint = opts.hint ?? false;
   const guest = createPlantStore(memoryStorage());
@@ -160,4 +169,112 @@ test('loadLocal() reads the guest key when logged out, the mirror when logged in
   assert.equal(repo.loadLocal().plants.length, 0);
   mirror.save({ photoUri: 'b.jpg', diagnosis });
   assert.equal(repo.loadLocal().plants.length, 1);
+});
+
+test('logged in: markWatered() updates the mirror and clears any pending reminder', async () => {
+  const { repo, mirror } = makeRepo({ hint: true });
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  assert.ok(saved.ok);
+  const id = saved.ok ? saved.plant.id : '';
+
+  const at = Date.parse('2026-01-01T00:00:00.000Z');
+  const result = await repo.markWatered(id, at);
+  assert.equal(result.ok, true);
+
+  const plant = mirror.load().plants.find((p) => p.id === id);
+  assert.equal(plant?.lastWateredAt, new Date(at).toISOString());
+  assert.deepEqual(plant?.wateringLog, [new Date(at).toISOString()]);
+});
+
+test('logged in: markWatered() leaves the mirror untouched on a cloud failure', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  assert.ok(saved.ok);
+  const id = saved.ok ? saved.plant.id : '';
+  const before = mirror.load().plants.find((p) => p.id === id);
+
+  const { deps, rows: failRows } = fakeCloudDeps({ update: true });
+  for (const [rowId, row] of rows) failRows.set(rowId, row);
+  const cloud = createCloudPlantLibrary(deps);
+  const failingRepo = createPlantRepo({
+    guest: createPlantStore(memoryStorage()),
+    mirror,
+    cloud,
+    getSessionHint: () => true,
+    getUserId: () => 'u1',
+  });
+
+  const result = await failingRepo.markWatered(id, Date.now());
+  assert.equal(result.ok, false);
+  const after = mirror.load().plants.find((p) => p.id === id);
+  assert.deepEqual(after, before);
+});
+
+test('logged in: markWatered() on an unknown id reports not_found', async () => {
+  const { repo } = makeRepo({ hint: true });
+  const result = await repo.markWatered('missing', Date.now());
+  assert.deepEqual(result, { ok: false, reason: 'not_found' });
+});
+
+test('logged in: update() sets a reminderId in the mirror', async () => {
+  const { repo, mirror } = makeRepo({ hint: true });
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  assert.ok(saved.ok);
+  const id = saved.ok ? saved.plant.id : '';
+
+  const result = await repo.update(id, { reminderId: 'rem-1' });
+  assert.equal(result.ok, true);
+  assert.equal(mirror.load().plants.find((p) => p.id === id)?.reminderId, 'rem-1');
+});
+
+test('logged in: update() explicitly clearing reminderId removes it from the mirror', async () => {
+  const { repo, mirror } = makeRepo({ hint: true });
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  assert.ok(saved.ok);
+  const id = saved.ok ? saved.plant.id : '';
+
+  await repo.update(id, { reminderId: 'rem-1' });
+  const result = await repo.update(id, { reminderId: undefined });
+  assert.equal(result.ok, true);
+  assert.equal(mirror.load().plants.find((p) => p.id === id)?.reminderId, undefined);
+});
+
+test('logged in: update() on an unknown id reports not_found', async () => {
+  const { repo } = makeRepo({ hint: true });
+  const result = await repo.update('missing', { reminderId: 'rem-1' });
+  assert.deepEqual(result, { ok: false, reason: 'not_found' });
+});
+
+test('logged in: remove() deletes from cloud and the mirror on success', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  assert.ok(saved.ok);
+  const id = saved.ok ? saved.plant.id : '';
+
+  const result = await repo.remove(id);
+  assert.equal(result.ok, true);
+  assert.equal(mirror.load().plants.find((p) => p.id === id), undefined);
+  assert.equal(rows.has(id), false);
+});
+
+test('logged in: remove() leaves the mirror untouched on a cloud failure', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  assert.ok(saved.ok);
+  const id = saved.ok ? saved.plant.id : '';
+
+  const { deps, rows: failRows } = fakeCloudDeps({ delete: true });
+  for (const [rowId, row] of rows) failRows.set(rowId, row);
+  const cloud = createCloudPlantLibrary(deps);
+  const failingRepo = createPlantRepo({
+    guest: createPlantStore(memoryStorage()),
+    mirror,
+    cloud,
+    getSessionHint: () => true,
+    getUserId: () => 'u1',
+  });
+
+  const result = await failingRepo.remove(id);
+  assert.equal(result.ok, false);
+  assert.ok(mirror.load().plants.find((p) => p.id === id));
 });
