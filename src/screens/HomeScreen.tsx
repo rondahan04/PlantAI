@@ -16,13 +16,16 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { plantRepo } from '../services/plantRepoInstance';
 import { plantLibrary } from '../services/plantLibrary';
 import { plantPhotos } from '../services/photos';
 import { triageSections } from '../lib/triage';
 import { APP_LOGO } from '../brand';
 import { FEATURES } from '../content/features';
 import { onboarding } from '../services/onboarding';
+import { useSession } from '../hooks/useSession';
 import PlantCard from '../components/PlantCard';
+import ImportBanner from '../components/ImportBanner';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
@@ -42,7 +45,14 @@ export default function HomeScreen({ navigation }: Props) {
    * flash before their own plants. This runs during the first render instead,
    * so the correct layout is the only one ever painted.
    */
-  const [library, setLibrary] = useState(() => plantLibrary.load());
+  const session = useSession();
+
+  /*
+   * Same lazy-initializer requirement as before (D8) - `plantRepo.loadLocal`
+   * is still synchronous, it just picks guest vs. mirror key internally via
+   * `sessionHint`, which `useSession` above keeps current.
+   */
+  const [library, setLibrary] = useState(() => plantRepo.loadLocal());
 
   /*
    * The name from onboarding, read synchronously for the same reason the
@@ -51,13 +61,29 @@ export default function HomeScreen({ navigation }: Props) {
    * is running, since onboarding only precedes Home.
    */
   const [profileName] = useState(() => onboarding.load()?.name);
+  const [showImportBanner, setShowImportBanner] = useState(() => plantRepo.hasUnimportedGuestPlants());
 
   // A plant saved on the Diagnosis screen has to appear on the way back.
   useFocusEffect(
     useCallback(() => {
-      setLibrary(plantLibrary.load());
+      setLibrary(plantRepo.loadLocal());
     }, [])
   );
+
+  // Logged-in background refresh (local cache first, then reconcile from
+  // Supabase) - re-fetches after the synchronous mirror read above has
+  // already painted, and only touches state if the result actually differs
+  // in size.
+  useEffect(() => {
+    if (!session) return;
+    plantRepo.refreshFromCloud().then((fresh) => {
+      setLibrary((current) => (fresh.plants.length !== current.plants.length ? fresh : current));
+    });
+  }, [session]);
+
+  useEffect(() => {
+    setShowImportBanner(plantRepo.hasUnimportedGuestPlants());
+  }, [session]);
 
   /*
    * Photo housekeeping (TODOS item 9), once per launch and off the render path.
@@ -75,7 +101,9 @@ export default function HomeScreen({ navigation }: Props) {
    * so a sweep would delete every photo the user has.
    */
   useEffect(() => {
-    if (!library.ok) return;
+    // Photos for a logged-in user live in Supabase Storage, not the document
+    // directory, so this local-file adopt/sweep must not run against the mirror.
+    if (!library.ok || session) return;
     const plants = library.plants;
 
     (async () => {
@@ -101,7 +129,7 @@ export default function HomeScreen({ navigation }: Props) {
     })();
     // Launch-time housekeeping, not a reaction to the library changing - the
     // focus effect above re-reads it constantly and this must not run each time.
-  }, []);
+  }, [session]);
 
   const sections = useMemo(() => triageSections(library.plants), [library]);
   const hasPlants = library.plants.length > 0;
@@ -166,6 +194,18 @@ export default function HomeScreen({ navigation }: Props) {
                   <Ionicons name="settings-outline" size={22} color={t.color.textSecondary} />
                 </Pressable>
               </View>
+
+              {showImportBanner && (
+                <ImportBanner
+                  count={plantRepo.guestPlantCount()}
+                  onImport={async () => {
+                    const result = await plantRepo.importGuestPlants();
+                    setLibrary(plantRepo.loadLocal());
+                    return result;
+                  }}
+                  onDismiss={() => setShowImportBanner(false)}
+                />
+              )}
 
               {/*
                 A damaged library must never be reported as an empty one -
