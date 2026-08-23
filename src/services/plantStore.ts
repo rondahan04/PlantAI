@@ -456,7 +456,7 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
    * identity for it here would desync it from the source it mirrors.
    */
   function replace(plants: StoredPlant[]): boolean {
-    return persist(plants);
+    return persist(plants.filter(isStoredPlant));
   }
 
   return { load, save, update, markWatered, remove, replace };

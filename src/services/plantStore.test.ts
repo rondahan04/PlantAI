@@ -198,9 +198,24 @@ test('replace() overwrites the whole library and persists it', () => {
 });
 
 test('replace() returns false and does not persist when the write does not land', () => {
+  const { deps, breakWrites, fixWrites } = fakeStorage();
+  const store = createPlantStore(deps, fixedOpts());
+  store.save({ photoUri: 'good', diagnosis });
+
+  breakWrites('throw');
+  const result = store.replace([{ id: 'x', savedAt: '2026-08-01T00:00:00.000Z', photoUri: 'a.jpg', diagnosis }]);
+  assert.equal(result, false);
+
+  fixWrites();
+  const r = store.load();
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.plants.map((p) => p.photoUri), ['good']);
+});
+
+test('replace() returns false when the write silently does not land', () => {
   const { deps, breakWrites } = fakeStorage();
   const store = createPlantStore(deps, fixedOpts());
-  breakWrites('throw');
+  breakWrites('silent');
 
   const result = store.replace([{ id: 'x', savedAt: '2026-08-01T00:00:00.000Z', photoUri: 'a.jpg', diagnosis }]);
   assert.equal(result, false);
