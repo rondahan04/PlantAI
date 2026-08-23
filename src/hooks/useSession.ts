@@ -19,12 +19,14 @@ export function useSession(): Session | null {
       setSessionHint(data.session !== null);
     });
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, next) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, next) => {
       setSession(next);
       setSessionHint(next !== null);
     });
 
-    return () => subscription.subscription.unsubscribe();
+    return () => subscription.unsubscribe();
   }, []);
 
   return session;
