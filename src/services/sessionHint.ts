@@ -14,7 +14,7 @@ import Storage from 'expo-sqlite/kv-store';
  * closed).
  */
 
-const KEY = 'plantai.session-hint';
+const KEY = 'plantai.sessionHint';
 
 export function getSessionHint(): boolean {
   return Storage.getItemSync(KEY) === '1';
