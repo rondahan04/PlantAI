@@ -1,6 +1,27 @@
 import type { PlantDiagnosis } from '../types';
 import type { StoredPlant } from './plantStore';
-import { photoExtension } from './photoStore.ts';
+
+/*
+ * Lowercased extension without the dot, or `jpg` when the source has none we
+ * can trust. Duplicated from `photoStore.ts`'s identical helper rather than
+ * imported from it - a cross-module runtime import from a `node --test`-run
+ * file needs an explicit `.ts` extension in the specifier, and Metro (this
+ * app's actual bundler, not tsc) does not correctly resolve an explicit `.ts`
+ * extension in production source. Keeping this module self-contained avoids
+ * the problem entirely rather than working around it.
+ */
+const MAX_EXT_LEN = 5;
+
+function photoExtension(sourceUri: string): string {
+  const path = sourceUri.split('?')[0].split('#')[0];
+  const name = path.slice(path.lastIndexOf('/') + 1);
+  const dot = name.lastIndexOf('.');
+  if (dot <= 0) return 'jpg';
+
+  const ext = name.slice(dot + 1).toLowerCase();
+  if (!ext || ext.length > MAX_EXT_LEN || !/^[a-z0-9]+$/.test(ext)) return 'jpg';
+  return ext;
+}
 
 /*
  * Row shape as it lives in `public.plants` (see the Epic 3a migration).
