@@ -7,7 +7,7 @@ import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
 import { directionalIconStyle } from '../lib/rtl';
-import { plantLibrary } from '../services/plantLibrary';
+import { plantRepo } from '../services/plantRepoInstance';
 import { wateringHistory } from '../services/plantStore';
 import { WEEKDAY_LABELS, dayKey, dayKeySet, monthView, shiftMonth } from '../lib/calendar';
 import { wateringState } from '../lib/watering';
@@ -35,7 +35,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
   // Re-read by id rather than taking the plant through params, for the same
   // reason the detail screen does: params are a snapshot of a record that may
   // have been watered or deleted since.
-  const [plant] = useState(() => plantLibrary.load().plants.find((p) => p.id === plantId) ?? null);
+  const [plant] = useState(() => plantRepo.loadLocal().plants.find((p) => p.id === plantId) ?? null);
   const [view, setView] = useState(() => {
     const now = new Date();
     return monthView(now.getFullYear(), now.getMonth());
