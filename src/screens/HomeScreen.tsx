@@ -24,6 +24,7 @@ import { APP_LOGO } from '../brand';
 import { FEATURES } from '../content/features';
 import { onboarding } from '../services/onboarding';
 import { useSession } from '../hooks/useSession';
+import { getSessionHint } from '../services/sessionHint';
 import PlantCard from '../components/PlantCard';
 import ImportBanner from '../components/ImportBanner';
 
@@ -81,6 +82,10 @@ export default function HomeScreen({ navigation }: Props) {
     });
   }, [session]);
 
+  // Guest plants left un-imported can change across a login/logout
+  // transition (a fresh login's guest key may now have entries a previous
+  // session's mirror didn't) - re-check whenever session identity changes,
+  // rather than only once at mount.
   useEffect(() => {
     setShowImportBanner(plantRepo.hasUnimportedGuestPlants());
   }, [session]);
@@ -103,7 +108,7 @@ export default function HomeScreen({ navigation }: Props) {
   useEffect(() => {
     // Photos for a logged-in user live in Supabase Storage, not the document
     // directory, so this local-file adopt/sweep must not run against the mirror.
-    if (!library.ok || session) return;
+    if (!library.ok || getSessionHint()) return;
     const plants = library.plants;
 
     (async () => {
@@ -200,7 +205,8 @@ export default function HomeScreen({ navigation }: Props) {
                   count={plantRepo.guestPlantCount()}
                   onImport={async () => {
                     const result = await plantRepo.importGuestPlants();
-                    setLibrary(plantRepo.loadLocal());
+                    const fresh = await plantRepo.refreshFromCloud();
+                    setLibrary(fresh);
                     return result;
                   }}
                   onDismiss={() => setShowImportBanner(false)}
