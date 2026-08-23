@@ -19,9 +19,12 @@ import { RootStackParamList, DeliveryMode } from '../types';
 import { Theme, useTheme } from '../theme';
 import { directionalIconStyle } from '../lib/rtl';
 import { prefetchNearbyNurseries } from '../services/nurseryService';
+import { plantRepo } from '../services/plantRepoInstance';
 import { plantLibrary } from '../services/plantLibrary';
 import { plantPhotos } from '../services/photos';
 import { identityConfidence } from '../lib/confidence';
+import { useSession } from '../hooks/useSession';
+import { getSessionHint } from '../services/sessionHint';
 
 // Tel Aviv center - used as fallback when location permission is denied
 const FALLBACK_LAT = 32.1624;
@@ -63,6 +66,7 @@ const CONDITION_ICON: Record<string, IconName> = {
 export default function DiagnosisScreen({ navigation, route }: Props) {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
+  const session = useSession();
   const { imageUri, diagnosis } = route.params;
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('delivery');
   const [findingNurseries, setFindingNurseries] = useState(false);
@@ -145,18 +149,20 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
   const [saved, setSaved] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (saved) return;
     setSaved(true);
 
-    const result = plantLibrary.save({ photoUri: imageUri, diagnosis });
+    const result = await plantRepo.save({ photoUri: imageUri, diagnosis });
     if (!result.ok) {
       setSaved(false);
       // The store already distinguishes this from every other failure: the
       // write did not land, and retrying after freeing space will work.
       Alert.alert(
         "Couldn't save",
-        'Your device is out of storage space. Free some space and try again.',
+        result.reason === 'network'
+          ? "Couldn't reach your account. Check your connection and try again."
+          : 'Your device is out of storage space. Free some space and try again.',
         [{ text: 'OK' }]
       );
       return;
@@ -165,7 +171,10 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
 
     /*
      * Photo persistence (TODOS item 9), deliberately AFTER the synchronous
-     * write and deliberately not awaited.
+     * write and deliberately not awaited. Guest-only: a cloud save already
+     * uploaded the photo as part of `plantRepo.save()`, so re-adopting it
+     * into the local document directory would be pointless (and would
+     * repoint a mirror-only record's local field to a local file path).
      *
      * `imageUri` points into the cache directory, which iOS empties whenever it
      * wants the space - so the record would outlive its picture. The copy is
@@ -175,18 +184,23 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
      * photo never made it across, which the next load repairs or forgets.
      */
     const id = result.plant.id;
-    void plantPhotos.adopt(id, imageUri).then((persisted) => {
-      if (persisted) plantLibrary.update(id, { photoUri: persisted });
-    });
+    if (!getSessionHint()) {
+      void plantPhotos.adopt(id, imageUri).then((persisted) => {
+        if (persisted) plantLibrary.update(id, { photoUri: persisted });
+      });
+    }
   };
 
-  const handleUnsave = () => {
+  const handleUnsave = async () => {
     if (!savedId) return;
-    const result = plantLibrary.remove(savedId);
+    const result = await plantRepo.remove(savedId);
     if (!result.ok) return;
     // Only after the record is gone - a failed removal must not cost the photo
-    // of a plant that is still in the library.
-    plantPhotos.discard(savedId);
+    // of a plant that is still in the library. Guest-only: a cloud save's
+    // photo lives in Supabase Storage, which `discard()` has no way to reach.
+    if (!getSessionHint()) {
+      plantPhotos.discard(savedId);
+    }
     setSaved(false);
     setSavedId(null);
   };
