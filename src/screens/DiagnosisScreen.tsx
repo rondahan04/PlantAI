@@ -66,7 +66,9 @@ const CONDITION_ICON: Record<string, IconName> = {
 export default function DiagnosisScreen({ navigation, route }: Props) {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
-  const session = useSession();
+  // Side effect only - keeps sessionHint fresh even if this screen is
+  // somehow reached before Home's own useSession() instance has run.
+  useSession();
   const { imageUri, diagnosis } = route.params;
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('delivery');
   const [findingNurseries, setFindingNurseries] = useState(false);
@@ -148,6 +150,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
    */
   const [saved, setSaved] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
 
   const handleSave = async () => {
     if (saved) return;
@@ -192,17 +195,22 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
   };
 
   const handleUnsave = async () => {
-    if (!savedId) return;
-    const result = await plantRepo.remove(savedId);
-    if (!result.ok) return;
-    // Only after the record is gone - a failed removal must not cost the photo
-    // of a plant that is still in the library. Guest-only: a cloud save's
-    // photo lives in Supabase Storage, which `discard()` has no way to reach.
-    if (!getSessionHint()) {
-      plantPhotos.discard(savedId);
+    if (!savedId || removing) return;
+    setRemoving(true);
+    try {
+      const result = await plantRepo.remove(savedId);
+      if (!result.ok) return;
+      // Only after the record is gone - a failed removal must not cost the photo
+      // of a plant that is still in the library. Guest-only: a cloud save's
+      // photo lives in Supabase Storage, which `discard()` has no way to reach.
+      if (!getSessionHint()) {
+        plantPhotos.discard(savedId);
+      }
+      setSaved(false);
+      setSavedId(null);
+    } finally {
+      setRemoving(false);
     }
-    setSaved(false);
-    setSavedId(null);
   };
 
   return (
