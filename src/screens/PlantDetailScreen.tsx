@@ -11,6 +11,8 @@ import { LOGO_GLYPH } from '../brand';
 import { plantRepo } from '../services/plantRepoInstance';
 import { plantPhotos } from '../services/photos';
 import { intervalLabel, wateringState } from '../lib/watering';
+import { resolveCoords } from '../lib/location';
+import { treatmentProduct } from '../lib/treatments';
 import { cancelWateringReminder, scheduleWateringReminder } from '../services/wateringReminder';
 
 /*
@@ -88,6 +90,28 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
    * button has to work, and `never_watered` is the tap that starts everything.
    */
   const settled = water.status === 'ok';
+
+  /*
+   * The nursery scrape, reachable from a SAVED plant - not only from the
+   * diagnosis that created it. Buying the treatment is a decision people make
+   * days later, standing in front of the plant, and until now the only door to
+   * the scrape closed the moment they left the diagnosis screen.
+   *
+   * Coordinates are resolved on tap rather than on mount: this screen is opened
+   * constantly (watering, history), and a location permission prompt or GPS fix
+   * on every open would be a tax paid by everyone for a button most visits
+   * never press. The scrape is therefore not prefetched here - NurseriesScreen
+   * shows its own progress state for the wait.
+   */
+  const findNearby = async (query: string) => {
+    const coords = await resolveCoords();
+    navigation.navigate('Nurseries', {
+      plantName: query,
+      lat: coords.lat,
+      lng: coords.lng,
+      mode: 'delivery',
+    });
+  };
 
   /*
    * Log a watering.
@@ -233,17 +257,31 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
         {diagnosis.treatments.length > 0 && (
           <View style={s.section}>
             <Text style={s.sectionTitle}>Treatment plan</Text>
-            {diagnosis.treatments.map((tr, i) => (
-              <View key={i} style={s.treatmentCard}>
-                {tr.urgent && (
-                  <View style={s.urgentPill}>
-                    <Text style={s.urgentText}>URGENT</Text>
-                  </View>
-                )}
-                <Text style={s.treatmentTitle}>{tr.title}</Text>
-                <Text style={s.treatmentDesc}>{tr.description}</Text>
-              </View>
-            ))}
+            {diagnosis.treatments.map((tr, i) => {
+              const product = treatmentProduct(tr.title);
+              return (
+                <View key={i} style={s.treatmentCard}>
+                  {tr.urgent && (
+                    <View style={s.urgentPill}>
+                      <Text style={s.urgentText}>URGENT</Text>
+                    </View>
+                  )}
+                  <Text style={s.treatmentTitle}>{tr.title}</Text>
+                  <Text style={s.treatmentDesc}>{tr.description}</Text>
+                  {product && (
+                    <Pressable
+                      style={({ pressed }) => [s.shopBtn, pressed && { opacity: 0.6 }]}
+                      onPress={() => findNearby(product)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Find ${product} at nurseries near you`}
+                    >
+                      <Ionicons name="storefront-outline" size={16} color={t.color.primary} />
+                      <Text style={s.shopBtnText}>Find {product} nearby</Text>
+                    </Pressable>
+                  )}
+                </View>
+              );
+            })}
           </View>
         )}
 
@@ -411,6 +449,32 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
           </View>
         )}
 
+        {/*
+          The replacement door, kept open after the diagnosis screen is gone.
+          The copy - not the button - is what changes with `canBeSaved`: a plant
+          that cannot be saved needs to be replaced, one that can is a plant the
+          user might simply want a second of.
+        */}
+        <View style={s.nurseryCard}>
+          <Text style={s.nurseryTitle}>
+            {diagnosis.canBeSaved ? 'Or replace with a healthy one' : 'Find a healthy replacement'}
+          </Text>
+          <Text style={s.nurseryNote}>
+            {diagnosis.canBeSaved
+              ? `Check which nurseries near you have ${diagnosis.plantName} in stock.`
+              : `This plant is too damaged to save. Find a healthy ${diagnosis.plantName} near you.`}
+          </Text>
+          <Pressable
+            style={({ pressed }) => [s.nurseryBtn, pressed && { opacity: 0.85 }]}
+            onPress={() => findNearby(diagnosis.plantName)}
+            accessibilityRole="button"
+            accessibilityLabel={`Find ${diagnosis.plantName} at nurseries near you`}
+          >
+            <Ionicons name="storefront-outline" size={18} color={t.color.onPrimary} />
+            <Text style={s.nurseryBtnText}>Find nearby nurseries</Text>
+          </Pressable>
+        </View>
+
         <Text style={s.savedAt}>Saved {new Date(plant.savedAt).toLocaleDateString()}</Text>
       </ScrollView>
     </SafeAreaView>
@@ -575,6 +639,48 @@ const makeStyles = (t: Theme) =>
     urgentText: { ...t.type.caption, color: t.color.onDanger, fontSize: 10 },
     treatmentTitle: { ...t.type.bodyStrong, color: t.color.foreground, writingDirection: 'auto' },
     treatmentDesc: { ...t.type.body, color: t.color.textSecondary, marginTop: 2, writingDirection: 'auto' },
+
+    /* Quiet outline button inside a treatment card - the filled accent on this
+     * screen belongs to watering, and buying supplies must not outrank it. */
+    shopBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: t.space.xs,
+      marginTop: t.space.sm,
+      paddingVertical: t.space.xs,
+      paddingHorizontal: t.space.sm,
+      borderRadius: t.radius.md,
+      borderWidth: 1,
+      borderColor: t.color.primary,
+      minHeight: 36,
+    },
+    shopBtnText: { ...t.type.label, color: t.color.primary, writingDirection: 'auto' },
+
+    nurseryCard: {
+      backgroundColor: t.color.surface,
+      borderRadius: t.radius.lg,
+      padding: t.space.lg,
+      marginTop: t.space.xl,
+    },
+    nurseryTitle: { ...t.type.heading, color: t.color.foreground, writingDirection: 'auto' },
+    nurseryNote: {
+      ...t.type.body,
+      color: t.color.textSecondary,
+      marginTop: t.space.xs,
+      writingDirection: 'auto',
+    },
+    nurseryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: t.space.sm,
+      marginTop: t.space.md,
+      minHeight: 48,
+      borderRadius: t.radius.lg,
+      backgroundColor: t.color.primary,
+    },
+    nurseryBtnText: { ...t.type.heading, color: t.color.onPrimary },
 
     savedAt: { ...t.type.caption, color: t.color.textMuted, marginTop: t.space.xl, textAlign: 'center' },
 

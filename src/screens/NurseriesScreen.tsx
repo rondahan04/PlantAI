@@ -9,6 +9,7 @@ import { RootStackParamList, Nursery, DeliveryMode } from '../types';
 import { Theme, useTheme } from '../theme';
 import { directionalIconStyle } from '../lib/rtl';
 import { fetchNearbyNurseries } from '../services/nurseryService';
+import { stockAgeLabel } from '../lib/freshness';
 import { waMeLink } from '../lib/whatsapp';
 import StatusView from '../components/StatusView';
 
@@ -210,6 +211,13 @@ export default function NurseriesScreen({ navigation, route }: Props) {
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [status, setStatus] = useState<Status>('loading');
   const [nurseries, setNurseries] = useState<Nursery[]>([]);
+  /*
+   * When this list's stock was actually checked. Results are now served from a
+   * cache that holds them for up to a week, so the age has to be on screen:
+   * prices and "in stock" from five days ago presented as live is the one way
+   * this screen can lie to someone about to drive to a shop.
+   */
+  const [scrapedAt, setScrapedAt] = useState<number | null>(null);
   const [failure, setFailure] = useState<NurseryFailure>(GENERIC_FAILURE);
   const headerFade = useRef(new Animated.Value(0)).current;
 
@@ -219,7 +227,8 @@ export default function NurseriesScreen({ navigation, route }: Props) {
     setStatus('loading');
     try {
       const data = await fetchNearbyNurseries(plantName, lat, lng, { force });
-      setNurseries(data);
+      setNurseries(data.nurseries);
+      setScrapedAt(data.scrapedAt);
       setStatus('ready');
     } catch (err: unknown) {
       // Never render err.message: it has surfaced raw fetch internals
@@ -237,6 +246,11 @@ export default function NurseriesScreen({ navigation, route }: Props) {
   useEffect(() => {
     Animated.timing(headerFade, { toValue: 1, duration: 400, useNativeDriver: true }).start();
   }, []);
+
+  // Computed on render rather than stored: the label is derived from a stamp
+  // that never changes, and a "3 hours ago" frozen at load time would keep
+  // ageing wrongly the longer the screen stays open.
+  const ageLabel = stockAgeLabel(scrapedAt, Date.now());
 
   const deliveryCount = nurseries.filter(isDeliverable).length;
   const pickupCount = nurseries.filter(isPickupable).length;
@@ -288,6 +302,27 @@ export default function NurseriesScreen({ navigation, route }: Props) {
           <Ionicons name={viewMode === 'list' ? 'map-outline' : 'list-outline'} size={18} color={t.color.primary} />
         </Pressable>
       </Animated.View>
+
+      {/*
+        Freshness line. Rendered only with results on screen, and paired with
+        the refresh that acts on it - telling someone the stock is four days
+        old without giving them a way to re-check it is just an apology.
+      */}
+      {status === 'ready' && ageLabel && (
+        <View style={s.freshRow}>
+          <Ionicons name="time-outline" size={13} color={t.color.textMuted} />
+          <Text style={s.freshText}>{ageLabel}</Text>
+          <Pressable
+            style={({ pressed }) => [s.freshBtn, pressed && { opacity: 0.6 }]}
+            onPress={() => load(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Check stock again now"
+            hitSlop={8}
+          >
+            <Text style={s.freshBtnText}>Refresh</Text>
+          </Pressable>
+        </View>
+      )}
 
       {/* Mode toggle (only when results exist) */}
       {status === 'ready' && nurseries.length > 0 && (
@@ -409,6 +444,17 @@ function makeStyles(t: Theme) {
     headerCenter: { flex: 1, alignItems: 'center' },
     headerTitle: { ...t.type.heading, color: t.color.foreground, textAlign: 'center', writingDirection: 'auto' },
     headerSub: { ...t.type.caption, color: t.color.textMuted, marginTop: 1 },
+
+    freshRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: t.space.xs,
+      paddingHorizontal: t.space.xl,
+      paddingBottom: t.space.xs,
+    },
+    freshText: { ...t.type.caption, color: t.color.textMuted, flex: 1, writingDirection: 'auto' },
+    freshBtn: { minHeight: 32, justifyContent: 'center' },
+    freshBtnText: { ...t.type.caption, color: t.color.primary },
     viewToggleBtn: {
       width: 44,
       height: 44,

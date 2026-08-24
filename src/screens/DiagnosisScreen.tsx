@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, DeliveryMode } from '../types';
@@ -23,27 +22,10 @@ import { plantRepo } from '../services/plantRepoInstance';
 import { plantLibrary } from '../services/plantLibrary';
 import { plantPhotos } from '../services/photos';
 import { identityConfidence } from '../lib/confidence';
+import { resolveCoords } from '../lib/location';
+import { treatmentProduct } from '../lib/treatments';
 import { useSession } from '../hooks/useSession';
 import { getSessionHint } from '../services/sessionHint';
-
-// Tel Aviv center - used as fallback when location permission is denied
-const FALLBACK_LAT = 32.1624;
-const FALLBACK_LNG = 34.8443;
-
-// Resolve the device location, falling back to Herzliya center when permission
-// is denied or GPS is unavailable.
-async function resolveCoords(): Promise<{ lat: number; lng: number }> {
-  try {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status === 'granted') {
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      return { lat: loc.coords.latitude, lng: loc.coords.longitude };
-    }
-  } catch {
-    // fall through to fallback
-  }
-  return { lat: FALLBACK_LAT, lng: FALLBACK_LNG };
-}
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Diagnosis'>;
@@ -93,6 +75,24 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
       if (cancelled) return;
       coordsRef.current = coords;
       prefetchNearbyNurseries(diagnosis.plantName, coords.lat, coords.lng);
+
+      /*
+       * Warm the treatment searches too, not just the replacement one. The
+       * scrape now persists server-side for a week, so this is the moment that
+       * makes "where do I buy Confidor" instant tomorrow, or next Tuesday -
+       * which is when people actually go looking for it, long after this
+       * screen is gone.
+       *
+       * URGENT treatments only. Every scrape is a paid job, and urgency is the
+       * diagnosis's own statement about what the user will act on; warming the
+       * optional "wipe it down" advice would double the bill for the case
+       * nobody rushes to buy.
+       */
+      for (const treatment of diagnosis.treatments) {
+        if (!treatment.urgent) continue;
+        const product = treatmentProduct(treatment.title);
+        if (product) prefetchNearbyNurseries(product, coords.lat, coords.lng);
+      }
     })();
     return () => {
       cancelled = true;
@@ -128,6 +128,23 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
     // is minimal. We only pass the query params here.
     navigation.navigate('Nurseries', {
       plantName: diagnosis.plantName,
+      lat: coords.lat,
+      lng: coords.lng,
+      mode: deliveryMode,
+    });
+  };
+
+  /*
+   * The same scrape with a different search term: what treats this plant,
+   * rather than a replacement for it. Only rendered for treatments that name
+   * something buyable (see `treatmentProduct`) - "wipe the scale off by hand"
+   * has nothing to sell.
+   */
+  const handleFindTreatment = async (product: string) => {
+    const coords = coordsRef.current ?? (await resolveCoords());
+    coordsRef.current = coords;
+    navigation.navigate('Nurseries', {
+      plantName: product,
       lat: coords.lat,
       lng: coords.lng,
       mode: deliveryMode,
@@ -330,17 +347,31 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
               <Ionicons name="medkit-outline" size={18} color={t.color.foreground} />
               <Text style={s.sectionTitle}>Treatment plan</Text>
             </View>
-            {diagnosis.treatments.map((tr, i) => (
-              <View key={i} style={[s.treatmentCard, tr.urgent && s.treatmentUrgent]}>
-                {tr.urgent && (
-                  <View style={s.urgentBadge}>
-                    <Text style={s.urgentText}>URGENT</Text>
-                  </View>
-                )}
-                <Text style={s.treatmentTitle}>{tr.title}</Text>
-                <Text style={s.treatmentDesc}>{tr.description}</Text>
-              </View>
-            ))}
+            {diagnosis.treatments.map((tr, i) => {
+              const product = treatmentProduct(tr.title);
+              return (
+                <View key={i} style={[s.treatmentCard, tr.urgent && s.treatmentUrgent]}>
+                  {tr.urgent && (
+                    <View style={s.urgentBadge}>
+                      <Text style={s.urgentText}>URGENT</Text>
+                    </View>
+                  )}
+                  <Text style={s.treatmentTitle}>{tr.title}</Text>
+                  <Text style={s.treatmentDesc}>{tr.description}</Text>
+                  {product && (
+                    <Pressable
+                      style={({ pressed }) => [s.shopBtn, pressed && s.shopBtnPressed]}
+                      onPress={() => handleFindTreatment(product)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Find ${product} at nurseries near you`}
+                    >
+                      <Ionicons name="storefront-outline" size={16} color={t.color.primary} />
+                      <Text style={s.shopBtnText}>Find {product} nearby</Text>
+                    </Pressable>
+                  )}
+                </View>
+              );
+            })}
           </Animated.View>
         )}
 
@@ -510,6 +541,26 @@ function makeStyles(t: Theme) {
     urgentText: { ...t.type.caption, fontSize: 10, fontWeight: '800', color: t.color.onDanger, letterSpacing: 1 },
     treatmentTitle: { ...t.type.bodyStrong, fontSize: 15, color: t.color.foreground, marginBottom: t.space.xs, writingDirection: 'auto' },
     treatmentDesc: { ...t.type.label, fontWeight: '400', fontSize: 13, lineHeight: 19, color: t.color.textSecondary, writingDirection: 'auto' },
+
+    /*
+     * A quiet outline button inside the card, not a second filled CTA: the
+     * accent colour on this screen belongs to "find a replacement", and buying
+     * a treatment must not compete with it visually.
+     */
+    shopBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: t.space.xs,
+      marginTop: t.space.sm,
+      paddingVertical: t.space.xs,
+      paddingHorizontal: t.space.sm,
+      borderRadius: t.radius.md,
+      borderWidth: 1,
+      borderColor: t.color.primary,
+    },
+    shopBtnPressed: { opacity: 0.6 },
+    shopBtnText: { ...t.type.label, color: t.color.primary, writingDirection: 'auto' },
     replaceCard: {
       marginTop: t.space.xl,
       backgroundColor: t.color.surfaceMuted,

@@ -33,6 +33,7 @@ import { discoverNurseries, resolvePhotoUrl } from '../scraper/places.ts';
 import { runNurserySearch, type PipelineDeps, type NurseryResult } from '../scraper/pipeline.ts';
 import { clientIp, createGate, readGateConfig } from './gate.ts';
 import { createJobStore } from './jobs.ts';
+import { createNurseryCache, searchKey } from './nurseryCache.ts';
 import {
   DiagnosisServiceError,
   NotAPlantError,
@@ -64,6 +65,17 @@ if (!FIRECRAWL_KEY || !OPENAI_KEY || !GOOGLE_KEY || !PLANTNET_KEY) {
 
 const gate = createGate(readGateConfig(env));
 const jobs = createJobStore<NurseryResult[]>();
+
+/*
+ * Durable scrape cache. Optional by design: without a service-role key the
+ * server behaves exactly as it did before, so local scraper work needs no
+ * Supabase. The anon key is deliberately NOT accepted as a fallback - RLS
+ * denies that role every row in the table, so it would silently cache nothing.
+ */
+const nurseryCache = createNurseryCache<NurseryResult[]>({
+  url: env('SUPABASE_URL') ?? env('EXPO_PUBLIC_SUPABASE_URL'),
+  serviceKey: env('SUPABASE_SERVICE_ROLE_KEY'),
+});
 
 /*
  * CORS is emitted only when CORS_ORIGIN is set, and only for that origin. The
@@ -345,35 +357,71 @@ const server = http.createServer(async (req, res) => {
 
   // ── POST /api/nurseries ─ start a scrape job ────────────────────────────────
   if (u.pathname === '/api/nurseries' && req.method === 'POST') {
-    const decision = gate.check(ip, secret);
-    if (!decision.allow) {
-      json(res, decision.status, { error: decision.code, message: decision.message });
+    /*
+     * Secret-only check first. The billable gate is applied further down, AFTER
+     * the cache lookup: an answer we already hold costs nothing to serve, and
+     * charging it against the daily cap would let yesterday's cached searches
+     * lock a user out of today's real one.
+     */
+    const auth = gate.checkSecret(ip, secret);
+    if (!auth.allow) {
+      json(res, auth.status, { error: auth.code, message: auth.message });
       return;
     }
 
-    let input: { plant: string; lat: number; lng: number; radiusM: number };
+    let input: { plant: string; lat: number; lng: number; radiusM: number; force: boolean };
     try {
       const body = JSON.parse((await readBody(req)).toString('utf8'));
       const plant = typeof body?.plant === 'string' ? body.plant.trim() : '';
       const lat = Number(body?.lat);
       const lng = Number(body?.lng);
       const radiusM = Number(body?.radius) || 10000;
+      /* The user asked for fresh stock rather than what we last saw. */
+      const force = body?.force === true;
       // Number(null) is 0 and 0 is finite, so a missing lat/lng would otherwise
       // pass validation and trigger a real (paid) scrape at 0,0.
       if (!plant || body?.lat == null || body?.lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) {
         json(res, 400, { error: 'bad_request', message: 'plant, lat and lng are required.' });
         return;
       }
-      input = { plant, lat, lng, radiusM };
+      input = { plant, lat, lng, radiusM, force };
     } catch (err: unknown) {
       fail(res, rid, 400, 'bad_request', 'That request could not be read.', errText(err));
       return;
     }
 
-    // The dedupe key is what stops a retry tap from buying a second scrape of
-    // the same thing. Coordinates are rounded to ~100m; finer than that is not
-    // a different set of nearby nurseries.
-    const key = `${input.plant.toLowerCase()}|${input.lat.toFixed(3)}|${input.lng.toFixed(3)}|${input.radiusM}`;
+    // One definition of "the same search", shared by the in-process job dedupe
+    // (which stops a retry tap buying a second scrape) and the durable cache
+    // below - the two must never disagree about what counts as identical.
+    const parts = { query: input.plant, lat: input.lat, lng: input.lng, radiusM: input.radiusM };
+    const key = searchKey(parts);
+
+    /*
+     * The whole point of the cache: a plant diagnosed yesterday warmed this
+     * search, so the treatment the user came back for opens instantly instead
+     * of starting an eight-minute job. `scrapedAt` travels with it so the app
+     * can say how old the stock check is rather than implying it is live.
+     */
+    if (!input.force) {
+      const hit = await nurseryCache.get(parts);
+      if (hit) {
+        logEvent(rid, 'nursery_cache_hit', {
+          plant: input.plant,
+          count: hit.results.length,
+          ageMs: Date.now() - hit.scrapedAt,
+        });
+        json(res, 200, { state: 'done', results: hit.results, scrapedAt: hit.scrapedAt });
+        return;
+      }
+    }
+
+    // Only now is this billable: a real scrape is about to be paid for.
+    const decision = gate.check(ip, secret);
+    if (!decision.allow) {
+      json(res, decision.status, { error: decision.code, message: decision.message });
+      return;
+    }
+
     const t0 = Date.now();
     const job = jobs.start(key, async () => {
       logEvent(rid, 'nursery_scrape_start', { plant: input.plant, lat: input.lat, lng: input.lng, radiusM: input.radiusM });
@@ -383,6 +431,13 @@ const server = http.createServer(async (req, res) => {
       );
       recordSuccess('nursery_scrape');
       logEvent(rid, 'nursery_scrape_done', { count: results.length, ms: Date.now() - t0 });
+      /*
+       * Awaited, not fired and forgotten: the job's result is only handed to
+       * the client once this resolves, and a write that lands after the process
+       * exits is a scrape paid for and thrown away. The cache swallows its own
+       * failures, so this cannot fail the job.
+       */
+      await nurseryCache.put(parts, results);
       return results;
     });
 
@@ -417,7 +472,9 @@ const server = http.createServer(async (req, res) => {
       json(res, 200, { state: 'error', error: job.errorCode ?? 'scrape_failed' });
       return;
     }
-    json(res, 200, { state: 'done', results: job.result ?? [] });
+    // `finishedAt` doubles as the stock-check stamp for a freshly scraped
+    // result, so the app renders the same "checked X ago" line either way.
+    json(res, 200, { state: 'done', results: job.result ?? [], scrapedAt: job.finishedAt });
     return;
   }
 
