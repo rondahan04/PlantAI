@@ -1,3 +1,4 @@
+import { File } from 'expo-file-system';
 import { supabase } from './supabase';
 import { createCloudPlantLibrary, type CloudDeps, type CloudRow } from './plantCloud';
 
@@ -48,16 +49,34 @@ const deps: CloudDeps = {
     );
   },
 
+  /*
+   * Read the file's bytes directly rather than `fetch(uri).blob()`. React
+   * Native's Blob is a handle to native-side data with no ArrayBuffer behind
+   * it, so supabase-js serialises it to nothing and the "successful" upload
+   * stores a null/empty object - which is exactly how every cloud plant ended
+   * up with `photo_path: null` and a placeholder thumbnail. `File.bytes()`
+   * (expo-file-system 56) hands back a real Uint8Array the client can send.
+   */
   async uploadPhoto(path, sourceUri) {
     try {
-      const response = await fetch(sourceUri);
-      const blob = await response.blob();
+      const file = new File(sourceUri);
+      if (!file.exists) return null;
+
+      const bytes = await file.bytes();
+      // A zero-byte read is a failed read, not a photo. Storing it would put a
+      // permanently blank image behind a row that claims to have one.
+      if (!bytes || bytes.length === 0) return null;
+
       const { error } = await supabase.storage
         .from('plant-photos')
-        .upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: true });
-      if (error) return null;
+        .upload(path, bytes, { contentType: file.type || 'image/jpeg', upsert: true });
+      if (error) {
+        console.warn(`[cloud] photo upload failed: ${error.message}`);
+        return null;
+      }
       return path;
-    } catch {
+    } catch (e) {
+      console.warn(`[cloud] photo upload threw: ${e instanceof Error ? e.message : String(e)}`);
       return null;
     }
   },

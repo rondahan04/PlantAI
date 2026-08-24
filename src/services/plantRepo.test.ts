@@ -160,6 +160,16 @@ test('wipeMirror() clears the mirror but never the guest key', async () => {
   assert.equal(guest.load().plants.length, 1);
 });
 
+test('wipeAllLocal() clears the guest key as well - account deletion erases everything', async () => {
+  const { repo, guest, mirror } = makeRepo({ hint: true });
+  guest.save({ photoUri: 'a.jpg', diagnosis });
+  mirror.save({ photoUri: 'b.jpg', diagnosis });
+
+  repo.wipeAllLocal();
+  assert.equal(mirror.load().plants.length, 0);
+  assert.equal(guest.load().plants.length, 0);
+});
+
 test('loadLocal() reads the guest key when logged out, the mirror when logged in', () => {
   const { repo, guest, mirror, setHint } = makeRepo({ hint: false });
   guest.save({ photoUri: 'a.jpg', diagnosis });

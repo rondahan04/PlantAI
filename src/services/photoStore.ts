@@ -102,6 +102,28 @@ export function createPhotoStore(deps: PhotoDeps) {
   }
 
   /*
+   * The same photo, addressed through TODAY's document directory.
+   *
+   * iOS can preserve an app's data container while changing the UUID in its
+   * path (a reinstall over an existing install does exactly this). The stored
+   * URI is absolute, so every previously-adopted photo then points at a
+   * container path that no longer resolves even though the file itself is
+   * sitting untouched in the new one - the library fills with placeholders for
+   * photos that were never actually lost.
+   *
+   * Recognising a URI as "ours, from a previous container" needs only the
+   * directory name and the file name; both survive the move. Returns null for
+   * anything that was never this store's file, so a genuine cache URI still
+   * goes down the copy path below.
+   */
+  function relocate(uri: string): string | null {
+    if (typeof uri !== 'string' || !uri.includes(`/${PHOTO_DIR_NAME}/`)) return null;
+    const name = uri.slice(uri.lastIndexOf('/') + 1);
+    if (!name) return null;
+    return `${dir}${name}`;
+  }
+
+  /*
    * Copy `sourceUri` into the document directory under `id`.
    *
    * Returns the new URI, or `null` when the photo could not be rescued - an
@@ -115,6 +137,16 @@ export function createPhotoStore(deps: PhotoDeps) {
     // Already ours. The repair path re-adopts on every load, so this is the
     // common case, and it must not delete-then-recopy a file onto itself.
     if (owns(sourceUri)) return deps.exists(sourceUri) ? sourceUri : null;
+
+    /*
+     * Ours, but written under a previous container path - the file is already
+     * where it belongs, so this is a repoint, not a copy. Checked before the
+     * existence test below because that test is exactly what fails for a
+     * stale container URI.
+     */
+    const moved = relocate(sourceUri);
+    if (moved && deps.exists(moved)) return moved;
+
     if (!deps.exists(sourceUri)) return null;
 
     const destination = `${dir}${fileNameFor(id, photoExtension(sourceUri))}`;
