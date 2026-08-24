@@ -9,6 +9,7 @@ import {
   SectionList,
   AccessibilityInfo,
   Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,6 +28,7 @@ import { useSession } from '../hooks/useSession';
 import { getSessionHint } from '../services/sessionHint';
 import PlantCard from '../components/PlantCard';
 import ImportBanner from '../components/ImportBanner';
+import { seedMockPlants, mockDiagnosisParams } from '../services/devSeed';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
@@ -165,6 +167,38 @@ export default function HomeScreen({ navigation }: Props) {
   }, []);
 
   /*
+   * Dev fixtures (`__DEV__` only, stripped from any release bundle): seed the
+   * two mock plants, or open either one's diagnosis directly - the Diagnosis
+   * screen is where the nursery scrape is triggered from.
+   */
+  const devTools = __DEV__ ? (
+    <View style={s.devRow}>
+      <Pressable
+        style={s.devBtn}
+        onPress={async () => {
+          const result = await seedMockPlants();
+          setLibrary(plantRepo.loadLocal());
+          if (result.failed.length > 0) Alert.alert('Seed partial', result.failed.join('\n'));
+        }}
+      >
+        <Text style={s.devText}>Seed mocks</Text>
+      </Pressable>
+      <Pressable
+        style={s.devBtn}
+        onPress={async () => navigation.navigate('Diagnosis', await mockDiagnosisParams('monstera'))}
+      >
+        <Text style={s.devText}>Dx Monstera</Text>
+      </Pressable>
+      <Pressable
+        style={s.devBtn}
+        onPress={async () => navigation.navigate('Diagnosis', await mockDiagnosisParams('alocasia'))}
+      >
+        <Text style={s.devText}>Dx Alocasia</Text>
+      </Pressable>
+    </View>
+  ) : null;
+
+  /*
    * Returning-user layout. The design review's "do not touch Home" rule was
    * about not degrading the first-run screen, which is why that branch below
    * is untouched - this is a second layout holding the same tokens on purpose
@@ -236,6 +270,8 @@ export default function HomeScreen({ navigation }: Props) {
                   </View>
                 </View>
               )}
+
+              {devTools}
 
               <Text style={s.libTitle}>My Plants</Text>
             </>
@@ -309,6 +345,8 @@ export default function HomeScreen({ navigation }: Props) {
             <Text style={s.ctaText}>Diagnose My Plant</Text>
           </Pressable>
         </Animated.View>
+
+        {devTools}
 
         {/* Features */}
         <Animated.View style={[s.features, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
@@ -420,6 +458,18 @@ function makeStyles(t: Theme) {
     },
     ctaBtnPressed: { backgroundColor: t.color.primaryPressed, transform: [{ scale: 0.98 }] },
     ctaText: { ...t.type.heading, color: t.color.onPrimary },
+
+    /* __DEV__ fixtures row - never shipped, so plain and unstyled on purpose. */
+    devRow: { flexDirection: 'row', gap: t.space.sm, marginTop: t.space.md },
+    devBtn: {
+      flex: 1,
+      alignItems: 'center',
+      paddingVertical: t.space.sm,
+      borderRadius: t.radius.md,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: t.color.textSecondary,
+    },
+    devText: { ...t.type.caption, color: t.color.textSecondary },
 
     features: { marginBottom: t.space.sm },
     featuresTitle: { ...t.type.heading, color: t.color.foreground, marginBottom: t.space.lg },
