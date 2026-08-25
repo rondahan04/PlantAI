@@ -4,7 +4,7 @@
  * hermetic unit tests: real network functions are the defaults wired in by
  * callers (see server/index.ts).
  */
-import { type PipelineResult } from './core.ts';
+import { hostOf, type PipelineResult } from './core.ts';
 import { type DiscoveredNursery } from './places.ts';
 
 export interface NurseryResult {
@@ -63,14 +63,6 @@ export function haversineKm(aLat: number, aLng: number, bLat: number, bLng: numb
     Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
   return R_KM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
-
-const hostOf = (u: string): string => {
-  try {
-    return new URL(u).hostname.replace(/^www\./, '').toLowerCase();
-  } catch {
-    return u.toLowerCase();
-  }
-};
 
 /* Scrape one nursery for the plant and fold the scraper output into the
  * identity we already have from Places (or the fallback list). */

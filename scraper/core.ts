@@ -21,6 +21,20 @@ import * as fs from 'fs';
 
 export type Platform = 'shopify' | 'woo' | 'wix' | 'unknown';
 
+/*
+ * Canonical host key: lowercase, no leading www. Lives here rather than in
+ * pipeline.ts because the searcher's per-host caches (platform, homepage
+ * markdown) are keyed by it, and a second private copy that drifted would turn
+ * every cache read into a silent miss.
+ */
+export function hostOf(u: string): string {
+  try {
+    return new URL(u).hostname.replace(/^www\./, '').toLowerCase();
+  } catch {
+    return u.toLowerCase();
+  }
+}
+
 // --- env -------------------------------------------------------------------
 
 /*
@@ -77,25 +91,117 @@ export function env(key: string): string | undefined {
  * scrapeUrl, so a retried Firecrawl call can never accidentally drop the
  * fallback key - the fallback decision is made once, after this resolves.
  */
+/*
+ * Cap on Firecrawl requests in flight across the WHOLE process.
+ *
+ * A nursery search fans out over every discovered site at once, and each site
+ * can itself issue several scrapes (platform identification, then up to three
+ * probe URLs when the platform is unknown). A 7-site fan-out therefore peaked
+ * around 28 simultaneous requests, Firecrawl answered 429, and the failure fed
+ * itself: a rate-limited identification returns 'unknown', and 'unknown' is
+ * exactly the path that fires THREE probes instead of one. Measured 2026-08-25:
+ * 58% of sites failed at the fetch layer, and every one of them returned
+ * 16KB-167KB of markdown when scraped on its own moments later.
+ *
+ * The cap is deliberately process-wide rather than per-search: two concurrent
+ * searches share one Firecrawl quota, so a per-search limiter would not bound
+ * anything. Override with FIRECRAWL_MAX_CONCURRENCY once the plan's real limit
+ * is known - the API returns no RateLimit-* headers to discover it from.
+ */
+const DEFAULT_MAX_CONCURRENCY = 5;
+
+/*
+ * Run at most `max` tasks concurrently; the rest queue in FIFO order. Returned
+ * as a factory rather than a class so tests can build a limiter of their own
+ * without touching the module-level one.
+ */
+export function createLimiter(max: number) {
+  let active = 0;
+  const waiting: Array<() => void> = [];
+  return async function run<T>(fn: () => Promise<T>): Promise<T> {
+    if (active >= max) await new Promise<void>((resolve) => waiting.push(resolve));
+    active++;
+    try {
+      return await fn();
+    } finally {
+      active--;
+      waiting.shift()?.(); // hand the slot to the next waiter, if any
+    }
+  };
+}
+
+/*
+ * Built on first use, not at import time: callers run loadEnv() AFTER importing
+ * this module, so reading the override at module scope would see only a real
+ * environment variable and silently ignore the one in .env.
+ */
+let firecrawlLimiter: ReturnType<typeof createLimiter> | null = null;
+function firecrawlLimit<T>(fn: () => Promise<T>): Promise<T> {
+  firecrawlLimiter ??= createLimiter(
+    Number(env('FIRECRAWL_MAX_CONCURRENCY')) || DEFAULT_MAX_CONCURRENCY
+  );
+  return firecrawlLimiter(fn);
+}
+
+const MAX_SCRAPE_ATTEMPTS = 4;
+
+/*
+ * How long to wait before retrying a throttled/failed Firecrawl call.
+ *
+ * The old code retried IMMEDIATELY, three times. Against a rate limiter that is
+ * the same as not retrying at all - the whole budget burns in milliseconds
+ * inside the window that is rejecting us, turning a soft 429 into a hard
+ * failure. Exponential (1s, 2s, 4s) with jitter so a fan-out that all got 429
+ * together does not march back in lockstep. `rand` is injected for tests.
+ *
+ * A Retry-After header, when present, is the server telling us the answer, so
+ * it wins outright - capped so a pathological value cannot stall a search.
+ */
+export function retryDelayMs(
+  attempt: number,
+  retryAfter?: string | null,
+  rand: () => number = Math.random
+): number {
+  const seconds = Number(retryAfter);
+  if (Number.isFinite(seconds) && seconds > 0) return Math.min(seconds * 1000, 30000);
+  const base = 1000 * 2 ** (attempt - 1);
+  return Math.round(base * (0.5 + rand())); // 50-150% of base
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 async function firecrawlScrape(
   url: string,
   firecrawlKey: string,
   opts: { waitFor?: number; attempt?: number } = {}
 ): Promise<string> {
   const { waitFor = 3500, attempt = 1 } = opts;
+  const retry = async (retryAfter?: string | null): Promise<string> => {
+    // Sleep OUTSIDE the concurrency slot - a waiting retry must not hold a slot
+    // that another site could be scraping with.
+    await sleep(retryDelayMs(attempt, retryAfter));
+    return firecrawlScrape(url, firecrawlKey, { waitFor, attempt: attempt + 1 });
+  };
+
   let res: Response;
   try {
-    res = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${firecrawlKey}` },
-      body: JSON.stringify({ url, formats: ['markdown'], onlyMainContent: true, waitFor }),
-    });
+    // Only the request itself occupies a slot.
+    res = await firecrawlLimit(() =>
+      fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${firecrawlKey}` },
+        body: JSON.stringify({ url, formats: ['markdown'], onlyMainContent: true, waitFor }),
+      })
+    );
   } catch (err) {
-    if (attempt < 3) return firecrawlScrape(url, firecrawlKey, { waitFor, attempt: attempt + 1 });
+    if (attempt < MAX_SCRAPE_ATTEMPTS) return retry();
     throw err;
   }
-  if ((res.status === 408 || res.status === 429 || res.status >= 500) && attempt < 3) {
-    return firecrawlScrape(url, firecrawlKey, { waitFor, attempt: attempt + 1 });
+  if (
+    (res.status === 408 || res.status === 429 || res.status >= 500) &&
+    attempt < MAX_SCRAPE_ATTEMPTS
+  ) {
+    return retry(res.headers.get('retry-after'));
   }
   if (!res.ok) throw new Error(`Firecrawl ${res.status}`);
   const data: any = await res.json();
@@ -343,8 +449,9 @@ Homepage signals:\n${fingerprint}`;
  * on a real platform with high probability instead of bailing to 'unknown':
  *
  *   L1  fast static homepage markers      ─▶ done (common case)
- *   L2  rendered homepage markers         ─▶ catches JS/SPA sites
- *   L3  well-known endpoints              ─▶ Shopify /products.json, Woo /wp-json/
+ *   L2  rendered homepage markers         ─▶ catches JS/SPA sites   ─┐ one
+ *   L3  well-known endpoints              ─▶ Shopify /products.json, │ parallel
+ *                                            Woo /wp-json/          ─┘ stage
  *   L4  LLM classifies homepage signals   ─▶ names platform + search template;
  *                                            brand-new platforms are registered
  *                                            so future sites skip the LLM
@@ -357,6 +464,14 @@ export interface IdentifyOpts {
   openaiKey?: string;
   learnedFile?: string;
   classify?: ClassifyFn;
+  /*
+   * Called with the best homepage markdown this identification happened to
+   * read, before it is discarded. The cascade always fetches the homepage, and
+   * the caller's availability-estimate fallback needs exactly that same page -
+   * without this hook it re-scrapes an origin we just had in hand. Never called
+   * when every layer came back empty.
+   */
+  onHomeMarkdown?: (markdown: string) => void;
 }
 
 export async function identifyPlatform(
@@ -364,22 +479,35 @@ export async function identifyPlatform(
   firecrawlKey: string,
   opts: IdentifyOpts = {}
 ): Promise<string> {
-  const { scrape = scrapeUrl, openaiKey, learnedFile, classify } = opts;
+  const { scrape = scrapeUrl, openaiKey, learnedFile, classify, onHomeMarkdown } = opts;
 
-  // L1 - fast static homepage.
+  // L1 - fast static homepage. Resolves the common case for one scrape, so it
+  // stays alone in its own stage and costs exactly what it always did.
   const home0 = await safeScrape(scrape, origin, firecrawlKey, 0);
+  if (home0 && onHomeMarkdown) onHomeMarkdown(home0);
   let p: string = detectPlatform(home0);
   if (p !== 'unknown') return p;
 
-  // L2 - rendered homepage (client-rendered storefronts).
-  const home = await safeScrape(scrape, origin, firecrawlKey, 4000);
+  // L2 + L3 - fired CONCURRENTLY, not in sequence. These three fetches are
+  // independent (rendered homepage, /products.json, /wp-json/) and only a site
+  // L1 already failed to classify ever reaches them, so the extra requests are
+  // spent exactly on the sites that used to pay four serial round trips. The
+  // rendered homepage carries a 4s waitFor and dominates the stage, which is
+  // why the old serial form cost ~4x this one. Precedence is unchanged: the
+  // results are consulted in L2 → shopify-endpoint → wp-endpoint order
+  // regardless of which settles first.
+  const [home, shopify, wp] = await Promise.all([
+    safeScrape(scrape, origin, firecrawlKey, 4000),
+    safeScrape(scrape, `${origin}/products.json`, firecrawlKey, 0),
+    safeScrape(scrape, `${origin}/wp-json/`, firecrawlKey, 0),
+  ]);
+
+  if (home && onHomeMarkdown) onHomeMarkdown(home); // rendered beats static
+
   p = detectPlatform(home);
   if (p !== 'unknown') return p;
 
-  // L3 - platform-specific endpoints (content-independent tells).
-  const shopify = await safeScrape(scrape, `${origin}/products.json`, firecrawlKey, 0);
   if (/"handle"\s*:|"variants"\s*:|"product_type"\s*:/.test(shopify)) return 'shopify';
-  const wp = await safeScrape(scrape, `${origin}/wp-json/`, firecrawlKey, 0);
   if (/wp\/v2|"namespace"|"routes"/.test(wp)) return 'woo';
 
   // L4 - LLM classifies whatever homepage content we have, and teaches us the
@@ -437,10 +565,37 @@ export function searchUrlsFor(origin: string, query: string, platform: string): 
  */
 export function scoreMarkdown(markdown: string | null, query: string): number {
   const s = markdown || '';
-  const prices = (s.match(/₪/g) || []).length;
-  const productLinks = (s.match(/\/products?\//g) || []).length;
+  const prices = countPrices(s);
+  const productLinks = (s.match(new RegExp(PRODUCT_LINK_RE.source, 'g')) || []).length;
   const queryEcho = query && s.includes(query) ? 50 : 0;
   return prices + productLinks + queryEcho;
+}
+
+// --- product/price recognition (pure) --------------------------------------
+
+/*
+ * What a product permalink looks like, per platform. Wix is the reason this is
+ * an explicit list rather than /\/products?\//: its canonical product URL is
+ * `/product-page/{slug}`, which that pattern does NOT match (it requires a '/'
+ * immediately after "product"). A Wix store therefore had every one of its
+ * listings filtered out of the excerpt before the model ever saw them, and came
+ * back as an indistinguishable "0 items". Alternation is deliberate over a
+ * looser `product[-/]` so blog paths like /product-reviews/ stay excluded.
+ */
+const PRODUCT_LINK_RE = /\/(?:products?|product-page|catalog\/product|shop\/p)\//;
+
+/*
+ * An ILS price. Israeli nursery sites write the currency at least five ways and
+ * only the symbol was recognized, so a site pricing in `49 ש"ח` looked
+ * priceless. A digit is required adjacent to the currency token on both sides of
+ * the alternation - without it the bare word `שח` matches inside ordinary
+ * Hebrew words (שחור, משחה) and drags in nav/prose lines.
+ */
+const ILS_PRICE_RE = /(?:₪|ש"ח|ש״ח|שח|NIS|ILS)\s*\d|\d\s*(?:₪|ש"ח|ש״ח|שח|NIS|ILS)/i;
+
+/* Count price mentions on a page (scoreMarkdown wants a tally, not a boolean). */
+function countPrices(s: string): number {
+  return (s.match(new RegExp(ILS_PRICE_RE.source, 'gi')) || []).length;
 }
 
 // --- excerpt (pure) --------------------------------------------------------
@@ -458,7 +613,7 @@ export function priceFocusedExcerpt(markdown: string, max = 18000): string {
     .map((l) => l.replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim())
     .filter(Boolean)
     .filter((l) => !l.startsWith('data:image'))
-    .filter((l) => /^#{1,6}\s/.test(l) || l.includes('₪') || /\/products?\//.test(l));
+    .filter((l) => /^#{1,6}\s/.test(l) || ILS_PRICE_RE.test(l) || PRODUCT_LINK_RE.test(l));
   return kept.join('\n').slice(0, max);
 }
 
@@ -493,7 +648,7 @@ export async function callOpenAIJson(
 
 // --- two-pass GPT extraction pipeline --------------------------------------
 //
-//   markdown ─▶ GPT-5.5 (extract) ─▶ GPT-5.5 (verify/critic) ─▶ verified plants
+//   markdown ─▶ the model (extract) ─▶ the model (verify/critic) ─▶ verified plants
 //
 // Pass 1 extracts the plant JSON; pass 2 re-reads the source as a strict
 // auditor and confirms (or corrects) every field before we trust it. Only an
@@ -508,7 +663,7 @@ export interface Plant {
   availability: Availability;
 }
 
-/* GPT-5.5 auditor verdict. */
+/* Auditor verdict. */
 export interface VerificationReport {
   is_valid: boolean;
   confidence_score: number; // 0..100
@@ -516,10 +671,35 @@ export interface VerificationReport {
   corrected_output: Plant[];
 }
 
+/*
+ * Where a site's extraction actually stopped. Every failure used to surface as
+ * the same "0 item(s)" line, which made the four very different causes below
+ * indistinguishable in the log - so there was no way to tell a site that genuinely
+ * lacks the plant from one whose markup we simply failed to parse. Success rate
+ * is not improvable without this breakdown.
+ *
+ *   no_markdown  scrape came back empty (site down, bot-walled, bad search URL)
+ *   no_excerpt   markdown arrived but no line looked like a product/price - our
+ *                filters missed this site's format, the model never saw the page
+ *   no_match     model read a real catalog and found nothing matching the query
+ *   rejected     model extracted rows, the auditor threw all of them out
+ *   ok           rows survived
+ */
+export type ExtractStage = 'no_markdown' | 'no_excerpt' | 'no_match' | 'rejected' | 'ok';
+
+export interface ExtractFunnel {
+  stage: ExtractStage;
+  mdChars: number; // scraped markdown size
+  excerptChars: number; // what survived priceFocusedExcerpt
+  extracted: number; // rows the extraction pass proposed
+  kept: number; // rows that survived the audit
+}
+
 export interface PipelineResult {
   plants: Plant[];
   report: VerificationReport;
-  engines: { extractor: 'gpt-5.6-luna' | 'none'; verifier: 'gpt-5.6-luna' | 'none' };
+  engines: { extractor: typeof OPENAI_MODEL | 'none'; verifier: typeof OPENAI_MODEL | 'none' };
+  funnel: ExtractFunnel;
 }
 
 function coercePlants(items: any): Plant[] {
@@ -534,7 +714,7 @@ function coercePlants(items: any): Plant[] {
     }));
 }
 
-/* Extraction pass: GPT-5.5 reads the condensed markdown and returns the plant
+/* Extraction pass: the model reads the condensed markdown and returns the plant
  * JSON array matching the Plant schema. */
 export async function extractPlants(
   excerpt: string,
@@ -556,7 +736,7 @@ Content:\n${excerpt}`;
   return coercePlants((await callOpenAIJson(prompt, openaiKey, 2000)).plants);
 }
 
-/* Verification pass: GPT-5.5 acts strictly as an auditor. It cross-references
+/* Verification pass: the model acts strictly as an auditor. It cross-references
  * the extracted JSON against the source text and returns a strict verdict. */
 export async function verifyPlantsWithGPT(
   excerpt: string,
@@ -598,34 +778,99 @@ ${excerpt}`;
   };
 }
 
-/* Orchestrate the two-pass pipeline: GPT-5.5 extracts, GPT-5.5 verifies.
+/* Orchestrate the two-pass pipeline: the model extracts, then audits itself.
  * Returns the verified plants plus the auditor's report. Per the workflow: on
  * is_valid the verified data is returned; on a rejection the failure feedback
  * is logged for evaluation. */
-export async function extractAndVerifyPlants(opts: {
-  markdown: string;
-  query: string;
-  site: string;
-  openaiKey?: string;
-}): Promise<PipelineResult> {
+export interface ExtractDeps {
+  extract?: typeof extractPlants;
+  verify?: typeof verifyPlantsWithGPT;
+}
+
+export async function extractAndVerifyPlants(
+  opts: {
+    markdown: string;
+    query: string;
+    site: string;
+    openaiKey?: string;
+  },
+  deps: ExtractDeps = {}
+): Promise<PipelineResult> {
   const { markdown, query, site, openaiKey } = opts;
+  const { extract = extractPlants, verify = verifyPlantsWithGPT } = deps;
   const excerpt = priceFocusedExcerpt(markdown);
 
-  const empty = (feedback: string): PipelineResult => ({
+  const empty = (stage: ExtractStage, feedback: string): PipelineResult => ({
     plants: [],
     report: { is_valid: false, confidence_score: 0, feedback, corrected_output: [] },
     engines: { extractor: 'none', verifier: 'none' },
+    funnel: {
+      stage,
+      mdChars: markdown.length,
+      excerptChars: excerpt.length,
+      extracted: 0,
+      kept: 0,
+    },
   });
 
-  if (!excerpt.trim()) return empty('empty excerpt - no product/price lines matched');
-  if (!openaiKey) return empty('no OpenAI key available');
+  if (!excerpt.trim()) {
+    // Distinguish "nothing was scraped" from "plenty was scraped and none of it
+    // looked like a product" - the second is a parser gap on our side.
+    return markdown.trim()
+      ? empty('no_excerpt', 'no product/price lines matched in the scraped markdown')
+      : empty('no_markdown', 'scrape returned no markdown');
+  }
+  if (!openaiKey) return empty('no_markdown', 'no OpenAI key available');
 
   // --- Extraction pass -----------------------------------------------------
-  const extracted = await extractPlants(excerpt, query, site, openaiKey);
+  const extracted = await extract(excerpt, query, site, openaiKey);
+
+  // Nothing to audit. The auditor's only job is to cross-check extracted rows
+  // against the source; with zero rows it can only ever confirm the empty list,
+  // so the call was a guaranteed no-op that still cost a full LLM round trip.
+  // Most sites in a fan-out return zero matches, so this is the common path.
+  if (extracted.length === 0) {
+    return {
+      plants: [],
+      report: {
+        is_valid: true,
+        confidence_score: 100,
+        feedback: 'no products extracted - verification skipped',
+        corrected_output: [],
+      },
+      engines: { extractor: OPENAI_MODEL, verifier: 'none' },
+      funnel: {
+        stage: 'no_match',
+        mdChars: markdown.length,
+        excerptChars: excerpt.length,
+        extracted: 0,
+        kept: 0,
+      },
+    };
+  }
 
   // --- Verification pass ----------------------------------------------------
-  const report = await verifyPlantsWithGPT(excerpt, extracted, query, site, openaiKey);
-  const verified = report.corrected_output.length ? report.corrected_output : extracted;
+  const report = await verify(excerpt, extracted, query, site, openaiKey);
+  /*
+   * Honour an explicit rejection. The old rule was "empty corrected_output →
+   * fall back to `extracted`", which quietly handed back the exact rows the
+   * auditor had just rejected as hallucinated - the audit pass had no teeth in
+   * the one case it exists for. Split on is_valid instead:
+   *
+   *   is_valid false → the auditor made a deliberate call; take corrected_output
+   *                    verbatim, empty included ("drop all of these").
+   *   is_valid true  → nothing was wrong; an empty corrected_output means the
+   *                    auditor just didn't echo the list back, so keep
+   *                    `extracted` rather than losing confirmed-good rows.
+   *
+   * verifyPlantsWithGPT throws when the LLM call itself fails, so reaching this
+   * line means we have a real verdict, not a degraded one.
+   */
+  const verified = report.is_valid
+    ? report.corrected_output.length
+      ? report.corrected_output
+      : extracted
+    : report.corrected_output;
 
   if (!report.is_valid) {
     // Self-correction loop: log the failure feedback for evaluation.
@@ -634,7 +879,18 @@ export async function extractAndVerifyPlants(opts: {
     );
   }
 
-  return { plants: verified, report, engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' } };
+  return {
+    plants: verified,
+    report,
+    engines: { extractor: OPENAI_MODEL, verifier: OPENAI_MODEL },
+    funnel: {
+      stage: verified.length ? 'ok' : 'rejected',
+      mdChars: markdown.length,
+      excerptChars: excerpt.length,
+      extracted: extracted.length,
+      kept: verified.length,
+    },
+  };
 }
 
 // --- availability inference (informational / no-shop sites) -----------------
@@ -717,6 +973,17 @@ export interface SearcherOpts {
  */
 export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
   const platformCache = new Map<string, string>();
+  /*
+   * Homepage markdown captured as a by-product of platform identification, per
+   * host. The availability-estimate fallback (0 structured items) wants the
+   * homepage, and identifyPlatform already fetched it - reading it from here
+   * removes a full Firecrawl round trip from the SLOWEST and most common path.
+   * Same lifetime as platformCache: a warm host skips identification entirely,
+   * so it also has no cached homepage and the caller falls back to a real
+   * scrape. Homepage prose ("we grow herbs and perennials") is what the
+   * estimate reads, and that does not change within a process lifetime.
+   */
+  const homeCache = new Map<string, string>();
   if (opts.learnedFile) loadLearnedPlatforms(opts.learnedFile);
 
   async function resolvePlatform(origin: string, host: string): Promise<string> {
@@ -725,9 +992,15 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
     const platform = await identifyPlatform(origin, firecrawlKey, {
       openaiKey: opts.openaiKey,
       learnedFile: opts.learnedFile,
+      onHomeMarkdown: (md) => homeCache.set(host, md),
     });
     platformCache.set(host, platform);
     return platform;
+  }
+
+  /* Homepage markdown already read for this host, or '' if we never saw one. */
+  function cachedHomeMarkdown(host: string): string {
+    return homeCache.get(host) ?? '';
   }
 
   async function fetchSearchMarkdown(
@@ -768,5 +1041,5 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
     return { md: best.md, platform, picked: best.picked };
   }
 
-  return { fetchSearchMarkdown, resolvePlatform };
+  return { fetchSearchMarkdown, resolvePlatform, cachedHomeMarkdown };
 }

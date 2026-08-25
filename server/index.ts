@@ -25,6 +25,7 @@ import {
   loadEnv,
   env,
   createSearcher,
+  hostOf,
   extractAndVerifyPlants,
   inferAvailabilityLLM,
   scrapeUrl,
@@ -93,7 +94,16 @@ const deps: PipelineDeps = {
     discoverNurseries(lat, lng, GOOGLE_KEY!, { radiusM, richFields: true }),
   search: (website, query, host) => searcher.fetchSearchMarkdown(website, query, host),
   extract: (o) => extractAndVerifyPlants({ ...o, openaiKey: OPENAI_KEY }),
-  scrapeHome: (origin) => scrapeUrl(origin, FIRECRAWL_KEY!, { tavilyKey: TAVILY_KEY }),
+  /*
+   * Reached only when structured extraction found 0 items - the slow, common
+   * path. Platform identification already read this homepage moments ago, so
+   * prefer that copy over paying a second Firecrawl round trip for the same
+   * bytes. A warm host (cached platform, no identification this run) has no
+   * cached homepage and falls through to a real scrape.
+   */
+  scrapeHome: async (origin) =>
+    searcher.cachedHomeMarkdown(hostOf(origin)) ||
+    scrapeUrl(origin, FIRECRAWL_KEY!, { tavilyKey: TAVILY_KEY }),
   infer: (homeMd, query, site) => inferAvailabilityLLM(homeMd, query, site, OPENAI_KEY!),
   resolvePhoto: (photoName) => resolvePhotoUrl(photoName, GOOGLE_KEY!),
   readFallbackUrls: () =>

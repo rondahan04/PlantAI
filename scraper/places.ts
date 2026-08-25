@@ -17,6 +17,42 @@
  * mirroring tavilyExtract in core.ts.
  */
 
+import { hostOf } from './core.ts';
+
+/*
+ * Hosts that can never yield a product catalog. Plenty of nurseries list a
+ * Facebook or Instagram page as their "website", and Places hands that back in
+ * websiteUri exactly like a real storefront. Measured 2026-08-25: 2 of 19
+ * site-visits in a tally run were social URLs - each one burned a platform
+ * identification, a search scrape and an LLM availability estimate to arrive at
+ * "~2% likely", which was never in doubt. Dropping them at discovery is pure
+ * saving: no reachable product page is lost.
+ */
+const NON_STORE_HOSTS = [
+  'facebook.com',
+  'instagram.com',
+  'twitter.com',
+  'x.com',
+  'tiktok.com',
+  'youtube.com',
+  'linkedin.com',
+  'pinterest.com',
+  'wa.me',
+  'api.whatsapp.com',
+  'waze.com',
+  'google.com',
+  'maps.google.com',
+  'sites.google.com',
+  'linktr.ee',
+];
+
+/* True when a discovered "website" is a social/profile page, not a storefront.
+ * Subdomain-aware so m.facebook.com and www.instagram.com are both caught. */
+export function isNonStoreHost(website: string): boolean {
+  const host = hostOf(website);
+  return NON_STORE_HOSTS.some((bad) => host === bad || host.endsWith(`.${bad}`));
+}
+
 export interface DiscoveredNursery {
   name: string;
   website: string;
@@ -118,6 +154,7 @@ export async function discoverNurseries(
   for (const p of places) {
     const website: unknown = p?.websiteUri;
     if (typeof website !== 'string' || !website) continue;
+    if (isNonStoreHost(website)) continue; // social page, not a storefront
     const host = hostOf(website);
     if (seenHosts.has(host)) continue;
     seenHosts.add(host);
@@ -143,14 +180,4 @@ export async function discoverNurseries(
     if (out.length >= maxResults) break;
   }
   return out;
-}
-
-/* Bare hostname (www-stripped, lowercased) for dedup; falls back to the raw
- * string if the URL is unparseable so a weird value still dedups against itself. */
-function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '').toLowerCase();
-  } catch {
-    return url.toLowerCase();
-  }
 }

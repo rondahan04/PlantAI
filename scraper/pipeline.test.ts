@@ -5,6 +5,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runNurserySearch, type PipelineDeps } from './pipeline.ts';
+import type { ExtractFunnel, Plant } from './core.ts';
+
+/* runNurserySearch reads only `plants`; the rest of PipelineResult is padding
+ * these fixtures have to carry to satisfy the type. */
+const funnel = (over: Partial<ExtractFunnel> = {}): ExtractFunnel => ({
+  stage: 'ok',
+  mdChars: 0,
+  excerptChars: 0,
+  extracted: 0,
+  kept: 0,
+  ...over,
+});
 
 function makeDeps(over: Partial<PipelineDeps> = {}): PipelineDeps {
   return {
@@ -27,6 +39,7 @@ function makeDeps(over: Partial<PipelineDeps> = {}): PipelineDeps {
       plants: [{ name: 'Monstera', price: '₪175', availability: 'in_stock' }],
       report: { is_valid: true, confidence_score: 90, feedback: '', corrected_output: [] },
       engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+      funnel: funnel(),
     }),
     scrapeHome: async () => 'homepage text',
     infer: async () => ({ confidence: 0, reasoning: '' }),
@@ -62,6 +75,7 @@ test('0 scraped products → estimate card (hasPlant false, availabilityNote set
         plants: [],
         report: { is_valid: false, confidence_score: 0, feedback: '', corrected_output: [] },
         engines: { extractor: 'none', verifier: 'none' },
+        funnel: funnel({ stage: 'no_match' }),
       }),
       infer: async () => ({ confidence: 72, reasoning: 'general nursery, likely stocks it' }),
     })
@@ -98,6 +112,7 @@ test('no local stock → national ship-to-home options appended (shipsToHome tru
         plants: [],
         report: { is_valid: false, confidence_score: 0, feedback: '', corrected_output: [] },
         engines: { extractor: 'none', verifier: 'none' },
+        funnel: funnel({ stage: 'no_match' }),
       }),
       nationalUrls: ['https://shipper.example/'],
     })
@@ -123,11 +138,13 @@ test('in-stock nurseries sort before estimate-only ones', async () => {
               plants: [],
               report: { is_valid: false, confidence_score: 0, feedback: '', corrected_output: [] },
               engines: { extractor: 'none', verifier: 'none' },
+              funnel: funnel({ stage: 'no_match' }),
             }
           : {
               plants: [{ name: 'Monstera', price: '₪150', availability: 'in_stock' }],
               report: { is_valid: true, confidence_score: 90, feedback: '', corrected_output: [] },
               engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+              funnel: funnel(),
             };
       },
     })
