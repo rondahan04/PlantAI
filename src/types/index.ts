@@ -93,7 +93,7 @@ export type RootStackParamList = {
   ForgotPassword: undefined;
   ResetPasswordConfirm: undefined;
   Settings: undefined;
-  EditProfileField: { field: 'full_name' | 'username'; current: string };
+  EditProfileField: { field: 'full_name' | 'username' | 'bio'; current: string };
   ManageAccount: undefined;
   ChangePassword: undefined;
   Notifications: undefined;

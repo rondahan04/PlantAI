@@ -18,8 +18,14 @@ import {
   resolveScrape,
   tavilyExtract,
   inferAvailabilityLLM,
+  extractAndVerifyPlants,
+  OPENAI_MODEL,
+  hostOf,
+  createSearcher,
+  createLimiter,
+  retryDelayMs,
 } from './core.ts';
-import type { ScrapeFn, ClassifyFn } from './core.ts';
+import type { ScrapeFn, ClassifyFn, Plant, VerificationReport } from './core.ts';
 
 test('detectPlatform: Shopify markers', () => {
   assert.equal(detectPlatform('![x](https://rootine.co.il/cdn/shop/files/a.png)'), 'shopify');
@@ -396,4 +402,266 @@ test('inferAvailabilityLLM: never throws when the LLM call fails', async () => {
   const est = await inferAvailabilityLLM('text', 'q', 's', 'k', classify);
   assert.equal(est.confidence, 0);
   assert.match(est.reasoning, /unavailable/);
+});
+
+// --- extractAndVerifyPlants orchestration (injected passes, no network) -----
+
+/* Markdown that survives priceFocusedExcerpt, so the real orchestration runs. */
+const PRICED_MD = '##### [מרווה](https://x.co.il/products/sage)\n₪49\n';
+
+const plant = (name: string): Plant => ({ name, price: '₪49', availability: 'in_stock' });
+
+const verdict = (over: Partial<VerificationReport> = {}): VerificationReport => ({
+  is_valid: true,
+  confidence_score: 100,
+  feedback: '',
+  corrected_output: [],
+  ...over,
+});
+
+test('extractAndVerifyPlants: zero extracted rows skip the auditor call entirely', async () => {
+  let verifyCalls = 0;
+  const res = await extractAndVerifyPlants(
+    { markdown: PRICED_MD, query: 'q', site: 's', openaiKey: 'k' },
+    {
+      extract: async () => [],
+      verify: async () => {
+        verifyCalls++;
+        return verdict();
+      },
+    }
+  );
+  assert.equal(verifyCalls, 0); // the whole point: no wasted LLM round trip
+  assert.deepEqual(res.plants, []);
+  assert.equal(res.report.is_valid, true);
+  assert.equal(res.engines.extractor, OPENAI_MODEL);
+  assert.equal(res.engines.verifier, 'none');
+});
+
+test('extractAndVerifyPlants: a rejection that drops every row is honoured', async () => {
+  const res = await extractAndVerifyPlants(
+    { markdown: PRICED_MD, query: 'q', site: 's', openaiKey: 'k' },
+    {
+      extract: async () => [plant('hallucinated')],
+      verify: async () =>
+        verdict({ is_valid: false, feedback: 'not in source', corrected_output: [] }),
+    }
+  );
+  assert.deepEqual(res.plants, []); // NOT the rejected extraction
+});
+
+test('extractAndVerifyPlants: a rejection that corrects rows returns the corrections', async () => {
+  const res = await extractAndVerifyPlants(
+    { markdown: PRICED_MD, query: 'q', site: 's', openaiKey: 'k' },
+    {
+      extract: async () => [{ name: 'מרווה', price: '₪9', availability: 'in_stock' }],
+      verify: async () =>
+        verdict({ is_valid: false, feedback: 'price misread', corrected_output: [plant('מרווה')] }),
+    }
+  );
+  assert.deepEqual(res.plants, [plant('מרווה')]);
+});
+
+test('extractAndVerifyPlants: a clean verdict with no echo keeps the extracted rows', async () => {
+  const res = await extractAndVerifyPlants(
+    { markdown: PRICED_MD, query: 'q', site: 's', openaiKey: 'k' },
+    { extract: async () => [plant('מרווה')], verify: async () => verdict() }
+  );
+  assert.deepEqual(res.plants, [plant('מרווה')]);
+  assert.equal(res.engines.verifier, OPENAI_MODEL);
+});
+
+test('extractAndVerifyPlants: no excerpt and no key both short-circuit before any pass', async () => {
+  let passes = 0;
+  const count = { extract: async () => (passes++, []), verify: async () => (passes++, verdict()) };
+  const noText = await extractAndVerifyPlants(
+    { markdown: 'just prose, no prices', query: 'q', site: 's', openaiKey: 'k' },
+    count
+  );
+  const noKey = await extractAndVerifyPlants({ markdown: PRICED_MD, query: 'q', site: 's' }, count);
+  assert.equal(passes, 0);
+  assert.equal(noText.funnel.stage, 'no_excerpt');
+  assert.match(noKey.report.feedback, /no OpenAI key/);
+});
+
+test('identifyPlatform: L2 and both L3 endpoint probes run concurrently, not serially', async () => {
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const scrape: ScrapeFn = async (url, _k, o) => {
+    // L1 (static homepage, no waitFor) is a stage of its own - exclude it so the
+    // counter measures only the concurrent stage.
+    if (url === 'https://x.co.il' && !o?.waitFor) return '';
+    inFlight++;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((r) => setTimeout(r, 5));
+    inFlight--;
+    return url.includes('/wp-json/') ? '{"namespace":"wp/v2"}' : '';
+  };
+  assert.equal(await identifyPlatform('https://x.co.il', 'k', { scrape }), 'woo');
+  assert.equal(maxInFlight, 3); // L2 + /products.json + /wp-json/ overlap
+});
+
+test('identifyPlatform: L2 still wins over an L3 endpoint that also matches', async () => {
+  const scrape = fakeScrape({
+    '/products.json': '{"handle":"mint"}',
+    'x.co.il': '<div>wixstatic.com</div>',
+  });
+  // Both would classify, but precedence must stay L2 -> shopify -> wp regardless
+  // of which concurrent probe settles first. L1 sees the same wix body here, so
+  // assert against a site whose static read is empty.
+  const staged: ScrapeFn = async (url, k, o) =>
+    url === 'https://x.co.il' && !o?.waitFor ? '' : scrape(url, k, o);
+  assert.equal(await identifyPlatform('https://x.co.il', 'k', { scrape: staged }), 'wix');
+});
+
+// --- hostOf + the searcher's homepage reuse --------------------------------
+
+test('hostOf: canonical key - strips www, lowercases, survives a non-URL', () => {
+  assert.equal(hostOf('https://WWW.Decogarden.co.il/search?q=x'), 'decogarden.co.il');
+  assert.equal(hostOf('http://gan-ad.com'), 'gan-ad.com');
+  assert.equal(hostOf('not a url'), 'not a url');
+});
+
+test('identifyPlatform: publishes the homepage it read, rendered copy winning', async () => {
+  const seen: string[] = [];
+  const l1 = fakeScrape({ 'x.co.il': '[a](https://x.co.il/collections/all)' });
+  await identifyPlatform('https://x.co.il', 'k', { scrape: l1, onHomeMarkdown: (m) => seen.push(m) });
+  assert.deepEqual(seen, ['[a](https://x.co.il/collections/all)']); // L1 hit, published once
+
+  const seen2: string[] = [];
+  const staged: ScrapeFn = async (url, _k, o) => {
+    if (url !== 'https://x.co.il') return '';
+    return o?.waitFor ? 'rendered wixstatic.com' : 'static, unclassifiable';
+  };
+  await identifyPlatform('https://x.co.il', 'k', {
+    scrape: staged,
+    onHomeMarkdown: (m) => seen2.push(m),
+  });
+  assert.deepEqual(seen2, ['static, unclassifiable', 'rendered wixstatic.com']);
+});
+
+test('identifyPlatform: publishes nothing when every layer comes back empty', async () => {
+  let calls = 0;
+  await identifyPlatform('https://x.co.il', 'k', {
+    scrape: fakeScrape({}),
+    onHomeMarkdown: () => calls++,
+  });
+  assert.equal(calls, 0);
+});
+
+test('createSearcher: caches the homepage read during identification, per host', async () => {
+  const searcher = createSearcher('fc-key');
+  assert.equal(searcher.cachedHomeMarkdown('never-seen.co.il'), ''); // cold host, no lie
+});
+
+// --- product/price recognition + the extraction funnel ---------------------
+
+test('priceFocusedExcerpt: keeps Wix /product-page/ listings', () => {
+  // Wix's canonical product URL does not match /\/products?\//, so these lines
+  // used to be filtered out entirely and the model saw an empty page.
+  const md = '[מרווה רפואית](https://gan-ad.com/product-page/salvia)\n49 ש"ח';
+  assert.match(priceFocusedExcerpt(md), /product-page/);
+  assert.ok(scoreMarkdown(md, 'מרווה') > 50); // link + price both counted
+});
+
+test('priceFocusedExcerpt: keeps the Hebrew and Latin ways to write ILS', () => {
+  for (const price of ['₪49', '49 ש"ח', '49 ש״ח', 'מחיר: 32 שח', '45.00 NIS', '45.00 ILS']) {
+    assert.equal(priceFocusedExcerpt(price), price, `dropped: ${price}`);
+  }
+});
+
+test('priceFocusedExcerpt: bare Hebrew prose is not mistaken for a price', () => {
+  // 'שח' is a substring of ordinary words; only a digit-adjacent match counts.
+  for (const line of ['משחה לצמחים', 'פרחים בצבע שחור', 'שעות פתיחה 9 עד 17']) {
+    assert.equal(priceFocusedExcerpt(line), '', `false positive: ${line}`);
+  }
+  assert.equal(priceFocusedExcerpt('[מדריך](https://x.co.il/product-reviews/sage)'), '');
+});
+
+test('extractAndVerifyPlants: funnel separates no_markdown from no_excerpt', async () => {
+  const noMd = await extractAndVerifyPlants({ markdown: '', query: 'q', site: 's', openaiKey: 'k' });
+  assert.equal(noMd.funnel.stage, 'no_markdown');
+
+  const noExcerpt = await extractAndVerifyPlants({
+    markdown: 'a real page of prose about gardening, with no product lines at all',
+    query: 'q',
+    site: 's',
+    openaiKey: 'k',
+  });
+  assert.equal(noExcerpt.funnel.stage, 'no_excerpt'); // our parser missed it - fixable
+  assert.ok(noExcerpt.funnel.mdChars > 0);
+});
+
+test('extractAndVerifyPlants: funnel reports no_match, rejected and ok', async () => {
+  const run = (extract: () => Promise<Plant[]>, verify: () => Promise<VerificationReport>) =>
+    extractAndVerifyPlants(
+      { markdown: PRICED_MD, query: 'q', site: 's', openaiKey: 'k' },
+      { extract, verify }
+    );
+
+  const noMatch = await run(async () => [], async () => verdict());
+  assert.equal(noMatch.funnel.stage, 'no_match');
+
+  const rejected = await run(
+    async () => [plant('ghost')],
+    async () => verdict({ is_valid: false, corrected_output: [] })
+  );
+  assert.equal(rejected.funnel.stage, 'rejected');
+  assert.equal(rejected.funnel.extracted, 1);
+  assert.equal(rejected.funnel.kept, 0);
+
+  const ok = await run(async () => [plant('מרווה')], async () => verdict());
+  assert.equal(ok.funnel.stage, 'ok');
+  assert.equal(ok.funnel.kept, 1);
+});
+
+// --- rate-limit defences ---------------------------------------------------
+
+test('createLimiter: never exceeds max in flight, and still runs everything', async () => {
+  const run = createLimiter(3);
+  let inFlight = 0;
+  let peak = 0;
+  const done: number[] = [];
+  await Promise.all(
+    Array.from({ length: 20 }, (_, i) =>
+      run(async () => {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await new Promise((r) => setTimeout(r, 1));
+        inFlight--;
+        done.push(i);
+      })
+    )
+  );
+  assert.equal(peak, 3);
+  assert.equal(done.length, 20); // queued work is run, not dropped
+});
+
+test('createLimiter: a throwing task releases its slot', async () => {
+  const run = createLimiter(1);
+  await assert.rejects(() => run(async () => { throw new Error('boom'); }));
+  assert.equal(await run(async () => 'after'), 'after'); // would hang if leaked
+});
+
+test('retryDelayMs: backs off exponentially instead of retrying instantly', () => {
+  // The bug this replaces: three immediate retries burned the whole budget
+  // inside the same rate-limit window, turning a soft 429 into a hard failure.
+  const noJitter = () => 0.5; // -> exactly 100% of base
+  assert.equal(retryDelayMs(1, null, noJitter), 1000);
+  assert.equal(retryDelayMs(2, null, noJitter), 2000);
+  assert.equal(retryDelayMs(3, null, noJitter), 4000);
+});
+
+test('retryDelayMs: jitter spreads a synchronized fan-out across a window', () => {
+  assert.equal(retryDelayMs(1, null, () => 0), 500); // 50% of base
+  assert.equal(retryDelayMs(1, null, () => 1), 1500); // 150% of base
+});
+
+test('retryDelayMs: Retry-After wins over the backoff, but is capped', () => {
+  assert.equal(retryDelayMs(1, '7'), 7000);
+  assert.equal(retryDelayMs(3, '2'), 2000); // server's answer beats our guess
+  assert.equal(retryDelayMs(1, '9999'), 30000); // cannot stall a whole search
+  // Junk or absent headers fall through to the exponential path.
+  assert.equal(retryDelayMs(1, 'Wed, 21 Oct 2026 07:28:00 GMT', () => 0.5), 1000);
+  assert.equal(retryDelayMs(1, '0', () => 0.5), 1000);
 });
