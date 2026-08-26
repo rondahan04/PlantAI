@@ -432,7 +432,11 @@ Template examples: woocommerce -> "{origin}/?s={query}&post_type=product", shopi
 If you cannot tell, return { "platform": "unknown", "searchTemplate": null }.
 Homepage signals:\n${fingerprint}`;
   try {
-    const out = await classify(prompt, openaiKey, 300);
+    // 1500 for the same reason as inferAvailabilityLLM: the answer is two short
+    // fields, but the reasoning that precedes it is not, and a cap that only
+    // covers the reasoning yields empty content and a silent 'unknown' - which
+    // costs us the search-URL template and therefore the whole site.
+    const out = await classify(prompt, openaiKey, 1500);
     const platform = normalizePlatform(String(out.platform ?? 'unknown'));
     const searchTemplate =
       typeof out.searchTemplate === 'string' && out.searchTemplate.includes('{query}')
@@ -623,27 +627,61 @@ export function priceFocusedExcerpt(markdown: string, max = 18000): string {
  * non-2xx or unparseable content so callers can decide how to degrade. */
 export const OPENAI_MODEL = 'gpt-5.6-luna';
 
+/*
+ * `max_completion_tokens` is a budget for reasoning AND the answer, and the
+ * model spends the reasoning first. A cap that only fits the reasoning comes
+ * back with `finish_reason: 'length'` and an EMPTY content string - a 200 OK
+ * that parses to nothing.
+ *
+ * That is exactly how the Deliver tab broke: al-haderech and rootine return
+ * long Hebrew catalogue pages, the extraction pass spent all 2000 tokens
+ * thinking, `JSON.parse('')` threw "Unexpected end of JSON input", and
+ * `scrapeOne` recorded the site as `not_found`. Both shippers failing that way
+ * emptied the only tab they populate, while the shorter local pages that
+ * happened to fit kept working - which is why Pick Up looked healthy.
+ *
+ * Two defences, because a bigger cap alone would only move the cliff:
+ * retry once with a doubled budget, then report the truncation by name instead
+ * of as a parse error.
+ */
 export async function callOpenAIJson(
   prompt: string,
   openaiKey: string,
   maxTokens = 1200
 ): Promise<any> {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      messages: [{ role: 'user', content: prompt }],
-      response_format: { type: 'json_object' },
-      max_completion_tokens: maxTokens,
-    }),
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`OpenAI ${res.status} ${body.slice(0, 200)}`);
+  const attempt = async (cap: number) => {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        max_completion_tokens: cap,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`OpenAI ${res.status} ${body.slice(0, 200)}`);
+    }
+    const data: any = await res.json();
+    const choice = data?.choices?.[0];
+    return {
+      content: String(choice?.message?.content ?? ''),
+      finish: String(choice?.finish_reason ?? ''),
+    };
+  };
+
+  let { content, finish } = await attempt(maxTokens);
+  if (!content.trim() && finish === 'length') {
+    ({ content, finish } = await attempt(maxTokens * 2));
   }
-  const data: any = await res.json();
-  return JSON.parse(data.choices[0].message.content);
+  if (!content.trim()) {
+    throw new Error(
+      `OpenAI returned no content (finish_reason=${finish || 'unknown'}, max_completion_tokens=${maxTokens})`
+    );
+  }
+  return JSON.parse(content);
 }
 
 // --- two-pass GPT extraction pipeline --------------------------------------
@@ -746,7 +784,14 @@ Rules:
 - url: copy the product's own link EXACTLY from the content (markdown links look like [name](https://...)). Never invent, guess or shorten a URL - omit the field instead.
 - If nothing matches, return { "plants": [] }.
 Content:\n${excerpt}`;
-  return coercePlants((await callOpenAIJson(prompt, openaiKey, 2000)).plants);
+  /*
+   * 6000, not 2000. A full nursery search page can carry 20+ matching listings,
+   * and the model reasons before it writes: measured on al-haderech's Monstera
+   * page the extraction pass needed 4022 completion tokens, so the old cap was
+   * consumed entirely by reasoning and returned an empty string. See
+   * callOpenAIJson.
+   */
+  return coercePlants((await callOpenAIJson(prompt, openaiKey, 6000)).plants);
 }
 
 /* Verification pass: the model acts strictly as an auditor. It cross-references
@@ -782,7 +827,9 @@ ${JSON.stringify({ plants }, null, 2)}
 SOURCE TEXT:
 ${excerpt}`;
 
-  const parsed = await callOpenAIJson(prompt, openaiKey, 2000);
+  // Same budget as the extraction pass: the auditor echoes the whole corrected
+  // list back, so its answer is at least as long as what it was given.
+  const parsed = await callOpenAIJson(prompt, openaiKey, 6000);
   return {
     is_valid: Boolean(parsed.is_valid),
     confidence_score: Number(parsed.confidence_score) || 0,
@@ -1028,7 +1075,10 @@ Rows:
 ${listing}`;
 
   try {
-    const out = await classify(prompt, openaiKey, 900);
+    // 2500: one verdict per row across every nursery in the search, after the
+    // reasoning that compares them. 900 truncated on a busy result set and the
+    // catch below then passed every price through unchecked.
+    const out = await classify(prompt, openaiKey, 2500);
     const results = Array.isArray(out?.results) ? out.results : [];
     for (const r of results) {
       const i = Number(r?.index);
@@ -1082,7 +1132,10 @@ Return ONLY JSON: { "hebrew": "<the Hebrew name>" }
 Plant name: ${query}`;
 
   try {
-    const out = await classify(prompt, openaiKey, 300);
+    // 1500: an empty answer here silently searches Israeli catalogues in
+    // English, which matches nothing - the failure looks like "shop does not
+    // stock it" rather than like a truncated model reply.
+    const out = await classify(prompt, openaiKey, 1500);
     const hebrew = typeof out?.hebrew === 'string' ? out.hebrew.trim() : '';
     // Guard against the model echoing the English back, or answering in prose.
     return hebrew && hasHebrew(hebrew) ? hebrew : query;

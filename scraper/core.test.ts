@@ -28,6 +28,7 @@ import {
   translateQuery,
   hasHebrew,
   sanityCheckPrices,
+  callOpenAIJson,
 } from './core.ts';
 import type { ScrapeFn, ClassifyFn, Plant, VerificationReport } from './core.ts';
 
@@ -822,4 +823,63 @@ test('sanityCheckPrices: the prompt tells the model that expensive is not wrong'
   assert.match(seen, /₪500-₪1500/);
   assert.match(seen, /phone number/);
   assert.match(seen, /free-shipping threshold/i);
+});
+
+// --- callOpenAIJson: reasoning models can spend the whole token budget -------
+//
+// The Deliver tab bug: a 200 OK whose content is '' because finish_reason was
+// 'length'. The old code fed that straight to JSON.parse and threw a parse
+// error, which scrapeOne recorded as "we could not read this shop".
+
+function openAiFetchStub(replies: { content: string; finish: string }[]) {
+  const caps: number[] = [];
+  const fn = (async (_url: string, init: any) => {
+    caps.push(JSON.parse(init.body).max_completion_tokens);
+    const r = replies[Math.min(caps.length - 1, replies.length - 1)];
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ choices: [{ message: { content: r.content }, finish_reason: r.finish }] }),
+    };
+  }) as unknown as typeof fetch;
+  return { fn, caps };
+}
+
+test('callOpenAIJson: truncated empty reply retries once at double the budget', async () => {
+  const original = globalThis.fetch;
+  const { fn, caps } = openAiFetchStub([
+    { content: '', finish: 'length' },
+    { content: '{"plants":[{"name":"מונסטרה"}]}', finish: 'stop' },
+  ]);
+  globalThis.fetch = fn;
+  try {
+    const out = await callOpenAIJson('p', 'k', 2000);
+    assert.deepEqual(caps, [2000, 4000]);
+    assert.equal(out.plants[0].name, 'מונסטרה');
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('callOpenAIJson: still empty after the retry → names the truncation, not a parse error', async () => {
+  const original = globalThis.fetch;
+  const { fn } = openAiFetchStub([{ content: '', finish: 'length' }]);
+  globalThis.fetch = fn;
+  try {
+    await assert.rejects(() => callOpenAIJson('p', 'k', 2000), /finish_reason=length/);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('callOpenAIJson: a good first answer costs no second call', async () => {
+  const original = globalThis.fetch;
+  const { fn, caps } = openAiFetchStub([{ content: '{"ok":true}', finish: 'stop' }]);
+  globalThis.fetch = fn;
+  try {
+    assert.deepEqual(await callOpenAIJson('p', 'k', 6000), { ok: true });
+    assert.deepEqual(caps, [6000]);
+  } finally {
+    globalThis.fetch = original;
+  }
 });
