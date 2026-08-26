@@ -12,6 +12,7 @@ import { fetchNearbyNurseries } from '../services/nurseryService';
 import { waMeLink } from '../lib/whatsapp';
 import StatusView from '../components/StatusView';
 import { availabilityBadge, isWorthShowing } from '../lib/availability';
+import { nurseryLogo } from '../lib/nurseryLogos';
 
 type Styles = ReturnType<typeof makeStyles>;
 
@@ -155,7 +156,11 @@ function NurseryCard({
   return (
     <Animated.View style={[s.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
       <View style={s.cardImageWrap}>
-        {nursery.image ? (
+        {nurseryLogo(nursery.id) ? (
+          /* A logo is artwork, not a photo of the place - contain it rather
+             than cropping the wordmark to fill the frame. */
+          <Image source={nurseryLogo(nursery.id)} style={[s.cardImage, s.cardLogo]} resizeMode="contain" />
+        ) : nursery.image ? (
           <Image source={{ uri: nursery.image }} style={s.cardImage} />
         ) : (
           <View style={[s.cardImage, s.imagePlaceholder]}>
@@ -304,8 +309,14 @@ export default function NurseriesScreen({ navigation, route }: Props) {
   const ruledOut = nurseries.length - worthShowing.length;
 
   const handleOrder = (nursery: Nursery) => {
-    if (nursery.website) {
-      Linking.openURL(nursery.website);
+    /*
+     * The product page when we have one. Opening the nursery's homepage instead
+     * left the user to find the plant again by hand - which at a shop stocking
+     * two dozen Alocasias is most of the work we just did for them.
+     */
+    const target = nursery.productUrl || nursery.website;
+    if (target) {
+      Linking.openURL(target);
       return;
     }
     // No site to send them to - a nursery scraped without one is exactly the
@@ -572,6 +583,7 @@ function makeStyles(t: Theme) {
     },
     infoPillWarn: { backgroundColor: t.color.warningWash },
     infoPillMuted: { backgroundColor: t.color.surfaceMuted },
+    cardLogo: { backgroundColor: t.color.surface },
     ruledOutNote: { ...t.type.caption, color: t.color.textMuted, textAlign: 'center', marginTop: t.space.lg },
     infoPillText: { ...t.type.label, fontWeight: '500', fontSize: 13, color: t.color.primary, flex: 1 },
     actionRow: { flexDirection: 'row', gap: t.space.sm },

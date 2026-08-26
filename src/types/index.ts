@@ -81,6 +81,11 @@ export interface Nursery {
    * not_found - we could not read the shop. Shown as "didn't find the product".
    */
   outcome?: 'found' | 'not_sold' | 'not_found';
+  /* The specific product page behind plantPrice - the Order button's target. */
+  productUrl?: string;
+  /* Which listing plantPrice belongs to, and how many matched. */
+  productName?: string;
+  matchCount?: number;
   /* Structured availability - see src/lib/availability.ts for presentation. */
   availability?: {
     kind: 'estimate' | 'unreadable' | 'error';

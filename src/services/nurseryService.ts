@@ -51,6 +51,9 @@ interface NurseryResultJSON {
   availabilityNote?: string;
   availability?: { kind: 'estimate' | 'unreadable' | 'error'; confidence?: number; detail: string };
   outcome?: 'found' | 'not_sold' | 'not_found';
+  productUrl?: string;
+  productName?: string;
+  matchCount?: number;
   shipsToHome: boolean;
 }
 
@@ -95,6 +98,9 @@ function toNursery(r: NurseryResultJSON): Nursery {
     availabilityNote: r.availabilityNote,
     availability: r.availability,
     outcome: r.outcome,
+    productUrl: r.productUrl,
+    productName: r.productName,
+    matchCount: r.matchCount,
     shipsToHome: r.shipsToHome,
     rating: r.rating,
     reviewCount: r.reviewCount,

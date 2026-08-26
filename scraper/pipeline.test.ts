@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runNurserySearch, type PipelineDeps } from './pipeline.ts';
+import { runNurserySearch, parsePrice, cheapestMatch, type PipelineDeps } from './pipeline.ts';
 import type { ExtractFunnel, Plant } from './core.ts';
 
 /* runNurserySearch reads only `plants`; the rest of PipelineResult is padding
@@ -269,4 +269,74 @@ test('ship-to-home nurseries are scraped on every search, not only as a fallback
   const shippers = out.filter((n) => n.shipsToHome).map((n) => n.id);
   assert.deepEqual(shippers.sort(), ['al-haderech.co.il', 'rootine.co.il']);
   assert.ok(out.some((n) => !n.shipsToHome), 'and the local shop is still there');
+});
+
+// --- which listing gets quoted ---------------------------------------------
+
+test('parsePrice reads the formats Israeli shops actually write', () => {
+  assert.equal(parsePrice('₪49'), 49);
+  assert.equal(parsePrice('₪1,499.90'), 1499.9);
+  assert.equal(parsePrice('249.00'), 249);
+  assert.equal(parsePrice('45.00 ILS'), 45);
+  // Unparseable sorts last instead of winning by accident.
+  assert.equal(parsePrice('call us'), Infinity);
+  assert.equal(parsePrice(''), Infinity);
+  assert.equal(parsePrice('₪0'), Infinity);
+});
+
+test('the cheapest in-stock listing is quoted, not whichever came first', () => {
+  /*
+   * Real case: al-haderech returned 28 Alocasia cultivars from ₪39 to ₪1,499.90
+   * and we quoted ₪999.90 purely because that row was first in the DOM. Every
+   * number was correct; the choice was arbitrary, and it read as a broken
+   * scrape.
+   */
+  const best = cheapestMatch([
+    { name: 'זברינה מוחיטו', price: '₪999.90', availability: 'in_stock' },
+    { name: 'ריגל שילד אלבו', price: '₪1,499.90', availability: 'in_stock' },
+    { name: 'דרגון סקייל מיני', price: '₪39.00', availability: 'in_stock' },
+    { name: 'פריידק ראונד ליף', price: '₪89.00', availability: 'in_stock' },
+  ]);
+  assert.equal(best.name, 'דרגון סקייל מיני');
+  assert.equal(best.price, '₪39.00');
+});
+
+test('a sold-out bargain does not beat something you can actually buy', () => {
+  const best = cheapestMatch([
+    { name: 'cheap but gone', price: '₪10', availability: 'out_of_stock' },
+    { name: 'in stock', price: '₪90', availability: 'in_stock' },
+  ]);
+  assert.equal(best.name, 'in stock');
+});
+
+test('an all-sold-out shop still reports its cheapest rather than nothing', () => {
+  const best = cheapestMatch([
+    { name: 'b', price: '₪90', availability: 'out_of_stock' },
+    { name: 'a', price: '₪10', availability: 'out_of_stock' },
+  ]);
+  assert.equal(best.name, 'a');
+});
+
+test('the quoted listing carries its own product link and match count', async () => {
+  // The Order button opened the homepage before this, leaving the user to find
+  // the plant again at a shop with two dozen of them.
+  const out = await runNurserySearch(
+    { plantName: 'alocasia', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      extract: async () => ({
+        plants: [
+          { name: 'pricey', price: '₪999', availability: 'in_stock', url: 'https://x.co.il/products/pricey' },
+          { name: 'cheap', price: '₪39', availability: 'in_stock', url: 'https://x.co.il/products/cheap' },
+        ],
+        report: { is_valid: true, confidence_score: 100, feedback: '', corrected_output: [] },
+        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        funnel: funnel(),
+      }),
+    })
+  );
+
+  assert.equal(out[0].plantPrice, '₪39');
+  assert.equal(out[0].productUrl, 'https://x.co.il/products/cheap');
+  assert.equal(out[0].productName, 'cheap');
+  assert.equal(out[0].matchCount, 2);
 });

@@ -4,7 +4,7 @@
  * hermetic unit tests: real network functions are the defaults wired in by
  * callers (see server/index.ts).
  */
-import { hostOf, type PipelineResult } from './core.ts';
+import { hostOf, type PipelineResult, type Plant } from './core.ts';
 import { type DiscoveredNursery } from './places.ts';
 
 export interface NurseryResult {
@@ -39,6 +39,19 @@ export interface NurseryResult {
   availability?: Availability;
   /* See NurseryOutcome. Drives what the client shows and what it hides. */
   outcome?: NurseryOutcome;
+  /*
+   * The specific product page behind `plantPrice`. The Order button used to
+   * open the nursery's homepage, which for a shop stocking 28 Alocasias left
+   * the user to find the plant all over again. Absent when the listing carried
+   * no link - the homepage is still the fallback.
+   */
+  productUrl?: string;
+  /* Which listing `plantPrice` belongs to. A search for "alocasia" can match
+   * two dozen cultivars at wildly different prices; naming the one we priced
+   * is the difference between a quote and a number. */
+  productName?: string;
+  /* How many listings matched, so the client can say "from ₪39 · 28 matches". */
+  matchCount?: number;
   shipsToHome: boolean; // national fallback (Deliver tab) vs local (Pick Up tab)
 }
 
@@ -115,6 +128,36 @@ export function haversineKm(aLat: number, aLng: number, bLat: number, bLng: numb
   return R_KM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+
+/*
+ * ILS out of a scraped price string. Handles "₪1,499.90", "1499.90 ש\"ח" and
+ * bare numbers; returns Infinity for anything unparseable so it sorts last
+ * rather than winning by accident.
+ */
+export function parsePrice(price: string): number {
+  const digits = (price || '').replace(/[^0-9.,]/g, '').replace(/,/g, '');
+  const n = Number.parseFloat(digits);
+  return Number.isFinite(n) && n > 0 ? n : Infinity;
+}
+
+/*
+ * Which of a shop's matching listings to quote.
+ *
+ * Was `plants[0]` - whatever the page happened to list first. Searching
+ * al-haderech for "alocasia" returned 28 cultivars from ₪39 to ₪1,499.90 and
+ * quoted ₪999.90 purely because that row came first, which reads as a broken
+ * scrape even though every number was correct.
+ *
+ * Cheapest in stock, because the question this screen answers is "where should
+ * I buy this and for how much". Out-of-stock rows are considered only if there
+ * is nothing else, so a shop with one sold-out listing still reports honestly.
+ */
+export function cheapestMatch(plants: Plant[]): Plant {
+  const byPrice = (a: Plant, b: Plant) => parsePrice(a.price) - parsePrice(b.price);
+  const inStock = plants.filter((p) => p.availability !== 'out_of_stock');
+  return [...(inStock.length ? inStock : plants)].sort(byPrice)[0];
+}
+
 /* Scrape one nursery for the plant and fold the scraper output into the
  * identity we already have from Places (or the fallback list). */
 async function scrapeOne(
@@ -151,13 +194,16 @@ async function scrapeOne(
     const { md } = await deps.search(n.website, searchTerm, host);
     const { plants, funnel } = await deps.extract({ markdown: md, query: input.plantName, site: host });
     if (plants.length > 0) {
-      const best = plants[0];
+      const best = cheapestMatch(plants);
       return {
         ...base,
         plantPrice: best.price,
         hasPlant: best.availability !== 'out_of_stock',
         inStockKnown: true,
         outcome: 'found',
+        productUrl: best.url,
+        productName: best.name,
+        matchCount: plants.length,
       };
     }
     /*

@@ -661,6 +661,12 @@ export interface Plant {
   name: string;
   price: string; // ILS, e.g. "₪49"
   availability: Availability;
+  /*
+   * The product page, when the listing carried a link. The Order button used to
+   * open the nursery's homepage and leave the user to find the plant again -
+   * which for a shop with 28 Alocasias is most of the work.
+   */
+  url?: string;
 }
 
 /* Auditor verdict. */
@@ -707,11 +713,17 @@ function coercePlants(items: any): Plant[] {
   const valid: Availability[] = ['in_stock', 'out_of_stock', 'unknown'];
   return items
     .filter((it) => it && typeof it === 'object' && it.name && it.price)
-    .map((it) => ({
-      name: String(it.name),
-      price: String(it.price),
-      availability: valid.includes(it.availability) ? it.availability : 'unknown',
-    }));
+    .map((it) => {
+      const url = typeof it.url === 'string' ? it.url.trim() : '';
+      return {
+        name: String(it.name),
+        price: String(it.price),
+        availability: valid.includes(it.availability) ? it.availability : 'unknown',
+        // Absolute http(s) only: a relative path or a hallucinated fragment
+        // would open to nothing, which is worse than the homepage fallback.
+        ...(/^https?:\/\//i.test(url) ? { url } : {}),
+      };
+    });
 }
 
 /* Extraction pass: the model reads the condensed markdown and returns the plant
@@ -726,11 +738,12 @@ export async function extractPlants(
 The content is mostly Hebrew. The user searched for: "${query}" (match either English or Hebrew, including translations and related plant types).
 From the content below, return ONLY products that match the search query.
 Return ONLY valid JSON in exactly this shape:
-{ "plants": [{ "name": "product name in its original language", "price": "₪XX", "availability": "in_stock" | "out_of_stock" | "unknown" }] }
+{ "plants": [{ "name": "product name in its original language", "price": "₪XX", "availability": "in_stock" | "out_of_stock" | "unknown", "url": "absolute link to that product's page, or omit if the content has none" }] }
 Rules:
 - Prices MUST be in ILS (₪). If a price has no currency symbol assume ILS and add ₪.
 - Only REAL products that have a price. Ignore blog posts, articles, guides ("איך לגדל"), categories, cart/shipping/total/free-shipping lines.
 - availability: "out_of_stock" only if the text clearly says sold out / אזל / לא במלאי; "in_stock" if clearly purchasable; otherwise "unknown".
+- url: copy the product's own link EXACTLY from the content (markdown links look like [name](https://...)). Never invent, guess or shorten a URL - omit the field instead.
 - If nothing matches, return { "plants": [] }.
 Content:\n${excerpt}`;
   return coercePlants((await callOpenAIJson(prompt, openaiKey, 2000)).plants);
@@ -756,7 +769,7 @@ Return ONLY valid JSON in exactly this shape:
   "is_valid": boolean,
   "confidence_score": number,        // 0 to 100
   "feedback": string,                // explain any issues found; "" if none
-  "corrected_output": [ { "name": "...", "price": "₪XX", "availability": "in_stock" | "out_of_stock" | "unknown" } ]
+  "corrected_output": [ { "name": "...", "price": "₪XX", "availability": "in_stock" | "out_of_stock" | "unknown", "url": "carry the url through unchanged if the extracted item had one" } ]
 }
 Rules:
 - is_valid = true only if every returned item is faithful to the source.
