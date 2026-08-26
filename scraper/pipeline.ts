@@ -4,7 +4,7 @@
  * hermetic unit tests: real network functions are the defaults wired in by
  * callers (see server/index.ts).
  */
-import { hostOf, type PipelineResult } from './core.ts';
+import { hostOf, looksUnreadable, type PipelineResult } from './core.ts';
 import { type DiscoveredNursery } from './places.ts';
 
 export interface NurseryResult {
@@ -23,8 +23,33 @@ export interface NurseryResult {
   plantPrice: string; // '₪XX' or '-'
   hasPlant: boolean; // a real in-stock product was scraped
   inStockKnown: boolean; // we have an exact listing (vs an LLM estimate)
-  availabilityNote?: string; // estimate text when inStockKnown is false
+  /*
+   * DEPRECATED for display, still populated. A pre-formatted
+   * "~50% · <long LLM sentence>" that overflowed its pill in the app. Kept
+   * because `jobs.ts` retains results across a restart, so a job started by the
+   * previous build still has to render in a client that already updated.
+   * New code reads `availability`.
+   */
+  availabilityNote?: string;
+  /*
+   * The same information, structured, so the client decides presentation and
+   * can put the long reasoning behind a tap instead of clipping it mid-word.
+   * Optional for the same rolling-deploy reason as `availabilityNote`.
+   */
+  availability?: Availability;
   shipsToHome: boolean; // national fallback (Deliver tab) vs local (Pick Up tab)
+}
+
+export interface Availability {
+  /*
+   * `estimate`   - we read the site and the model judged a likelihood.
+   * `unreadable` - the site was a bot wall or returned nothing. NOT a
+   *                likelihood: there is no number to honestly report.
+   * `error`      - the scrape itself failed.
+   */
+  kind: 'estimate' | 'unreadable' | 'error';
+  confidence?: number; // `estimate` only
+  detail: string; // full reasoning / error text, shown on demand
 }
 
 export interface SearchInput {
@@ -109,13 +134,44 @@ async function scrapeOne(
     try {
       homeMd = await deps.scrapeHome(new URL(n.website).origin);
     } catch {
-      /* unreachable → infer('') yields 0% */
+      /* unreachable → handled as unreadable below */
     }
+
+    /*
+     * A bot wall is not a shop we read and judged - it is a shop we never saw.
+     * Asking the model to estimate from a captcha page produced exactly one
+     * observed result: "~50% · the site text is only a security-verification
+     * page", a made-up number in the same pill as a real one. Bail before the
+     * call; it is both the honest answer and one fewer LLM request.
+     */
+    if (looksUnreadable(homeMd)) {
+      return { ...base, ...unreadable('the site blocked automated reading') };
+    }
+
     const est = await deps.infer(homeMd, input.plantName, host);
-    return { ...base, availabilityNote: `~${est.confidence}% · ${est.reasoning}` };
+    // The regex missed it but the model saw it - reclassify rather than trust.
+    if (est.confidence === 0 || looksUnreadable(est.reasoning)) {
+      return { ...base, ...unreadable(est.reasoning || 'no readable site content') };
+    }
+
+    return {
+      ...base,
+      availabilityNote: `~${est.confidence}% · ${est.reasoning}`,
+      availability: { kind: 'estimate', confidence: est.confidence, detail: est.reasoning },
+    };
   } catch (err: any) {
-    return { ...base, availabilityNote: `unavailable (${err.message})` };
+    return {
+      ...base,
+      availabilityNote: `unavailable (${err.message})`,
+      availability: { kind: 'error', detail: err.message },
+    };
   }
+}
+
+/* Both fields together, so the legacy string and the structured value can never
+ * disagree about the same nursery. */
+function unreadable(detail: string): Pick<NurseryResult, 'availabilityNote' | 'availability'> {
+  return { availabilityNote: `unavailable (${detail})`, availability: { kind: 'unreadable', detail } };
 }
 
 export async function runNurserySearch(

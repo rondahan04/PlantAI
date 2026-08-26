@@ -83,7 +83,12 @@ test('0 scraped products → estimate card (hasPlant false, availabilityNote set
   assert.equal(out[0].hasPlant, false);
   assert.equal(out[0].inStockKnown, false);
   assert.equal(out[0].plantPrice, '-');
-  assert.match(out[0].availabilityNote ?? '', /72%/);
+  assert.match(out[0].availabilityNote ?? '', /72%/, 'legacy string still populated');
+  assert.deepEqual(out[0].availability, {
+    kind: 'estimate',
+    confidence: 72,
+    detail: 'general nursery, likely stocks it',
+  });
 });
 
 test('empty Places discovery falls back to the testing URL list', async () => {
@@ -150,4 +155,57 @@ test('in-stock nurseries sort before estimate-only ones', async () => {
     })
   );
   assert.equal(out[0].hasPlant, true); // HasStock first regardless of distance
+});
+
+test('a bot-walled nursery is reported as unreadable and costs NO LLM call', async () => {
+  /*
+   * The whole point of the fix. Previously the model was handed a captcha page
+   * and produced "~50% · the site text is only a security-verification page" -
+   * a fabricated likelihood about a shop we never saw, rendered in the same
+   * pill as a real estimate. The spy is the cost half of the assertion.
+   */
+  let inferCalls = 0;
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      extract: async () => ({
+        plants: [],
+        report: { is_valid: false, confidence_score: 0, feedback: '', corrected_output: [] },
+        engines: { extractor: 'none', verifier: 'none' },
+        funnel: funnel({ stage: 'no_match' }),
+      }),
+      scrapeHome: async () => 'Attention Required! Please verify you are human.',
+      infer: async () => {
+        inferCalls += 1;
+        return { confidence: 50, reasoning: 'should never be asked' };
+      },
+    })
+  );
+
+  assert.equal(inferCalls, 0, 'no estimate is requested for a page we could not read');
+  assert.equal(out[0].availability?.kind, 'unreadable');
+  assert.equal(out[0].availability?.confidence, undefined, 'no percentage is invented');
+});
+
+test('an estimate the model itself calls unreadable is reclassified', async () => {
+  // Belt and braces: the marker list missed it, the model did not.
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      extract: async () => ({
+        plants: [],
+        report: { is_valid: false, confidence_score: 0, feedback: '', corrected_output: [] },
+        engines: { extractor: 'none', verifier: 'none' },
+        funnel: funnel({ stage: 'no_match' }),
+      }),
+      scrapeHome: async () => 'a page with no obvious marker',
+      infer: async () => ({
+        confidence: 50,
+        reasoning: 'The site text is only a security-verification page, so there is no evidence.',
+      }),
+    })
+  );
+
+  assert.equal(out[0].availability?.kind, 'unreadable');
+  assert.equal(out[0].availability?.confidence, undefined);
 });

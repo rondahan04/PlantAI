@@ -905,6 +905,49 @@ export async function extractAndVerifyPlants(
 //
 // Pair it with the SITE HOMEPAGE, not the (often empty/broken) search page.
 
+/*
+ * Markers of a page that is a wall, not a website: Cloudflare interstitials,
+ * captchas, "enable JavaScript" shells. Kept SHORT and specific on purpose - a
+ * loose list would downgrade real catalogues that merely mention "verification"
+ * somewhere, which is a worse failure than the one being fixed. Hebrew forms
+ * are included because these are Israeli sites.
+ */
+const UNREADABLE_MARKERS = [
+  'security verification',
+  'verify you are human',
+  'checking your browser',
+  'cf browser verification',
+  'captcha',
+  'enable javascript',
+  'access denied',
+  'attention required',
+  'אימות אבטחה',
+  'אנא הפעל javascript',
+  'הגישה נדחתה',
+];
+
+/*
+ * True when the text we scraped is a bot wall rather than the site itself.
+ *
+ * Why this matters: a wall page still has words on it, so inferAvailabilityLLM
+ * dutifully read one and returned "~50% · the site text is only a
+ * security-verification page". That is a fabricated likelihood about a shop we
+ * never actually saw, presented to the user in the same pill as a real
+ * estimate. Detecting it up front is both the honest answer and one fewer LLM
+ * call per walled nursery.
+ */
+export function looksUnreadable(text: string): boolean {
+  if (!(text || '').trim()) return true; // nothing scraped is the same story to a user
+  /*
+   * Hyphens and underscores collapse to spaces before matching. The observed
+   * failure wrote it "security-verification page" while the marker reads
+   * "security verification", and a list that misses the one case that prompted
+   * it is worse than no list at all.
+   */
+  const s = text.toLowerCase().replace(/[-_]+/g, ' ');
+  return UNREADABLE_MARKERS.some((m) => s.includes(m));
+}
+
 export interface AvailabilityEstimate {
   confidence: number; // 0–100: likelihood the nursery carries the queried plant
   reasoning: string; // one-line justification, or why no estimate was possible

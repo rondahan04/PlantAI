@@ -24,6 +24,7 @@ import {
   createSearcher,
   createLimiter,
   retryDelayMs,
+  looksUnreadable,
 } from './core.ts';
 import type { ScrapeFn, ClassifyFn, Plant, VerificationReport } from './core.ts';
 
@@ -664,4 +665,39 @@ test('retryDelayMs: Retry-After wins over the backoff, but is capped', () => {
   // Junk or absent headers fall through to the exponential path.
   assert.equal(retryDelayMs(1, 'Wed, 21 Oct 2026 07:28:00 GMT', () => 0.5), 1000);
   assert.equal(retryDelayMs(1, '0', () => 0.5), 1000);
+});
+
+// --- bot-wall detection ----------------------------------------------------
+
+test('looksUnreadable: catches the walls that produced fabricated estimates', () => {
+  // The observed case: the model was handed a Cloudflare page and returned
+  // "~50% · the site text is only a security-verification page".
+  for (const page of [
+    'Security Verification required to continue',
+    'Please verify you are human',
+    'Checking your browser before accessing',
+    '<div id="cf-browser-verification">',
+    'Complete the CAPTCHA to continue',
+    'Please enable JavaScript to view this site',
+    'Access Denied',
+    'Attention Required! | Cloudflare',
+    'נדרש אימות אבטחה כדי להמשיך',
+    '',
+    '   ',
+  ]) {
+    assert.equal(looksUnreadable(page), true, `should be unreadable: ${JSON.stringify(page)}`);
+  }
+});
+
+test('looksUnreadable: a real catalogue is not mistaken for a wall', () => {
+  // A loose marker list would downgrade working shops, which is worse than the
+  // bug being fixed - these are the negatives that keep the list honest.
+  for (const page of [
+    '##### [מרווה רפואית](https://x.co.il/products/sage)\n₪49',
+    'We verify every plant before shipping. Free delivery over ₪200.',
+    'Our security policy protects your payment details.',
+    'משתלה אורגנית - צמחי תבלין, ורדים ועצי פרי',
+  ]) {
+    assert.equal(looksUnreadable(page), false, `should be readable: ${JSON.stringify(page)}`);
+  }
 });

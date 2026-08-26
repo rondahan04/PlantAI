@@ -11,6 +11,7 @@ import { directionalIconStyle } from '../lib/rtl';
 import { fetchNearbyNurseries } from '../services/nurseryService';
 import { waMeLink } from '../lib/whatsapp';
 import StatusView from '../components/StatusView';
+import { availabilityBadge } from '../lib/availability';
 
 type Styles = ReturnType<typeof makeStyles>;
 
@@ -67,6 +68,54 @@ function StarRating({ rating, t, s }: { rating: number; t: Theme; s: Styles }) {
       })}
       <Text style={s.ratingNum}>{rating.toFixed(1)}</Text>
     </View>
+  );
+}
+
+/*
+ * One line, whatever the scraper found. The reasoning behind an estimate is a
+ * full sentence and used to be rendered straight into this pill, where it
+ * clipped mid-word; it now lives behind the tap. `availabilityBadge` decides
+ * the wording, including refusing to state a percentage for a site we could
+ * never actually read.
+ */
+function AvailabilityPill({ nursery }: { nursery: Nursery }) {
+  const t = useTheme();
+  const s = useMemo(() => makeStyles(t), [t]);
+  const badge = availabilityBadge(nursery);
+
+  const tone = {
+    good: { bg: undefined, fg: t.color.primary, icon: 'checkmark-circle-outline' as const },
+    maybe: { bg: s.infoPillWarn, fg: t.color.warning, icon: 'help-circle-outline' as const },
+    // "We couldn't check" is not a warning ABOUT the nursery, so it does not
+    // get the amber treatment that reads as one.
+    unknown: { bg: s.infoPillMuted, fg: t.color.textSecondary, icon: 'help-circle-outline' as const },
+  }[badge.tone];
+
+  const body = (
+    <>
+      <Ionicons name={tone.icon} size={14} color={tone.fg} />
+      <Text style={[s.infoPillText, { color: tone.fg }]} numberOfLines={1}>
+        {badge.text}
+      </Text>
+      {badge.hasDetail && (
+        <Ionicons name="information-circle-outline" size={14} color={tone.fg} />
+      )}
+    </>
+  );
+
+  if (!badge.hasDetail) return <View style={[s.infoPill, tone.bg]}>{body}</View>;
+
+  return (
+    <Pressable
+      style={[s.infoPill, tone.bg]}
+      onPress={() => Alert.alert(badge.text, badge.detail)}
+      accessibilityRole="button"
+      // The truncated line is meaningless to a screen reader; speak all of it.
+      accessibilityLabel={`${badge.text}. ${badge.detail}`}
+      accessibilityHint="Shows why"
+    >
+      {body}
+    </Pressable>
   );
 }
 
@@ -157,20 +206,9 @@ function NurseryCard({
           </View>
         )}
 
-        {/* Availability: exact stock vs LLM estimate */}
-        {nursery.inStockKnown ? (
-          <View style={s.infoPill}>
-            <Ionicons name="checkmark-circle-outline" size={14} color={t.color.primary} />
-            <Text style={s.infoPillText}>In stock now{nursery.shipsToHome ? ' · ships to home' : ' · local pickup'}</Text>
-          </View>
-        ) : (
-          <View style={[s.infoPill, s.infoPillWarn]}>
-            <Ionicons name="help-circle-outline" size={14} color={t.color.warning} />
-            <Text style={[s.infoPillText, { color: t.color.warning }]} numberOfLines={2}>
-              {nursery.availabilityNote ?? 'Availability unknown - call to confirm'}
-            </Text>
-          </View>
-        )}
+        {/* Availability. One line, always - the long LLM reasoning goes behind
+            the tap rather than clipping mid-word inside the pill. */}
+        <AvailabilityPill nursery={nursery} />
 
         <View style={s.actionRow}>
           {!!nursery.phone && (
@@ -510,6 +548,7 @@ function makeStyles(t: Theme) {
       marginVertical: t.space.md,
     },
     infoPillWarn: { backgroundColor: t.color.warningWash },
+    infoPillMuted: { backgroundColor: t.color.surfaceMuted },
     infoPillText: { ...t.type.label, fontWeight: '500', fontSize: 13, color: t.color.primary, flex: 1 },
     actionRow: { flexDirection: 'row', gap: t.space.sm },
     actionSecondary: {

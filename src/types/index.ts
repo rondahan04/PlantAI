@@ -72,7 +72,15 @@ export interface Nursery {
   hasPlant: boolean; // a real in-stock product was scraped
   inStockKnown: boolean; // exact listing (vs an LLM estimate)
   plantPrice: string; // '₪XX' or '-'
-  availabilityNote?: string; // estimate text when inStockKnown is false
+  /* Legacy pre-formatted string; read `availability` instead. Still sent so a
+   * job started by an older server keeps rendering. */
+  availabilityNote?: string;
+  /* Structured availability - see src/lib/availability.ts for presentation. */
+  availability?: {
+    kind: 'estimate' | 'unreadable' | 'error';
+    confidence?: number;
+    detail: string;
+  };
   shipsToHome: boolean; // national ship-to-home option (vs local store)
   rating?: number;
   reviewCount?: number;
