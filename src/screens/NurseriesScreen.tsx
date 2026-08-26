@@ -11,7 +11,7 @@ import { directionalIconStyle } from '../lib/rtl';
 import { fetchNearbyNurseries } from '../services/nurseryService';
 import { waMeLink } from '../lib/whatsapp';
 import StatusView from '../components/StatusView';
-import { availabilityBadge } from '../lib/availability';
+import { availabilityBadge, isWorthShowing } from '../lib/availability';
 
 type Styles = ReturnType<typeof makeStyles>;
 
@@ -52,7 +52,9 @@ function describeFailure(err: unknown): NurseryFailure {
 
 // A nursery is "deliverable" if it ships to home or has a confirmed in-stock
 // listing; "pickupable" if it has a real local location (finite distance).
-const isDeliverable = (n: Nursery) => n.shipsToHome || n.inStockKnown;
+/* Only the national shippers actually deliver. A local shop having stock says
+ * nothing about whether it will post it to you. */
+const isDeliverable = (n: Nursery) => n.shipsToHome;
 const isPickupable = (n: Nursery) => Number.isFinite(n.distanceKm);
 const hasCoords = (n: Nursery) => n.latitude !== 0 && n.longitude !== 0;
 
@@ -276,9 +278,30 @@ export default function NurseriesScreen({ navigation, route }: Props) {
     Animated.timing(headerFade, { toValue: 1, duration: 400, useNativeDriver: true }).start();
   }, []);
 
-  const deliveryCount = nurseries.filter(isDeliverable).length;
-  const pickupCount = nurseries.filter(isPickupable).length;
-  const mapNurseries = nurseries.filter(hasCoords);
+  /*
+   * Shops that demonstrably do not stock the plant are dropped outright - see
+   * isWorthShowing. What is left is either a real listing or a shop we could
+   * not read, and both are worth a row.
+   */
+  const worthShowing = useMemo(() => nurseries.filter(isWorthShowing), [nurseries]);
+
+  /*
+   * The tabs now actually split the list. Previously both rendered EVERY
+   * nursery and the toggle only changed a button label, so "Deliver Today"
+   * showed local shops that cannot deliver. Delivery is the ship-to-home
+   * nurseries; Pick Up is the ones with a real location you can drive to.
+   */
+  const deliveryList = useMemo(() => worthShowing.filter(isDeliverable), [worthShowing]);
+  const pickupList = useMemo(() => worthShowing.filter(isPickupable), [worthShowing]);
+  const visible = mode === 'delivery' ? deliveryList : pickupList;
+
+  const deliveryCount = deliveryList.length;
+  const pickupCount = pickupList.length;
+  const mapNurseries = visible.filter(hasCoords);
+
+  /* How many were checked and ruled out. Not rows, just a quiet reassurance
+   * that the search was wider than the list suggests. */
+  const ruledOut = nurseries.length - worthShowing.length;
 
   const handleOrder = (nursery: Nursery) => {
     if (nursery.website) {
@@ -415,7 +438,7 @@ export default function NurseriesScreen({ navigation, route }: Props) {
           </MapView>
         ) : (
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.list}>
-            {nurseries.map((nursery, i) => (
+            {visible.map((nursery, i) => (
               <NurseryCard
                 key={nursery.id}
                 nursery={nursery}
@@ -549,6 +572,7 @@ function makeStyles(t: Theme) {
     },
     infoPillWarn: { backgroundColor: t.color.warningWash },
     infoPillMuted: { backgroundColor: t.color.surfaceMuted },
+    ruledOutNote: { ...t.type.caption, color: t.color.textMuted, textAlign: 'center', marginTop: t.space.lg },
     infoPillText: { ...t.type.label, fontWeight: '500', fontSize: 13, color: t.color.primary, flex: 1 },
     actionRow: { flexDirection: 'row', gap: t.space.sm },
     actionSecondary: {

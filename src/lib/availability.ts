@@ -45,8 +45,19 @@ function band(confidence: number): string {
 
 type AvailabilityInput = Pick<
   Nursery,
-  'inStockKnown' | 'hasPlant' | 'shipsToHome' | 'availability' | 'availabilityNote'
+  'inStockKnown' | 'hasPlant' | 'shipsToHome' | 'availability' | 'availabilityNote' | 'outcome'
 >;
+
+/*
+ * Whether a nursery is worth showing at all.
+ *
+ * `not_sold` means we searched their catalogue and the plant was not in it.
+ * That shop is not a result - it is the absence of one, and a list padded with
+ * places that definitely cannot help is a list the user has to read past.
+ */
+export function isWorthShowing(n: Pick<Nursery, 'outcome'>): boolean {
+  return n.outcome !== 'not_sold';
+}
 
 export function availabilityBadge(n: AvailabilityInput): AvailabilityBadge {
   // An exact listing outranks every estimate - we saw the product and its price.
@@ -56,6 +67,21 @@ export function availabilityBadge(n: AvailabilityInput): AvailabilityBadge {
       tone: 'good',
       detail: '',
       hasDetail: false,
+    };
+  }
+
+  /*
+   * We could not read this shop. Say we did not find the product, NOT that the
+   * scrape failed: our plumbing is not the user's problem, and the honest user
+   * -facing fact is simply that we have nothing to show for this nursery. They
+   * may still want to ring it, which is why the row survives at all.
+   */
+  if (n.outcome === 'not_found') {
+    return {
+      text: "Didn't find the product",
+      tone: 'unknown',
+      detail: n.availability?.detail ?? '',
+      hasDetail: Boolean(n.availability?.detail),
     };
   }
 
@@ -71,16 +97,17 @@ export function availabilityBadge(n: AvailabilityInput): AvailabilityBadge {
   }
 
   /*
-   * No percentage here, on purpose. We never read the shop, so any number would
-   * be about a captcha page rather than about the plant. "Couldn't read" is the
-   * whole truth and it is shorter.
+   * Legacy shapes from a job started before outcomes existed. Same wording as
+   * `not_found` above - the user should never see two vocabularies for one
+   * situation just because a job outlived a deploy.
    */
-  if (a?.kind === 'unreadable') {
-    return { text: "Couldn't read this site", tone: 'unknown', detail: a.detail, hasDetail: Boolean(a.detail) };
-  }
-
-  if (a?.kind === 'error') {
-    return { text: "Couldn't check this site", tone: 'unknown', detail: a.detail, hasDetail: Boolean(a.detail) };
+  if (a?.kind === 'unreadable' || a?.kind === 'error') {
+    return {
+      text: "Didn't find the product",
+      tone: 'unknown',
+      detail: a.detail,
+      hasDetail: Boolean(a.detail),
+    };
   }
 
   /*

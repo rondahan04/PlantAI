@@ -27,6 +27,7 @@ import {
   createSearcher,
   hostOf,
   extractAndVerifyPlants,
+  translateQuery,
   inferAvailabilityLLM,
   scrapeUrl,
 } from '../scraper/core.ts';
@@ -74,14 +75,17 @@ const jobs = createJobStore<NurseryResult[]>();
  */
 const CORS_ORIGIN = env('CORS_ORIGIN');
 
-const NATIONAL_NURSERIES = [
-  'https://al-haderech.co.il/',
-  'https://rootine.co.il/',
-  'https://www.peer-nursery.co.il/',
-  'https://www.plantit.co.il/',
-  'https://netaplants.co.il/',
-  'https://decogarden.co.il/',
-];
+/*
+ * The nurseries that actually ship nationally. These are scraped on EVERY
+ * search, not only when nothing local matches, because they are the whole
+ * content of the Deliver tab - a user who opens it wants delivery whether or
+ * not a local shop happened to have the plant.
+ *
+ * Kept to the two confirmed shippers. The others on this list were general
+ * nurseries with no delivery, so including them padded the tab with rows that
+ * could not be delivered and cost a scrape each.
+ */
+const NATIONAL_NURSERIES = ['https://al-haderech.co.il/', 'https://rootine.co.il/'];
 
 const searcher = createSearcher(FIRECRAWL_KEY, {
   openaiKey: OPENAI_KEY,
@@ -94,6 +98,8 @@ const deps: PipelineDeps = {
     discoverNurseries(lat, lng, GOOGLE_KEY!, { radiusM, richFields: true }),
   search: (website, query, host) => searcher.fetchSearchMarkdown(website, query, host),
   extract: (o) => extractAndVerifyPlants({ ...o, openaiKey: OPENAI_KEY }),
+  /* English in, Hebrew out - see translateQuery. One call per search. */
+  translate: (plantName) => translateQuery(plantName, OPENAI_KEY!),
   /*
    * Reached only when structured extraction found 0 items - the slow, common
    * path. Platform identification already read this homepage moments ago, so

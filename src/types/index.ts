@@ -75,6 +75,12 @@ export interface Nursery {
   /* Legacy pre-formatted string; read `availability` instead. Still sent so a
    * job started by an older server keeps rendering. */
   availabilityNote?: string;
+  /*
+   * found     - a real listing. Shown.
+   * not_sold  - we read their catalogue, the plant is not in it. HIDDEN.
+   * not_found - we could not read the shop. Shown as "didn't find the product".
+   */
+  outcome?: 'found' | 'not_sold' | 'not_found';
   /* Structured availability - see src/lib/availability.ts for presentation. */
   availability?: {
     kind: 'estimate' | 'unreadable' | 'error';

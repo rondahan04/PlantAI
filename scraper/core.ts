@@ -948,6 +948,52 @@ export function looksUnreadable(text: string): boolean {
   return UNREADABLE_MARKERS.some((m) => s.includes(m));
 }
 
+// --- query translation ------------------------------------------------------
+
+/* Any Hebrew letter. A query already in Hebrew needs no translating. */
+const HEBREW_RE = /[֐-׿]/;
+
+export function hasHebrew(s: string): boolean {
+  return HEBREW_RE.test(s || '');
+}
+
+/*
+ * Translate a plant name to Hebrew for the site search.
+ *
+ * Israeli nursery sites index their catalogue in Hebrew, so searching them for
+ * "alocasia regal shield" returns nothing - not because the shop lacks the
+ * plant, but because the string never appears on the page. The extractor has
+ * always been told to match either language; the SEARCH URL was the half still
+ * asking in English.
+ *
+ * Called ONCE per search rather than per site: the answer is the same for every
+ * nursery, and per-site would multiply a cheap call by the fan-out width.
+ * Returns the original on any failure - a search in the wrong language still
+ * beats no search.
+ */
+export async function translateQuery(
+  name: string,
+  openaiKey: string,
+  classify: ClassifyFn = callOpenAIJson
+): Promise<string> {
+  const query = (name || '').trim();
+  if (!query || hasHebrew(query)) return query;
+
+  const prompt = `Translate this plant name into Hebrew as an Israeli plant nursery would list it on its website.
+Transliterate the genus and cultivar rather than translating them literally - Israeli nurseries write "Alocasia Regal Shield" as "אלוקסיה ריגל שילד", not as a description of a shield.
+Return ONLY JSON: { "hebrew": "<the Hebrew name>" }
+Plant name: ${query}`;
+
+  try {
+    const out = await classify(prompt, openaiKey, 300);
+    const hebrew = typeof out?.hebrew === 'string' ? out.hebrew.trim() : '';
+    // Guard against the model echoing the English back, or answering in prose.
+    return hebrew && hasHebrew(hebrew) ? hebrew : query;
+  } catch {
+    return query;
+  }
+}
+
 export interface AvailabilityEstimate {
   confidence: number; // 0–100: likelihood the nursery carries the queried plant
   reasoning: string; // one-line justification, or why no estimate was possible

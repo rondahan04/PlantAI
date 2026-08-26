@@ -25,6 +25,8 @@ import {
   createLimiter,
   retryDelayMs,
   looksUnreadable,
+  translateQuery,
+  hasHebrew,
 } from './core.ts';
 import type { ScrapeFn, ClassifyFn, Plant, VerificationReport } from './core.ts';
 
@@ -700,4 +702,51 @@ test('looksUnreadable: a real catalogue is not mistaken for a wall', () => {
   ]) {
     assert.equal(looksUnreadable(page), false, `should be readable: ${JSON.stringify(page)}`);
   }
+});
+
+// --- query translation -----------------------------------------------------
+
+test('translateQuery: an English name becomes the Hebrew a nursery would list', async () => {
+  /*
+   * Israeli nurseries index their catalogues in Hebrew, so searching them for
+   * "alocasia regal shield" matches nothing - the shop may stock the plant, the
+   * string just never appears on the page.
+   */
+  const out = await translateQuery(
+    'alocasia regal shield',
+    'k',
+    fakeClassify({ hebrew: 'אלוקסיה ריגל שילד' })
+  );
+  assert.equal(out, 'אלוקסיה ריגל שילד');
+});
+
+test('translateQuery: a query already in Hebrew costs nothing', async () => {
+  let calls = 0;
+  const counting: ClassifyFn = async () => {
+    calls += 1;
+    return {};
+  };
+  assert.equal(await translateQuery('מרווה', 'k', counting), 'מרווה');
+  assert.equal(calls, 0, 'no round trip for a query that needs none');
+});
+
+test('translateQuery: a useless answer falls back to the original', async () => {
+  // Better to search in the wrong language than not to search at all.
+  assert.equal(await translateQuery('monstera', 'k', fakeClassify({ hebrew: '' })), 'monstera');
+  assert.equal(
+    await translateQuery('monstera', 'k', fakeClassify({ hebrew: 'Monstera deliciosa' })),
+    'monstera',
+    'an English echo is not a translation'
+  );
+  const throwing: ClassifyFn = async () => {
+    throw new Error('LLM down');
+  };
+  assert.equal(await translateQuery('monstera', 'k', throwing), 'monstera');
+});
+
+test('hasHebrew distinguishes the two scripts', () => {
+  assert.equal(hasHebrew('אלוקסיה'), true);
+  assert.equal(hasHebrew('alocasia'), false);
+  assert.equal(hasHebrew('Alocasia אלוקסיה'), true);
+  assert.equal(hasHebrew(''), false);
 });

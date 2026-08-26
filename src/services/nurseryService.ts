@@ -50,6 +50,7 @@ interface NurseryResultJSON {
   inStockKnown: boolean;
   availabilityNote?: string;
   availability?: { kind: 'estimate' | 'unreadable' | 'error'; confidence?: number; detail: string };
+  outcome?: 'found' | 'not_sold' | 'not_found';
   shipsToHome: boolean;
 }
 
@@ -93,6 +94,7 @@ function toNursery(r: NurseryResultJSON): Nursery {
     plantPrice: r.plantPrice,
     availabilityNote: r.availabilityNote,
     availability: r.availability,
+    outcome: r.outcome,
     shipsToHome: r.shipsToHome,
     rating: r.rating,
     reviewCount: r.reviewCount,

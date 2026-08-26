@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { availabilityBadge, LIKELY_AT_OR_ABOVE, MAYBE_AT_OR_ABOVE } from './availability.ts';
+import {
+  availabilityBadge,
+  isWorthShowing,
+  LIKELY_AT_OR_ABOVE,
+  MAYBE_AT_OR_ABOVE,
+} from './availability.ts';
 import type { Nursery } from '../types/index.ts';
 
 /*
@@ -59,24 +64,42 @@ test('an estimate keeps its reasoning behind the tap, not in the line', () => {
   assert.equal(b.hasDetail, true);
 });
 
-test('an unreadable site NEVER gets a percentage', () => {
-  // The bug in one assertion: no number may be stated about a page we could
-  // not read, however confident the model sounded about the captcha.
+test('a shop we could not read says we did not find the product', () => {
+  /*
+   * Two rules in one line. No percentage - we never read the shop, so any
+   * number would describe a captcha page rather than the plant. And no talk of
+   * scrapes or blocking: our plumbing is not the user's problem, and all they
+   * need to know is that we have nothing to show for this nursery.
+   */
   const b = availabilityBadge(
-    base({ availability: { kind: 'unreadable', detail: 'the site blocked automated reading' } })
+    base({
+      outcome: 'not_found',
+      availability: { kind: 'unreadable', detail: 'the site blocked automated reading' },
+    })
   );
 
-  assert.equal(b.text, "Couldn't read this site");
+  assert.equal(b.text, "Didn't find the product");
   assert.doesNotMatch(b.text, /%/);
+  assert.doesNotMatch(b.text, /scrape|block|fail|error/i, 'no plumbing language');
   assert.equal(b.tone, 'unknown', 'not amber - this is not a warning about the nursery');
-  assert.equal(b.hasDetail, true);
+  assert.equal(b.detail, 'the site blocked automated reading', 'the reason stays behind the tap');
 });
 
-test('a failed check is distinguished from an unreadable site', () => {
-  const b = availabilityBadge(base({ availability: { kind: 'error', detail: 'Firecrawl 429' } }));
-  assert.equal(b.text, "Couldn't check this site");
-  assert.equal(b.detail, 'Firecrawl 429');
+test('a legacy unreadable/error payload speaks the same words', () => {
+  // A job that outlived a deploy must not show the user a second vocabulary.
+  for (const kind of ['unreadable', 'error'] as const) {
+    const b = availabilityBadge(base({ availability: { kind, detail: 'Firecrawl 429' } }));
+    assert.equal(b.text, "Didn't find the product", kind);
+  }
 });
+
+test('a shop that was read and does not stock the plant is not shown at all', () => {
+  assert.equal(isWorthShowing(base({ outcome: 'not_sold' })), false);
+  assert.equal(isWorthShowing(base({ outcome: 'found' })), true);
+  assert.equal(isWorthShowing(base({ outcome: 'not_found' })), true);
+  assert.equal(isWorthShowing(base()), true, 'an older payload with no outcome still shows');
+});
+
 
 test('a legacy note from an older server still renders', () => {
   /*

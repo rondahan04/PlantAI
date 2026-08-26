@@ -67,7 +67,13 @@ test('assembles a NurseryResult from Places identity + scraper price', async () 
   assert.ok(n.distanceKm > 0 && n.distanceKm < 50);
 });
 
-test('0 scraped products → estimate card (hasPlant false, availabilityNote set)', async () => {
+test('a shop we read that does not list the plant is classified not_sold', async () => {
+  /*
+   * The user does not want to see these at all - a nursery that demonstrably
+   * does not stock the plant is not a result. The client hides them; the
+   * pipeline's job is to say so unambiguously.
+   */
+  let inferCalls = 0;
   const out = await runNurserySearch(
     { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
     makeDeps({
@@ -77,19 +83,20 @@ test('0 scraped products → estimate card (hasPlant false, availabilityNote set
         engines: { extractor: 'none', verifier: 'none' },
         funnel: funnel({ stage: 'no_match' }),
       }),
-      infer: async () => ({ confidence: 72, reasoning: 'general nursery, likely stocks it' }),
+      infer: async () => {
+        inferCalls += 1;
+        return { confidence: 72, reasoning: 'general nursery, likely stocks it' };
+      },
     })
   );
+
+  assert.equal(out[0].outcome, 'not_sold');
   assert.equal(out[0].hasPlant, false);
   assert.equal(out[0].inStockKnown, false);
   assert.equal(out[0].plantPrice, '-');
-  assert.match(out[0].availabilityNote ?? '', /72%/, 'legacy string still populated');
-  assert.deepEqual(out[0].availability, {
-    kind: 'estimate',
-    confidence: 72,
-    detail: 'general nursery, likely stocks it',
-  });
+  assert.equal(inferCalls, 0, 'no likelihood is displayed any more, so none is paid for');
 });
+
 
 test('empty Places discovery falls back to the testing URL list', async () => {
   let usedFallback = false;
@@ -157,12 +164,13 @@ test('in-stock nurseries sort before estimate-only ones', async () => {
   assert.equal(out[0].hasPlant, true); // HasStock first regardless of distance
 });
 
-test('a bot-walled nursery is reported as unreadable and costs NO LLM call', async () => {
+test('a bot-walled nursery is not_found and costs NO LLM call', async () => {
   /*
-   * The whole point of the fix. Previously the model was handed a captcha page
-   * and produced "~50% · the site text is only a security-verification page" -
-   * a fabricated likelihood about a shop we never saw, rendered in the same
-   * pill as a real estimate. The spy is the cost half of the assertion.
+   * A wall means the SEARCH page never yielded a catalogue, which the funnel
+   * reports as no_markdown. Previously this path fetched the homepage too and
+   * asked the model to estimate from the captcha, producing "~50% · the site
+   * text is only a security-verification page" - a fabricated likelihood about
+   * a shop we never saw. The spy is the cost half of the assertion.
    */
   let inferCalls = 0;
   const out = await runNurserySearch(
@@ -172,7 +180,7 @@ test('a bot-walled nursery is reported as unreadable and costs NO LLM call', asy
         plants: [],
         report: { is_valid: false, confidence_score: 0, feedback: '', corrected_output: [] },
         engines: { extractor: 'none', verifier: 'none' },
-        funnel: funnel({ stage: 'no_match' }),
+        funnel: funnel({ stage: 'no_markdown' }),
       }),
       scrapeHome: async () => 'Attention Required! Please verify you are human.',
       infer: async () => {
@@ -183,12 +191,17 @@ test('a bot-walled nursery is reported as unreadable and costs NO LLM call', asy
   );
 
   assert.equal(inferCalls, 0, 'no estimate is requested for a page we could not read');
-  assert.equal(out[0].availability?.kind, 'unreadable');
+  assert.equal(out[0].outcome, 'not_found', 'unreadable is NOT proof the plant is absent');
   assert.equal(out[0].availability?.confidence, undefined, 'no percentage is invented');
 });
 
-test('an estimate the model itself calls unreadable is reclassified', async () => {
-  // Belt and braces: the marker list missed it, the model did not.
+test('a shop whose catalogue we never read is not_found, never not_sold', async () => {
+  /*
+   * The distinction that matters. `no_excerpt` means the page came back but
+   * nothing on it looked like a catalogue - so the plant may well be there and
+   * we simply could not see it. Calling that "does not sell it" would hide a
+   * nursery that has the plant.
+   */
   const out = await runNurserySearch(
     { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
     makeDeps({
@@ -196,16 +209,64 @@ test('an estimate the model itself calls unreadable is reclassified', async () =
         plants: [],
         report: { is_valid: false, confidence_score: 0, feedback: '', corrected_output: [] },
         engines: { extractor: 'none', verifier: 'none' },
-        funnel: funnel({ stage: 'no_match' }),
-      }),
-      scrapeHome: async () => 'a page with no obvious marker',
-      infer: async () => ({
-        confidence: 50,
-        reasoning: 'The site text is only a security-verification page, so there is no evidence.',
+        funnel: funnel({ stage: 'no_excerpt' }),
       }),
     })
   );
 
-  assert.equal(out[0].availability?.kind, 'unreadable');
-  assert.equal(out[0].availability?.confidence, undefined);
+  assert.equal(out[0].outcome, 'not_found');
+});
+
+
+test('the query is translated once for the whole fan-out, not once per site', async () => {
+  // Per-site would multiply a cheap call by the width of the search.
+  let translateCalls = 0;
+  const searchedFor: string[] = [];
+
+  await runNurserySearch(
+    { plantName: 'alocasia regal shield', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      discover: async () => [
+        { name: 'A', website: 'https://a.example/', lat: 32.1, lng: 34.8, address: '' },
+        { name: 'B', website: 'https://b.example/', lat: 32.2, lng: 34.9, address: '' },
+      ],
+      nationalUrls: ['https://ship.example/'],
+      translate: async () => {
+        translateCalls += 1;
+        return 'אלוקסיה ריגל שילד';
+      },
+      search: async (_website, query) => {
+        searchedFor.push(query);
+        return { md: 'x', platform: 'woo', picked: 'u' };
+      },
+    })
+  );
+
+  assert.equal(translateCalls, 1, 'one translation for three sites');
+  assert.equal(searchedFor.length, 3);
+  assert.ok(
+    searchedFor.every((q) => q === 'אלוקסיה ריגל שילד'),
+    'every shop is searched in the language it indexes'
+  );
+});
+
+test('ship-to-home nurseries are scraped on every search, not only as a fallback', async () => {
+  /*
+   * They used to run only when nothing local matched, which emptied the Deliver
+   * tab in exactly the case a user opens it: a local shop had the plant but they
+   * would rather have it delivered.
+   */
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      discover: async () => [
+        { name: 'Local', website: 'https://local.example/', lat: 32.1, lng: 34.8, address: '' },
+      ],
+      nationalUrls: ['https://al-haderech.co.il/', 'https://rootine.co.il/'],
+    })
+  );
+
+  const shippers = out.filter((n) => n.shipsToHome).map((n) => n.id);
+  assert.deepEqual(shippers.sort(), ['al-haderech.co.il', 'rootine.co.il']);
+  assert.ok(out.some((n) => !n.shipsToHome), 'and the local shop is still there');
 });
