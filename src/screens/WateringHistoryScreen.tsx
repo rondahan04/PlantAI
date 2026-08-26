@@ -8,7 +8,7 @@ import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
 import { directionalIconStyle } from '../lib/rtl';
 import { plantLibrary } from '../services/plantLibrary';
-import { wateringHistory } from '../services/plantStore';
+import { careHistory } from '../services/plantStore';
 import { WEEKDAY_LABELS, dayKey, dayKeySet, monthView, shiftMonth } from '../lib/calendar';
 import { wateringState } from '../lib/watering';
 
@@ -27,10 +27,34 @@ type Props = {
   route: RouteProp<RootStackParamList, 'WateringHistory'>;
 };
 
+/* One calendar, three kinds. The copy is the only thing that differs. */
+const COPY: Record<'water' | 'repot' | 'fertilizer', { title: string; empty: string; one: string; many: string }> = {
+  water: {
+    title: 'Watering history',
+    empty: 'No waterings logged yet - tap Water now on the plant to start.',
+    one: 'watering',
+    many: 'waterings',
+  },
+  repot: {
+    title: 'Repotting history',
+    empty: 'No repotting logged yet - tap Log repot on the plant to start.',
+    one: 'repot',
+    many: 'repots',
+  },
+  fertilizer: {
+    title: 'Fertilizer history',
+    empty: 'No feeding logged yet - tap Log feed on the plant to start.',
+    one: 'feed',
+    many: 'feeds',
+  },
+};
+
 export default function WateringHistoryScreen({ navigation, route }: Props) {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
-  const { plantId } = route.params;
+  /* Defaults to watering so the existing navigate({ plantId }) call sites are
+   * unchanged. Repot and fertilizer reuse the same calendar. */
+  const { plantId, kind = 'water' } = route.params;
 
   // Re-read by id rather than taking the plant through params, for the same
   // reason the detail screen does: params are a snapshot of a record that may
@@ -41,12 +65,18 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
     return monthView(now.getFullYear(), now.getMonth());
   });
 
-  const history = useMemo(() => (plant ? wateringHistory(plant) : []), [plant]);
+  const history = useMemo(() => (plant ? careHistory(plant, kind) : []), [plant, kind]);
   const watered = useMemo(() => dayKeySet(history), [history]);
 
-  const water = plant
-    ? wateringState(plant.diagnosis.carePlan, plant.lastWateredAt, Date.now())
-    : null;
+  /*
+   * Only watering has a schedule. The care plan carries no repot or fertilizer
+   * interval, so for those kinds there is no next-due day to highlight - and
+   * drawing one would be inventing a due date the app never computed.
+   */
+  const water =
+    plant && kind === 'water'
+      ? wateringState(plant.diagnosis.carePlan, plant.lastWateredAt, Date.now())
+      : null;
   const dueKey = water?.nextDueAt ? dayKey(water.nextDueAt) : '';
   const todayKey = dayKey(new Date());
 
@@ -83,11 +113,11 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
           </Pressable>
         </View>
 
-        <Text style={s.title}>Watering history</Text>
+        <Text style={s.title}>{COPY[kind].title}</Text>
         <Text style={s.subtitle}>
           {history.length === 0
-            ? 'No waterings logged yet - tap Water now on the plant to start.'
-            : `${history.length} watering${history.length === 1 ? '' : 's'} logged`}
+            ? COPY[kind].empty
+            : `${history.length} ${history.length === 1 ? COPY[kind].one : COPY[kind].many} logged`}
         </Text>
 
         <View style={s.card}>

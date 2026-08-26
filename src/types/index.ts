@@ -102,7 +102,9 @@ export type RootStackParamList = {
     diagnosis: PlantDiagnosis;
   };
   PlantDetail: { plantId: string };
-  WateringHistory: { plantId: string };
+  /* `kind` is optional so the existing navigate({ plantId }) call sites keep
+   * working and default to watering. */
+  WateringHistory: { plantId: string; kind?: 'water' | 'repot' | 'fertilizer' };
   Nurseries: {
     plantName: string;
     lat: number;

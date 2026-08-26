@@ -11,6 +11,7 @@ import { LOGO_GLYPH } from '../brand';
 import { plantLibrary } from '../services/plantLibrary';
 import { plantPhotos } from '../services/photos';
 import { intervalLabel, wateringState } from '../lib/watering';
+import { careHistory, type CareKind } from '../services/plantStore';
 import { cancelWateringReminder, scheduleWateringReminder } from '../services/wateringReminder';
 
 /*
@@ -20,6 +21,18 @@ import { cancelWateringReminder, scheduleWateringReminder } from '../services/wa
  * params: params are a snapshot, and a plant deleted or changed elsewhere
  * would still render here from stale data.
  */
+
+/* The care LOG (things the user records), distinct from CARE_ROWS below, which
+ * is the care PLAN (advice the model gave). Watering has its own card. */
+const CARE_LOG_ROWS: {
+  kind: CareKind;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  verb: string;
+}[] = [
+  { kind: 'repot', label: 'Repot / soil change', icon: 'flower-outline', verb: 'Log repot' },
+  { kind: 'fertilizer', label: 'Fertilizer', icon: 'nutrition-outline', verb: 'Log feed' },
+];
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'PlantDetail'>;
@@ -99,6 +112,25 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
    * this whole feature is designed to survive, since the detail screen and the
    * library badge both read from storage, not from the OS.
    */
+  /*
+   * Repot and feed. Simpler than handleWater on purpose: neither schedules a
+   * reminder, so there is no OS handle to cancel and no ordering constraint -
+   * storage is the whole operation.
+   */
+  const handleCare = (kind: CareKind) => {
+    const logged = plantLibrary.markCare(plant.id, kind, Date.now());
+    if (!logged.ok) {
+      Alert.alert(
+        "Couldn't record that",
+        logged.reason === 'not_found'
+          ? 'This plant is no longer saved.'
+          : 'Your device is out of storage space, so nothing was saved.'
+      );
+      return;
+    }
+    setPlant(logged.plant);
+  };
+
   const handleWater = async () => {
     if (watering) return;
     setWatering(true);
@@ -260,7 +292,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
                   <Ionicons name={icon} size={20} color={key === 'water' ? t.color.water : t.color.primary} />
                 </View>
                 <View style={s.careBody}>
-                  <Text style={s.careLabel}>{label}</Text>
+                  <Text style={s.logLabel}>{label}</Text>
                   <Text style={s.careText}>{diagnosis.carePlan![key]}</Text>
                 </View>
               </View>
@@ -396,6 +428,54 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
           </View>
         )}
 
+        {/*
+          Repotting and feeding. Deliberately no countdown and no "due" state:
+          unlike watering, the care plan carries no interval for either, and a
+          schedule invented here would be advice the app made up.
+        */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Care log</Text>
+          {CARE_LOG_ROWS.map(({ kind, label, icon, verb }) => {
+            const last = careHistory(plant, kind)[0];
+            return (
+              <View key={kind} style={s.logRow}>
+                <Ionicons name={icon} size={18} color={t.color.textSecondary} />
+                <View style={s.logRowText}>
+                  <Text style={s.logLabel}>{label}</Text>
+                  <Text style={s.logMeta}>
+                    {last ? `Last ${new Date(last).toLocaleDateString()}` : 'Never logged'}
+                  </Text>
+                </View>
+                {!!last && (
+                  <Pressable
+                    style={({ pressed }) => [s.historyBtn, pressed && { opacity: 0.6 }]}
+                    onPress={() => navigation.navigate('WateringHistory', { plantId: plant.id, kind })}
+                    accessibilityRole="button"
+                    accessibilityLabel={`See the ${label.toLowerCase()} history for ${diagnosis.plantName}`}
+                    hitSlop={8}
+                  >
+                    <Ionicons
+                      name="chevron-forward"
+                      size={16}
+                      color={t.color.textSecondary}
+                      style={directionalIconStyle}
+                    />
+                  </Pressable>
+                )}
+                <Pressable
+                  style={({ pressed }) => [s.logBtn, pressed && { opacity: 0.7 }]}
+                  onPress={() => handleCare(kind)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${verb} ${diagnosis.plantName} today`}
+                  hitSlop={6}
+                >
+                  <Text style={s.logBtnText}>{verb}</Text>
+                </Pressable>
+              </View>
+            );
+          })}
+        </View>
+
         <Text style={s.savedAt}>Saved {new Date(plant.savedAt).toLocaleDateString()}</Text>
       </ScrollView>
     </SafeAreaView>
@@ -446,6 +526,17 @@ const makeStyles = (t: Theme) =>
 
     section: { marginTop: t.space.xl },
     sectionTitle: { ...t.type.heading, color: t.color.foreground, marginBottom: t.space.sm },
+    logRow: { flexDirection: 'row', alignItems: 'center', gap: t.space.md, paddingVertical: t.space.sm },
+    logRowText: { flex: 1 },
+    logLabel: { ...t.type.bodyStrong, color: t.color.foreground },
+    logMeta: { ...t.type.caption, color: t.color.textMuted },
+    logBtn: {
+      paddingHorizontal: t.space.md,
+      paddingVertical: t.space.sm,
+      borderRadius: t.radius.pill,
+      backgroundColor: t.color.surfaceMuted,
+    },
+    logBtnText: { ...t.type.label, color: t.color.foreground },
     sectionNote: { ...t.type.caption, color: t.color.textMuted, marginTop: -t.space.xs, marginBottom: t.space.sm },
 
     /*
