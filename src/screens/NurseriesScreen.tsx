@@ -194,8 +194,15 @@ function NurseryCard({
             )}
           </View>
           {nursery.inStockKnown ? (
-            <View style={s.priceTag}>
-              <Text style={s.priceText}>{nursery.plantPrice}</Text>
+            /*
+             * A price we did not trust is shown as "See price" rather than as a
+             * number - the shop does stock the plant, we just would not stand
+             * behind the figure we read, and a wrong price is worse than none.
+             */
+            <View style={[s.priceTag, nursery.priceSuspect && s.priceTagMuted]}>
+              <Text style={[s.priceText, nursery.priceSuspect && s.priceTextMuted]}>
+                {nursery.priceSuspect ? 'See price' : nursery.plantPrice}
+              </Text>
             </View>
           ) : null}
         </View>
@@ -568,6 +575,8 @@ function makeStyles(t: Theme) {
     ratingNum: { ...t.type.caption, color: t.color.textSecondary, marginStart: t.space.xs, fontWeight: '600' },
     reviewCount: { ...t.type.caption, fontSize: 11, color: t.color.textMuted },
     priceTag: { backgroundColor: t.color.primaryWash, borderRadius: t.radius.md, paddingHorizontal: t.space.md, paddingVertical: t.space.xs },
+    priceTagMuted: { backgroundColor: t.color.surfaceMuted },
+    priceTextMuted: { color: t.color.textSecondary },
     priceText: { ...t.type.bodyStrong, fontSize: 16, fontWeight: '800', color: t.color.primary },
     metaRow: { flexDirection: 'row', alignItems: 'center', gap: t.space.xs, marginBottom: t.space.xs },
     metaText: { ...t.type.label, fontWeight: '400', fontSize: 13, color: t.color.textSecondary, flex: 1, writingDirection: 'auto' },

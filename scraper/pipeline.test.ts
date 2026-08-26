@@ -340,3 +340,66 @@ test('the quoted listing carries its own product link and match count', async ()
   assert.equal(out[0].productName, 'cheap');
   assert.equal(out[0].matchCount, 2);
 });
+
+test('a price the final check rejects is hidden, but the nursery stays', async () => {
+  /*
+   * The shop does stock the plant - we simply do not trust the figure we read
+   * off its page. A wrong price is worse than no price, so the number goes and
+   * the row remains with a "See price" tag pointing at the product.
+   */
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      extract: async () => ({
+        plants: [{ name: 'Monstera', price: '₪0521234567', availability: 'in_stock' }],
+        report: { is_valid: true, confidence_score: 100, feedback: '', corrected_output: [] },
+        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        funnel: funnel(),
+      }),
+      checkPrices: async () => [{ plausible: false, reason: 'that is a phone number' }],
+    })
+  );
+
+  assert.equal(out[0].priceSuspect, true);
+  assert.equal(out[0].plantPrice, '-', 'the number we do not trust is not shown');
+  assert.equal(out[0].priceNote, 'that is a phone number');
+  assert.equal(out[0].inStockKnown, true, 'the shop still stocks it');
+  assert.equal(out[0].outcome, 'found');
+});
+
+test('a price the final check accepts is left exactly as scraped', async () => {
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      checkPrices: async () => [{ plausible: true, reason: '' }],
+    })
+  );
+  assert.equal(out[0].plantPrice, '₪175');
+  assert.equal(out[0].priceSuspect, undefined);
+});
+
+test('the price check is one call for the whole search, over priced rows only', async () => {
+  // Comparing nurseries against each other is the point, so it cannot be
+  // per-site; and rows with no price have nothing to check.
+  let calls = 0;
+  let batch: { site: string; price: string }[] = [];
+
+  await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      discover: async () => [
+        { name: 'A', website: 'https://a.example/', lat: 32.1, lng: 34.8, address: '' },
+        { name: 'B', website: 'https://b.example/', lat: 32.2, lng: 34.9, address: '' },
+      ],
+      nationalUrls: [],
+      checkPrices: async (_q, candidates) => {
+        calls += 1;
+        batch = candidates;
+        return candidates.map(() => ({ plausible: true, reason: '' }));
+      },
+    })
+  );
+
+  assert.equal(calls, 1, 'two nurseries, one call');
+  assert.equal(batch.length, 2, 'both priced rows go in the same comparison');
+});

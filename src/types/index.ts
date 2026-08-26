@@ -86,6 +86,9 @@ export interface Nursery {
   /* Which listing plantPrice belongs to, and how many matched. */
   productName?: string;
   matchCount?: number;
+  /* A final LLM pass did not trust this price, so plantPrice is '-'. */
+  priceSuspect?: boolean;
+  priceNote?: string;
   /* Structured availability - see src/lib/availability.ts for presentation. */
   availability?: {
     kind: 'estimate' | 'unreadable' | 'error';

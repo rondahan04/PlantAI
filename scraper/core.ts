@@ -961,6 +961,90 @@ export function looksUnreadable(text: string): boolean {
   return UNREADABLE_MARKERS.some((m) => s.includes(m));
 }
 
+// --- price sanity check -----------------------------------------------------
+
+export interface PriceCandidate {
+  site: string;
+  name: string;
+  price: string;
+}
+
+export interface PriceVerdict {
+  plausible: boolean;
+  reason: string;
+}
+
+/*
+ * Last look at the prices before a user sees them.
+ *
+ * The extractor and the auditor both check a price against the SOURCE TEXT -
+ * "does the page really say ₪999.90?" - and both can be perfectly right while
+ * the number is still wrong for the product, because the page also contains
+ * phone numbers, free-shipping thresholds, cart totals and instalment plans.
+ * This pass asks the different question: is this a plausible price FOR THIS
+ * PLANT, given what every other nursery in the same search is charging.
+ *
+ * EXPENSIVE IS NOT WRONG. al-haderech genuinely sells variegated Alocasias at
+ * ₪1,499.90, and a check that flagged big numbers would have "corrected" a
+ * correct price into a missing one. The prompt says so explicitly, and the
+ * cross-nursery list is what makes the distinction possible: one shop charging
+ * ₪999 for a plant three others sell at ₪45 is suspicious; every shop agreeing
+ * it is a ₪900 plant is just an expensive plant.
+ *
+ * ONE call for the whole search, not one per nursery - the comparison is the
+ * point, and a per-site call could not see the other sites.
+ *
+ * Never throws. On any failure every price is treated as plausible: this is a
+ * safety net, and a broken net must not start hiding real prices.
+ */
+export async function sanityCheckPrices(
+  query: string,
+  candidates: PriceCandidate[],
+  openaiKey: string,
+  classify: ClassifyFn = callOpenAIJson
+): Promise<PriceVerdict[]> {
+  const ok = candidates.map(() => ({ plausible: true, reason: '' }));
+  if (candidates.length === 0 || !openaiKey) return ok;
+
+  const listing = candidates
+    .map((c, i) => `${i}. site=${c.site} | product="${c.name}" | price=${c.price}`)
+    .join('\n');
+
+  const prompt = `You are checking scraped prices from Israeli plant nurseries before they are shown to a shopper who searched for "${query}".
+For each row decide whether the price is a PLAUSIBLE PRICE FOR THAT PRODUCT.
+
+A price is IMPLAUSIBLE when it is clearly not the product's price, for example:
+- a phone number, address number, postcode or year read as a price
+- a free-shipping threshold, minimum order, cart total or instalment amount
+- a decimal error (₪4990 where the page means ₪49.90)
+- a number wildly out of line with what the OTHER rows charge for the same kind of plant
+
+A price is PLAUSIBLE even when it is HIGH. Rare and variegated houseplants genuinely sell for ₪500-₪1500 in Israel, and small plugs genuinely sell for ₪20-₪40. A wide spread across cultivars is normal and is NOT a reason to flag anything. Only flag a row you would be embarrassed to show a customer.
+
+Return ONLY JSON: { "results": [ { "index": <row number>, "plausible": true|false, "reason": "<short reason, empty when plausible>" } ] }
+Include one entry per row.
+
+Rows:
+${listing}`;
+
+  try {
+    const out = await classify(prompt, openaiKey, 900);
+    const results = Array.isArray(out?.results) ? out.results : [];
+    for (const r of results) {
+      const i = Number(r?.index);
+      if (!Number.isInteger(i) || i < 0 || i >= ok.length) continue;
+      // Only an explicit false flags a row - a missing or malformed verdict
+      // must not silently remove a price we have no evidence against.
+      if (r?.plausible === false) {
+        ok[i] = { plausible: false, reason: String(r?.reason ?? '').slice(0, 200) };
+      }
+    }
+    return ok;
+  } catch {
+    return ok;
+  }
+}
+
 // --- query translation ------------------------------------------------------
 
 /* Any Hebrew letter. A query already in Hebrew needs no translating. */

@@ -54,6 +54,8 @@ interface NurseryResultJSON {
   productUrl?: string;
   productName?: string;
   matchCount?: number;
+  priceSuspect?: boolean;
+  priceNote?: string;
   shipsToHome: boolean;
 }
 
@@ -101,6 +103,8 @@ function toNursery(r: NurseryResultJSON): Nursery {
     productUrl: r.productUrl,
     productName: r.productName,
     matchCount: r.matchCount,
+    priceSuspect: r.priceSuspect,
+    priceNote: r.priceNote,
     shipsToHome: r.shipsToHome,
     rating: r.rating,
     reviewCount: r.reviewCount,

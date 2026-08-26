@@ -52,6 +52,14 @@ export interface NurseryResult {
   productName?: string;
   /* How many listings matched, so the client can say "from ₪39 · 28 matches". */
   matchCount?: number;
+  /*
+   * A final LLM pass judged this price not to belong to this product (a phone
+   * number, a shipping threshold, a decimal slip). The client hides the number
+   * rather than showing one it does not trust - a wrong price is worse than no
+   * price. `priceNote` carries the reason for the log and the detail tap.
+   */
+  priceSuspect?: boolean;
+  priceNote?: string;
   shipsToHome: boolean; // national fallback (Deliver tab) vs local (Pick Up tab)
 }
 
@@ -113,6 +121,12 @@ export interface PipelineDeps {
   /* Plant name -> the term to type into a nursery's own search box. Israeli
    * sites index in Hebrew. Called once per search, not once per site. */
   translate?: (plantName: string) => Promise<string>;
+  /* Final sanity pass over the quoted prices, once for the whole search so the
+   * model can compare nurseries against each other. See sanityCheckPrices. */
+  checkPrices?: (
+    query: string,
+    candidates: { site: string; name: string; price: string }[]
+  ) => Promise<{ plausible: boolean; reason: string }[]>;
   readFallbackUrls: () => string[]; // nurseries-fallback.txt
   nationalUrls: string[]; // ship-to-home shippers
 }
@@ -297,10 +311,53 @@ export async function runNurserySearch(
 
   // 4. Dedup by id, sort: in-stock first, then by distance.
   const seen = new Set<string>();
-  return [...local, ...national]
+  const rows = [...local, ...national]
     .filter((n) => (seen.has(n.id) ? false : (seen.add(n.id), true)))
     .sort((a, b) => {
       if (a.hasPlant !== b.hasPlant) return a.hasPlant ? -1 : 1;
       return a.distanceKm - b.distanceKm;
     });
+
+  /*
+   * 5. One last look at the prices, across every nursery at once.
+   *
+   * The extractor and the auditor both verify a price against the page it came
+   * from, and both can be right while the number is still wrong for the product
+   * - pages also carry phone numbers, free-shipping thresholds and cart totals.
+   * Comparing the shops against each other is what catches that, so this runs
+   * once over the whole result set rather than per site.
+   */
+  return await verifyPrices(rows, input.plantName, deps);
+}
+
+async function verifyPrices(
+  rows: NurseryResult[],
+  plantName: string,
+  deps: PipelineDeps
+): Promise<NurseryResult[]> {
+  if (!deps.checkPrices) return rows;
+
+  // Only rows that actually quote a price have anything to check.
+  const priced = rows
+    .map((n, i) => ({ n, i }))
+    .filter(({ n }) => n.inStockKnown && n.plantPrice && n.plantPrice !== '-');
+  if (priced.length === 0) return rows;
+
+  const verdicts = await deps.checkPrices(
+    plantName,
+    priced.map(({ n }) => ({ site: n.id, name: n.productName ?? n.name, price: n.plantPrice }))
+  );
+
+  const out = [...rows];
+  priced.forEach(({ i }, k) => {
+    const v = verdicts[k];
+    if (!v || v.plausible) return;
+    /*
+     * Drop the number, keep the row. The shop does stock the plant - we simply
+     * do not trust the figure we read, and showing a price we would be
+     * embarrassed by is worse than sending the user to the product page to look.
+     */
+    out[i] = { ...out[i], plantPrice: '-', priceSuspect: true, priceNote: v.reason };
+  });
+  return out;
 }

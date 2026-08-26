@@ -28,6 +28,7 @@ import {
   hostOf,
   extractAndVerifyPlants,
   translateQuery,
+  sanityCheckPrices,
   inferAvailabilityLLM,
   scrapeUrl,
 } from '../scraper/core.ts';
@@ -100,6 +101,8 @@ const deps: PipelineDeps = {
   extract: (o) => extractAndVerifyPlants({ ...o, openaiKey: OPENAI_KEY }),
   /* English in, Hebrew out - see translateQuery. One call per search. */
   translate: (plantName) => translateQuery(plantName, OPENAI_KEY!),
+  /* One call for the whole search - the cross-nursery comparison is the point. */
+  checkPrices: (query, candidates) => sanityCheckPrices(query, candidates, OPENAI_KEY!),
   /*
    * Reached only when structured extraction found 0 items - the slow, common
    * path. Platform identification already read this homepage moments ago, so

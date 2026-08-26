@@ -27,6 +27,7 @@ import {
   looksUnreadable,
   translateQuery,
   hasHebrew,
+  sanityCheckPrices,
 } from './core.ts';
 import type { ScrapeFn, ClassifyFn, Plant, VerificationReport } from './core.ts';
 
@@ -749,4 +750,76 @@ test('hasHebrew distinguishes the two scripts', () => {
   assert.equal(hasHebrew('alocasia'), false);
   assert.equal(hasHebrew('Alocasia אלוקסיה'), true);
   assert.equal(hasHebrew(''), false);
+});
+
+// --- price sanity check ----------------------------------------------------
+
+test('sanityCheckPrices: an explicit false is the only thing that flags a row', async () => {
+  const candidates = [
+    { site: 'a.co.il', name: 'Monstera', price: '₪89' },
+    { site: 'b.co.il', name: 'Monstera', price: '₪0521234567' },
+  ];
+  const out = await sanityCheckPrices(
+    'monstera',
+    candidates,
+    'k',
+    fakeClassify({
+      results: [
+        { index: 0, plausible: true, reason: '' },
+        { index: 1, plausible: false, reason: 'that is a phone number' },
+      ],
+    })
+  );
+
+  assert.equal(out[0].plausible, true);
+  assert.equal(out[1].plausible, false);
+  assert.equal(out[1].reason, 'that is a phone number');
+});
+
+test('sanityCheckPrices: a broken or missing verdict never hides a real price', async () => {
+  /*
+   * This is a safety net, and a torn net must not start dropping prices. Only
+   * an explicit `plausible: false` removes a number; silence, junk indexes and
+   * outright failure all leave every row intact.
+   */
+  const candidates = [{ site: 'a.co.il', name: 'Monstera', price: '₪89' }];
+  const allPlausible = (out: { plausible: boolean }[]) =>
+    assert.ok(out.every((v) => v.plausible));
+
+  allPlausible(await sanityCheckPrices('monstera', candidates, 'k', fakeClassify({})));
+  allPlausible(await sanityCheckPrices('monstera', candidates, 'k', fakeClassify({ results: [] })));
+  allPlausible(
+    await sanityCheckPrices(
+      'monstera',
+      candidates,
+      'k',
+      fakeClassify({ results: [{ index: 99, plausible: false, reason: 'out of range' }] })
+    )
+  );
+  const throwing: ClassifyFn = async () => {
+    throw new Error('LLM down');
+  };
+  allPlausible(await sanityCheckPrices('monstera', candidates, 'k', throwing));
+  // No key and no rows are both no-ops rather than errors.
+  allPlausible(await sanityCheckPrices('monstera', candidates, '', fakeClassify({})));
+  assert.deepEqual(await sanityCheckPrices('monstera', [], 'k', fakeClassify({})), []);
+});
+
+test('sanityCheckPrices: the prompt tells the model that expensive is not wrong', async () => {
+  /*
+   * al-haderech genuinely sells variegated Alocasias at ₪1,499.90. A check that
+   * flagged big numbers would have turned a correct price into a missing one,
+   * so the instruction is part of the contract, not decoration.
+   */
+  let seen = '';
+  const capture: ClassifyFn = async (prompt) => {
+    seen = prompt;
+    return { results: [] };
+  };
+  await sanityCheckPrices('alocasia', [{ site: 'a', name: 'x', price: '₪1,499.90' }], 'k', capture);
+
+  assert.match(seen, /PLAUSIBLE even when it is HIGH/);
+  assert.match(seen, /₪500-₪1500/);
+  assert.match(seen, /phone number/);
+  assert.match(seen, /free-shipping threshold/i);
 });
