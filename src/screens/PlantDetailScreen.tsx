@@ -11,6 +11,7 @@ import { LOGO_GLYPH } from '../brand';
 import { plantLibrary } from '../services/plantLibrary';
 import { plantPhotos } from '../services/photos';
 import { intervalLabel, wateringState } from '../lib/watering';
+import { careState } from '../lib/care';
 import { careHistory, type CareKind } from '../services/plantStore';
 import { useNurserySearch } from '../hooks/useNurserySearch';
 import { cancelWateringReminder, scheduleWateringReminder } from '../services/wateringReminder';
@@ -450,21 +451,27 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
         </Pressable>
 
         {/*
-          Repotting and feeding. Deliberately no countdown and no "due" state:
-          unlike watering, the care plan carries no interval for either, and a
-          schedule invented here would be advice the app made up.
+          Repotting and feeding, on the standard houseplant intervals in
+          lib/care.ts rather than on anything the model returned - the care plan
+          has never carried one. The wording keeps that honest: the line reads
+          as a prompt to look at the plant, not as a deadline the app computed
+          from this species.
         */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>Care log</Text>
           {CARE_LOG_ROWS.map(({ kind, label, icon, verb }) => {
             const last = careHistory(plant, kind)[0];
+            const state = careState(kind, diagnosis.carePlan, last, Date.now());
+            const late = state.status === 'due' || state.status === 'overdue';
             return (
               <View key={kind} style={s.logRow}>
                 <Ionicons name={icon} size={18} color={t.color.textSecondary} />
                 <View style={s.logRowText}>
                   <Text style={s.logLabel}>{label}</Text>
-                  <Text style={s.logMeta}>
-                    {last ? `Last ${new Date(last).toLocaleDateString()}` : 'Never logged'}
+                  <Text style={[s.logMeta, late && s.logMetaDue]}>
+                    {last
+                      ? `Last ${new Date(last).toLocaleDateString()} · ${state.label}`
+                      : state.label || 'Never logged'}
                   </Text>
                 </View>
                 {!!last && (
@@ -551,6 +558,9 @@ const makeStyles = (t: Theme) =>
     logRowText: { flex: 1 },
     logLabel: { ...t.type.bodyStrong, color: t.color.foreground },
     logMeta: { ...t.type.caption, color: t.color.textMuted },
+    // Due and overdue are the only states worth a colour here - the row is a
+    // reminder, not an alarm, so it warms rather than turning red.
+    logMetaDue: { color: t.color.warning, fontWeight: '700' as const },
     logBtn: {
       paddingHorizontal: t.space.md,
       paddingVertical: t.space.sm,
