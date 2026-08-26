@@ -11,6 +11,9 @@ import { LOGO_GLYPH } from '../brand';
 import { plantLibrary } from '../services/plantLibrary';
 import { plantPhotos } from '../services/photos';
 import { intervalLabel, wateringState } from '../lib/watering';
+import { careState } from '../lib/care';
+import { careHistory, type CareKind } from '../services/plantStore';
+import { useNurserySearch } from '../hooks/useNurserySearch';
 import { cancelWateringReminder, scheduleWateringReminder } from '../services/wateringReminder';
 
 /*
@@ -20,6 +23,18 @@ import { cancelWateringReminder, scheduleWateringReminder } from '../services/wa
  * params: params are a snapshot, and a plant deleted or changed elsewhere
  * would still render here from stale data.
  */
+
+/* The care LOG (things the user records), distinct from CARE_ROWS below, which
+ * is the care PLAN (advice the model gave). Watering has its own card. */
+const CARE_LOG_ROWS: {
+  kind: CareKind;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  verb: string;
+}[] = [
+  { kind: 'repot', label: 'Repot / soil change', icon: 'flower-outline', verb: 'Log repot' },
+  { kind: 'fertilizer', label: 'Fertilizer', icon: 'nutrition-outline', verb: 'Log feed' },
+];
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'PlantDetail'>;
@@ -59,6 +74,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
     plantLibrary.load().plants.find((p) => p.id === plantId) ?? null
   );
   const [watering, setWatering] = useState(false);
+  const { busy: searching, search: findNurseries } = useNurserySearch();
 
   /*
    * The plant is gone. Reachable if it was removed in another tab of the
@@ -99,6 +115,25 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
    * this whole feature is designed to survive, since the detail screen and the
    * library badge both read from storage, not from the OS.
    */
+  /*
+   * Repot and feed. Simpler than handleWater on purpose: neither schedules a
+   * reminder, so there is no OS handle to cancel and no ordering constraint -
+   * storage is the whole operation.
+   */
+  const handleCare = (kind: CareKind) => {
+    const logged = plantLibrary.markCare(plant.id, kind, Date.now());
+    if (!logged.ok) {
+      Alert.alert(
+        "Couldn't record that",
+        logged.reason === 'not_found'
+          ? 'This plant is no longer saved.'
+          : 'Your device is out of storage space, so nothing was saved.'
+      );
+      return;
+    }
+    setPlant(logged.plant);
+  };
+
   const handleWater = async () => {
     if (watering) return;
     setWatering(true);
@@ -260,7 +295,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
                   <Ionicons name={icon} size={20} color={key === 'water' ? t.color.water : t.color.primary} />
                 </View>
                 <View style={s.careBody}>
-                  <Text style={s.careLabel}>{label}</Text>
+                  <Text style={s.logLabel}>{label}</Text>
                   <Text style={s.careText}>{diagnosis.carePlan![key]}</Text>
                 </View>
               </View>
@@ -396,6 +431,79 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
           </View>
         )}
 
+        {/*
+          Buy another one. Until now the nursery search was reachable only from
+          a fresh diagnosis, so a plant you already owned - the exact thing you
+          are most likely to want a second of - had no way to reach it.
+        */}
+        <Pressable
+          style={({ pressed }) => [s.findBtn, pressed && { opacity: 0.7 }]}
+          onPress={() => findNurseries(diagnosis.plantName, 'delivery')}
+          disabled={searching}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: searching }}
+          accessibilityLabel={`Find nurseries selling ${diagnosis.plantName}`}
+        >
+          <Ionicons name="storefront-outline" size={18} color={t.color.primary} />
+          <Text style={s.findBtnText}>
+            {searching ? 'Finding nurseries...' : 'Find this plant at a nursery'}
+          </Text>
+        </Pressable>
+
+        {/*
+          Repotting and feeding, on the standard houseplant intervals in
+          lib/care.ts rather than on anything the model returned - the care plan
+          has never carried one. The wording keeps that honest: the line reads
+          as a prompt to look at the plant, not as a deadline the app computed
+          from this species.
+        */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Care log</Text>
+          {CARE_LOG_ROWS.map(({ kind, label, icon, verb }) => {
+            const last = careHistory(plant, kind)[0];
+            const state = careState(kind, diagnosis.carePlan, last, Date.now());
+            const late = state.status === 'due' || state.status === 'overdue';
+            return (
+              <View key={kind} style={s.logRow}>
+                <Ionicons name={icon} size={18} color={t.color.textSecondary} />
+                <View style={s.logRowText}>
+                  <Text style={s.logLabel}>{label}</Text>
+                  <Text style={[s.logMeta, late && s.logMetaDue]}>
+                    {last
+                      ? `Last ${new Date(last).toLocaleDateString()} · ${state.label}`
+                      : state.label || 'Never logged'}
+                  </Text>
+                </View>
+                {!!last && (
+                  <Pressable
+                    style={({ pressed }) => [s.historyBtn, pressed && { opacity: 0.6 }]}
+                    onPress={() => navigation.navigate('WateringHistory', { plantId: plant.id, kind })}
+                    accessibilityRole="button"
+                    accessibilityLabel={`See the ${label.toLowerCase()} history for ${diagnosis.plantName}`}
+                    hitSlop={8}
+                  >
+                    <Ionicons
+                      name="chevron-forward"
+                      size={16}
+                      color={t.color.textSecondary}
+                      style={directionalIconStyle}
+                    />
+                  </Pressable>
+                )}
+                <Pressable
+                  style={({ pressed }) => [s.logBtn, pressed && { opacity: 0.7 }]}
+                  onPress={() => handleCare(kind)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${verb} ${diagnosis.plantName} today`}
+                  hitSlop={6}
+                >
+                  <Text style={s.logBtnText}>{verb}</Text>
+                </Pressable>
+              </View>
+            );
+          })}
+        </View>
+
         <Text style={s.savedAt}>Saved {new Date(plant.savedAt).toLocaleDateString()}</Text>
       </ScrollView>
     </SafeAreaView>
@@ -446,6 +554,33 @@ const makeStyles = (t: Theme) =>
 
     section: { marginTop: t.space.xl },
     sectionTitle: { ...t.type.heading, color: t.color.foreground, marginBottom: t.space.sm },
+    logRow: { flexDirection: 'row', alignItems: 'center', gap: t.space.md, paddingVertical: t.space.sm },
+    logRowText: { flex: 1 },
+    logLabel: { ...t.type.bodyStrong, color: t.color.foreground },
+    logMeta: { ...t.type.caption, color: t.color.textMuted },
+    // Due and overdue are the only states worth a colour here - the row is a
+    // reminder, not an alarm, so it warms rather than turning red.
+    logMetaDue: { color: t.color.warning, fontWeight: '700' as const },
+    logBtn: {
+      paddingHorizontal: t.space.md,
+      paddingVertical: t.space.sm,
+      borderRadius: t.radius.pill,
+      backgroundColor: t.color.surfaceMuted,
+    },
+    logBtnText: { ...t.type.label, color: t.color.foreground },
+    findBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: t.space.sm,
+      marginTop: t.space.xl,
+      paddingVertical: t.space.md,
+      borderRadius: t.radius.pill,
+      borderWidth: 1,
+      borderColor: t.color.border,
+      backgroundColor: t.color.surface,
+    },
+    findBtnText: { ...t.type.bodyStrong, color: t.color.primary },
     sectionNote: { ...t.type.caption, color: t.color.textMuted, marginTop: -t.space.xs, marginBottom: t.space.sm },
 
     /*

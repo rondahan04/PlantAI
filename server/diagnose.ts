@@ -77,12 +77,21 @@ export interface PlantDiagnosis {
   description: string;
   carePlan?: CarePlan;
   variety?: string;
+  /* Genus and its aggregated score. Optional - see `Identification`. */
+  genus?: string;
+  genusConfidence?: number;
 }
 
 export interface Identification {
   scientificName: string;
   commonName: string;
+  /* PlantNet's score for THIS SPECIES. See `genusConfidence` for why that is
+   * often the wrong number to show a user. */
   confidence: number;
+  /* Optional on purpose: an older server omits both, and the client must keep
+   * rendering plants saved before they existed. Never make these required. */
+  genus?: string;
+  genusConfidence?: number;
 }
 
 export interface HealthAssessment {
@@ -177,6 +186,8 @@ export async function diagnose(image: Buffer, deps: DiagnosisDeps): Promise<Plan
     // way, and an absent key is what the client's optional field expects.
     ...(health.carePlan ? { carePlan: health.carePlan } : {}),
     ...(health.variety ? { variety: health.variety } : {}),
+    ...(id.genus ? { genus: id.genus } : {}),
+    ...(id.genusConfidence !== undefined ? { genusConfidence: id.genusConfidence } : {}),
   };
 }
 
@@ -207,6 +218,82 @@ function describeBytes(image: Buffer): string {
   return `unknown (${image.subarray(0, 4).toString('hex')})`;
 }
 
+/*
+ * Turn PlantNet's ranked species list into one identification.
+ *
+ * THE PROBLEM THIS SOLVES. PlantNet scores SPECIES, and it splits its
+ * probability mass across every species it considered. Photograph an Anthurium
+ * and it may return eight Anthurium species at 23%, 19%, 14%... Reporting the
+ * top species score alone renders a confident genus match as "23%", and the
+ * client's low-confidence tier then tells the user we could not identify their
+ * plant - while the name on screen is right. The number was never wrong; it was
+ * answering "which species is this?" when the user asked "what is this?".
+ *
+ * Summing the same-genus scores answers the second question. Crucially it does
+ * NOT paper over real errors: the Aug 2026 case where a Monstera deliciosa came
+ * back as Rhaphidophora tetrasperma at 48% is a CROSS-genus mistake, so the
+ * genus sum stays low there and the caveat still fires. Same-genus doubt gets
+ * quieter; genuinely-wrong identifications do not.
+ *
+ * We report the genus OF THE TOP CANDIDATE rather than the heaviest genus. A
+ * heaviest-genus rule can print "Ficus 40% · best guess Monstera deliciosa 35%",
+ * a headline its own subtitle contradicts. Aggregation may only ever strengthen
+ * what the top result already said.
+ *
+ * Pure and exported so the whole cascade is testable without a network call.
+ */
+export function aggregateIdentification(results: any[]): Identification {
+  const candidates = (Array.isArray(results) ? results : [])
+    .map((r) => ({
+      score: Number(r?.score) || 0,
+      scientificName: r?.species?.scientificName ?? '',
+      commonName: r?.species?.commonNames?.[0] ?? r?.species?.scientificName ?? '',
+      genus: genusOf(r),
+    }))
+    .filter((c) => c.score > 0)
+    // Do not trust the upstream ordering; the top score decides the headline.
+    .sort((a, b) => b.score - a.score);
+
+  if (candidates.length === 0) throw new NotAPlantError();
+
+  const top = candidates[0];
+  const base: Identification = {
+    scientificName: top.scientificName,
+    commonName: top.commonName,
+    confidence: Math.round(top.score * 100),
+  };
+
+  if (!top.genus) return base; // no genus to aggregate on - species score stands
+
+  const key = top.genus.toLowerCase();
+  const sum = candidates
+    .filter((c) => c.genus && c.genus.toLowerCase() === key)
+    .reduce((acc, c) => acc + c.score, 0);
+
+  return {
+    ...base,
+    genus: top.genus,
+    // Clamped: nb-results truncation plus float error can push a sum past 1.
+    genusConfidence: Math.max(0, Math.min(100, Math.round(sum * 100))),
+  };
+}
+
+/*
+ * The genus for one PlantNet result. Prefers the structured field; falls back
+ * to the first token of the scientific name, but only when it LOOKS like a
+ * genus - capitalized, alphabetic, three or more letters. That guard rejects
+ * hybrid markers ("×Fatshedera") and junk, which would otherwise become their
+ * own bucket and silently split a genus in two.
+ */
+function genusOf(result: any): string | null {
+  const structured = result?.species?.genus?.scientificNameWithoutAuthor;
+  if (typeof structured === 'string' && structured.trim()) return structured.trim();
+
+  const name = result?.species?.scientificNameWithoutAuthor ?? result?.species?.scientificName;
+  const first = typeof name === 'string' ? name.trim().split(/\s+/)[0] : '';
+  return /^[A-Z][a-z-]{2,}$/.test(first) ? first : null;
+}
+
 export function plantNetIdentify(apiKey: string) {
   return async function identify(image: Buffer): Promise<Identification> {
     const kind = sniffImage(image);
@@ -220,7 +307,9 @@ export function plantNetIdentify(apiKey: string) {
     );
     form.append('organs', 'auto');
 
-    const res = await fetch(`${PLANTNET_URL}?api-key=${apiKey}&nb-results=1&lang=en`, {
+    // 10, not 1: aggregateIdentification needs the genus's siblings to sum. The
+    // tail past ten is noise, and PlantNet charges per request, not per result.
+    const res = await fetch(`${PLANTNET_URL}?api-key=${apiKey}&nb-results=10&lang=en`, {
       method: 'POST',
       body: form,
     });
@@ -232,14 +321,8 @@ export function plantNetIdentify(apiKey: string) {
     }
 
     const data: any = await res.json();
-    const top = data.results?.[0];
-    if (!top) throw new NotAPlantError();
-
-    return {
-      scientificName: top.species?.scientificName ?? '',
-      commonName: top.species?.commonNames?.[0] ?? top.species?.scientificName ?? '',
-      confidence: Math.round((top.score ?? 0) * 100),
-    };
+    // Throws NotAPlantError on an empty result set, exactly as before.
+    return aggregateIdentification(data.results ?? []);
   };
 }
 

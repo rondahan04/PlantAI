@@ -82,3 +82,70 @@ test('the label always states the percent, regardless of tier', () => {
   assert.equal(identityConfidence(70, 'x').label, '70% species match');
   assert.equal(identityConfidence(100, 'x').label, '100% species match');
 });
+
+/*
+ * Genus-led identification. The point of these is that adding genus data must
+ * change NOTHING when it is absent - every plant saved before the field existed
+ * and every response from an older server goes down the original path.
+ */
+
+test('genus data absent leaves every existing result byte-identical', () => {
+  for (const percent of [0, 23, 39, 40, 55, 69, 70, 92, 100]) {
+    assert.deepEqual(
+      identityConfidence(percent, 'Mini monstera', {}),
+      identityConfidence(percent, 'Mini monstera'),
+      `two-arg and empty-genus must agree at ${percent}`
+    );
+  }
+});
+
+test('a confident genus with an unsure species leads with the genus', () => {
+  // The Anthurium case: 23% species, 90% genus.
+  const c = identityConfidence(23, 'Flamingo flower', { genus: 'Anthurium', genusPercent: 90 });
+
+  assert.equal(c.genusLed, true);
+  assert.equal(c.headline, 'Anthurium');
+  assert.equal(c.namePrefix, '', 'no "Possibly" hedge on a genus we are sure of');
+  assert.equal(c.genusLabel, '90% genus match');
+  assert.equal(c.noteTitle, 'We know the plant group, not the exact species');
+  assert.match(c.noteBody, /Flamingo flower/, 'the species is still named');
+  assert.notEqual(c.noteTitle, 'We could not identify this plant');
+});
+
+test('a cross-genus mistake still gets the full caveat', () => {
+  // Rhaphidophora at 48% with no siblings: genus is only moderate, so the
+  // original doubt survives. This is the safety net that must not be removed.
+  const c = identityConfidence(48, 'Mini monstera', {
+    genus: 'Rhaphidophora',
+    genusPercent: 48,
+  });
+
+  assert.equal(c.genusLed, false);
+  assert.equal(c.headline, 'Mini monstera');
+  assert.equal(c.namePrefix, 'Probably');
+  assert.equal(c.noteTitle, 'We are not certain of the species');
+  assert.equal(c.needsCaveat, true);
+});
+
+test('an already-confident species is not overridden by its genus', () => {
+  const c = identityConfidence(92, 'Monstera deliciosa', { genus: 'Monstera', genusPercent: 96 });
+
+  assert.equal(c.genusLed, false, 'nothing to explain when the species is certain');
+  assert.equal(c.headline, 'Monstera deliciosa');
+  assert.equal(c.needsCaveat, false);
+});
+
+test('a genus weaker than its species is ignored as inconsistent', () => {
+  // Aggregation can only strengthen; a lower genus means bad upstream data.
+  const c = identityConfidence(60, 'Ficus lyrata', { genus: 'Ficus', genusPercent: 40 });
+
+  assert.equal(c.genusLed, false);
+  assert.equal(c.genusLabel, '');
+  assert.equal(c.headline, 'Ficus lyrata');
+});
+
+test('an empty genus string is treated as no genus at all', () => {
+  const c = identityConfidence(23, 'Flamingo flower', { genus: '   ', genusPercent: 90 });
+  assert.equal(c.genusLed, false);
+  assert.equal(c.headline, 'Flamingo flower');
+});

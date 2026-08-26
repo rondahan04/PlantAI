@@ -55,6 +55,18 @@ const light = {
   onWater: '#FFFFFF',
   waterWash: '#E0F2FE',
 
+  /*
+   * The other two care kinds. They exist because one calendar now shows
+   * watering, repotting and feeding on the same grid, and three kinds sharing
+   * one blue would make the grid unreadable. Repot is soil amber, feed is a
+   * growth green distinct from `primary` so a filled day is never mistaken for
+   * a primary action. Both clear 4.5:1 against their `on*` text.
+   */
+  repot: '#B45309',
+  onRepot: '#FFFFFF',
+  feed: '#4D7C0F',
+  onFeed: '#FFFFFF',
+
   // Plant condition scale - badge/dot/bar accents (>=3:1 on light surfaces).
   conditionHealthy: '#15803D',
   conditionMild: '#0F766E',
@@ -96,6 +108,12 @@ const dark = {
   waterPressed: '#22A3DC',
   onWater: '#04212E',
   waterWash: '#0F2E3E',
+
+  // Repot / feed - lighter tonal variants with dark text on the fill.
+  repot: '#FBBF24',
+  onRepot: '#231603',
+  feed: '#A3E635',
+  onFeed: '#16230A',
 
   // Plant condition scale - lighter tonal variants for dark surfaces.
   conditionHealthy: '#34D399',

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isHealthAssessment, normalizeAssessment } from './diagnose.ts';
+import { isHealthAssessment, normalizeAssessment, aggregateIdentification } from './diagnose.ts';
+import { NotAPlantError } from './diagnose.ts';
 
 /*
  * These cover the OpenAI response-shape contract, which is the one part of the
@@ -273,4 +274,112 @@ test('a non-string variety is dropped, not fatal', () => {
 test('the guard rejects a non-string variety directly', () => {
   assert.equal(isHealthAssessment({ ...valid, variety: 42 }), false);
   assert.equal(isHealthAssessment({ ...valid, variety: '' }), false);
+});
+
+/*
+ * Genus aggregation. The bug being fixed: a photo the app correctly calls an
+ * Anthurium reported "23%" because PlantNet splits its score across the genus's
+ * species, and the client then told the user we could not identify their plant.
+ */
+
+const res = (score: number, sci: string, genus?: string | null, common?: string) => ({
+  score,
+  species: {
+    scientificName: sci,
+    scientificNameWithoutAuthor: sci,
+    commonNames: common ? [common] : [],
+    ...(genus === null ? {} : { genus: { scientificNameWithoutAuthor: genus ?? sci.split(' ')[0] } }),
+  },
+});
+
+test('aggregateIdentification: sums the siblings of one genus', () => {
+  // The Anthurium case, verbatim: no single species is convincing, the genus is.
+  const id = aggregateIdentification([
+    res(0.23, 'Anthurium andraeanum', 'Anthurium', 'Flamingo flower'),
+    res(0.19, 'Anthurium scherzerianum', 'Anthurium'),
+    res(0.14, 'Anthurium clarinervium', 'Anthurium'),
+    res(0.09, 'Anthurium crystallinum', 'Anthurium'),
+  ]);
+
+  assert.equal(id.confidence, 23, 'the species score is reported unchanged');
+  assert.equal(id.genus, 'Anthurium');
+  assert.equal(id.genusConfidence, 65, '23 + 19 + 14 + 9');
+  assert.equal(id.scientificName, 'Anthurium andraeanum');
+  assert.equal(id.commonName, 'Flamingo flower');
+});
+
+test('aggregateIdentification: a cross-genus mistake is NOT dressed up as certainty', () => {
+  /*
+   * The Aug 2026 incident: a Monstera deliciosa came back as Rhaphidophora
+   * tetrasperma at 48%. Different genera, so the sum stays low and the client's
+   * caveat still fires. This is the test that proves the fix does not simply
+   * silence the warning it was asked to remove.
+   */
+  const id = aggregateIdentification([
+    res(0.48, 'Rhaphidophora tetrasperma', 'Rhaphidophora'),
+    res(0.31, 'Monstera deliciosa', 'Monstera'),
+    res(0.11, 'Epipremnum aureum', 'Epipremnum'),
+  ]);
+
+  assert.equal(id.genus, 'Rhaphidophora');
+  assert.equal(id.genusConfidence, 48, 'no siblings to sum, so no confidence is invented');
+});
+
+test('aggregateIdentification: reports the TOP result genus, not the heaviest', () => {
+  /*
+   * A heaviest-genus rule would headline "Ficus 60%" over a best guess of
+   * Monstera deliciosa - a title its own subtitle contradicts.
+   */
+  const id = aggregateIdentification([
+    res(0.4, 'Monstera deliciosa', 'Monstera'),
+    res(0.3, 'Ficus lyrata', 'Ficus'),
+    res(0.3, 'Ficus elastica', 'Ficus'),
+  ]);
+
+  assert.equal(id.genus, 'Monstera');
+  assert.equal(id.genusConfidence, 40);
+});
+
+test('aggregateIdentification: falls back to the first token when genus is absent', () => {
+  const id = aggregateIdentification([
+    { score: 0.5, species: { scientificName: 'Alocasia regal shield', commonName: [] } as any },
+    { score: 0.2, species: { scientificName: 'Alocasia amazonica' } as any },
+  ]);
+
+  assert.equal(id.genus, 'Alocasia');
+  assert.equal(id.genusConfidence, 70);
+});
+
+test('aggregateIdentification: a name that does not look like a genus yields none', () => {
+  // '×Fatshedera' and friends must not become their own bucket.
+  const id = aggregateIdentification([
+    { score: 0.6, species: { scientificName: '×Fatshedera lizei' } as any },
+  ]);
+
+  assert.equal(id.confidence, 60);
+  assert.equal(id.genus, undefined);
+  assert.equal(id.genusConfidence, undefined);
+});
+
+test('aggregateIdentification: genusConfidence is never below confidence, and is clamped', () => {
+  const id = aggregateIdentification([
+    res(0.7, 'Ficus lyrata', 'Ficus'),
+    res(0.6, 'Ficus elastica', 'Ficus'),
+  ]);
+  assert.ok(id.genusConfidence! >= id.confidence, 'aggregation may only strengthen');
+  assert.equal(id.genusConfidence, 100, 'clamped rather than 130');
+});
+
+test('aggregateIdentification: unsorted input still picks the true top', () => {
+  const id = aggregateIdentification([
+    res(0.1, 'Ficus elastica', 'Ficus'),
+    res(0.8, 'Monstera deliciosa', 'Monstera'),
+  ]);
+  assert.equal(id.scientificName, 'Monstera deliciosa');
+});
+
+test('aggregateIdentification: no usable results still throws NotAPlantError', () => {
+  // The 422 not_a_plant contract must survive the rewrite.
+  assert.throws(() => aggregateIdentification([]), NotAPlantError);
+  assert.throws(() => aggregateIdentification([res(0, 'Ficus lyrata', 'Ficus')]), NotAPlantError);
 });

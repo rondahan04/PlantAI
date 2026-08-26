@@ -432,7 +432,11 @@ Template examples: woocommerce -> "{origin}/?s={query}&post_type=product", shopi
 If you cannot tell, return { "platform": "unknown", "searchTemplate": null }.
 Homepage signals:\n${fingerprint}`;
   try {
-    const out = await classify(prompt, openaiKey, 300);
+    // 1500 for the same reason as inferAvailabilityLLM: the answer is two short
+    // fields, but the reasoning that precedes it is not, and a cap that only
+    // covers the reasoning yields empty content and a silent 'unknown' - which
+    // costs us the search-URL template and therefore the whole site.
+    const out = await classify(prompt, openaiKey, 1500);
     const platform = normalizePlatform(String(out.platform ?? 'unknown'));
     const searchTemplate =
       typeof out.searchTemplate === 'string' && out.searchTemplate.includes('{query}')
@@ -623,27 +627,61 @@ export function priceFocusedExcerpt(markdown: string, max = 18000): string {
  * non-2xx or unparseable content so callers can decide how to degrade. */
 export const OPENAI_MODEL = 'gpt-5.6-luna';
 
+/*
+ * `max_completion_tokens` is a budget for reasoning AND the answer, and the
+ * model spends the reasoning first. A cap that only fits the reasoning comes
+ * back with `finish_reason: 'length'` and an EMPTY content string - a 200 OK
+ * that parses to nothing.
+ *
+ * That is exactly how the Deliver tab broke: al-haderech and rootine return
+ * long Hebrew catalogue pages, the extraction pass spent all 2000 tokens
+ * thinking, `JSON.parse('')` threw "Unexpected end of JSON input", and
+ * `scrapeOne` recorded the site as `not_found`. Both shippers failing that way
+ * emptied the only tab they populate, while the shorter local pages that
+ * happened to fit kept working - which is why Pick Up looked healthy.
+ *
+ * Two defences, because a bigger cap alone would only move the cliff:
+ * retry once with a doubled budget, then report the truncation by name instead
+ * of as a parse error.
+ */
 export async function callOpenAIJson(
   prompt: string,
   openaiKey: string,
   maxTokens = 1200
 ): Promise<any> {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      messages: [{ role: 'user', content: prompt }],
-      response_format: { type: 'json_object' },
-      max_completion_tokens: maxTokens,
-    }),
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`OpenAI ${res.status} ${body.slice(0, 200)}`);
+  const attempt = async (cap: number) => {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        max_completion_tokens: cap,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`OpenAI ${res.status} ${body.slice(0, 200)}`);
+    }
+    const data: any = await res.json();
+    const choice = data?.choices?.[0];
+    return {
+      content: String(choice?.message?.content ?? ''),
+      finish: String(choice?.finish_reason ?? ''),
+    };
+  };
+
+  let { content, finish } = await attempt(maxTokens);
+  if (!content.trim() && finish === 'length') {
+    ({ content, finish } = await attempt(maxTokens * 2));
   }
-  const data: any = await res.json();
-  return JSON.parse(data.choices[0].message.content);
+  if (!content.trim()) {
+    throw new Error(
+      `OpenAI returned no content (finish_reason=${finish || 'unknown'}, max_completion_tokens=${maxTokens})`
+    );
+  }
+  return JSON.parse(content);
 }
 
 // --- two-pass GPT extraction pipeline --------------------------------------
@@ -661,6 +699,12 @@ export interface Plant {
   name: string;
   price: string; // ILS, e.g. "₪49"
   availability: Availability;
+  /*
+   * The product page, when the listing carried a link. The Order button used to
+   * open the nursery's homepage and leave the user to find the plant again -
+   * which for a shop with 28 Alocasias is most of the work.
+   */
+  url?: string;
 }
 
 /* Auditor verdict. */
@@ -707,11 +751,17 @@ function coercePlants(items: any): Plant[] {
   const valid: Availability[] = ['in_stock', 'out_of_stock', 'unknown'];
   return items
     .filter((it) => it && typeof it === 'object' && it.name && it.price)
-    .map((it) => ({
-      name: String(it.name),
-      price: String(it.price),
-      availability: valid.includes(it.availability) ? it.availability : 'unknown',
-    }));
+    .map((it) => {
+      const url = typeof it.url === 'string' ? it.url.trim() : '';
+      return {
+        name: String(it.name),
+        price: String(it.price),
+        availability: valid.includes(it.availability) ? it.availability : 'unknown',
+        // Absolute http(s) only: a relative path or a hallucinated fragment
+        // would open to nothing, which is worse than the homepage fallback.
+        ...(/^https?:\/\//i.test(url) ? { url } : {}),
+      };
+    });
 }
 
 /* Extraction pass: the model reads the condensed markdown and returns the plant
@@ -726,14 +776,22 @@ export async function extractPlants(
 The content is mostly Hebrew. The user searched for: "${query}" (match either English or Hebrew, including translations and related plant types).
 From the content below, return ONLY products that match the search query.
 Return ONLY valid JSON in exactly this shape:
-{ "plants": [{ "name": "product name in its original language", "price": "₪XX", "availability": "in_stock" | "out_of_stock" | "unknown" }] }
+{ "plants": [{ "name": "product name in its original language", "price": "₪XX", "availability": "in_stock" | "out_of_stock" | "unknown", "url": "absolute link to that product's page, or omit if the content has none" }] }
 Rules:
 - Prices MUST be in ILS (₪). If a price has no currency symbol assume ILS and add ₪.
 - Only REAL products that have a price. Ignore blog posts, articles, guides ("איך לגדל"), categories, cart/shipping/total/free-shipping lines.
 - availability: "out_of_stock" only if the text clearly says sold out / אזל / לא במלאי; "in_stock" if clearly purchasable; otherwise "unknown".
+- url: copy the product's own link EXACTLY from the content (markdown links look like [name](https://...)). Never invent, guess or shorten a URL - omit the field instead.
 - If nothing matches, return { "plants": [] }.
 Content:\n${excerpt}`;
-  return coercePlants((await callOpenAIJson(prompt, openaiKey, 2000)).plants);
+  /*
+   * 6000, not 2000. A full nursery search page can carry 20+ matching listings,
+   * and the model reasons before it writes: measured on al-haderech's Monstera
+   * page the extraction pass needed 4022 completion tokens, so the old cap was
+   * consumed entirely by reasoning and returned an empty string. See
+   * callOpenAIJson.
+   */
+  return coercePlants((await callOpenAIJson(prompt, openaiKey, 6000)).plants);
 }
 
 /* Verification pass: the model acts strictly as an auditor. It cross-references
@@ -756,7 +814,7 @@ Return ONLY valid JSON in exactly this shape:
   "is_valid": boolean,
   "confidence_score": number,        // 0 to 100
   "feedback": string,                // explain any issues found; "" if none
-  "corrected_output": [ { "name": "...", "price": "₪XX", "availability": "in_stock" | "out_of_stock" | "unknown" } ]
+  "corrected_output": [ { "name": "...", "price": "₪XX", "availability": "in_stock" | "out_of_stock" | "unknown", "url": "carry the url through unchanged if the extracted item had one" } ]
 }
 Rules:
 - is_valid = true only if every returned item is faithful to the source.
@@ -769,7 +827,9 @@ ${JSON.stringify({ plants }, null, 2)}
 SOURCE TEXT:
 ${excerpt}`;
 
-  const parsed = await callOpenAIJson(prompt, openaiKey, 2000);
+  // Same budget as the extraction pass: the auditor echoes the whole corrected
+  // list back, so its answer is at least as long as what it was given.
+  const parsed = await callOpenAIJson(prompt, openaiKey, 6000);
   return {
     is_valid: Boolean(parsed.is_valid),
     confidence_score: Number(parsed.confidence_score) || 0,
@@ -904,6 +964,185 @@ export async function extractAndVerifyPlants(
 // "~75% likely" instead of a bare, ambiguous "nothing found".
 //
 // Pair it with the SITE HOMEPAGE, not the (often empty/broken) search page.
+
+/*
+ * Markers of a page that is a wall, not a website: Cloudflare interstitials,
+ * captchas, "enable JavaScript" shells. Kept SHORT and specific on purpose - a
+ * loose list would downgrade real catalogues that merely mention "verification"
+ * somewhere, which is a worse failure than the one being fixed. Hebrew forms
+ * are included because these are Israeli sites.
+ */
+const UNREADABLE_MARKERS = [
+  'security verification',
+  'verify you are human',
+  'checking your browser',
+  'cf browser verification',
+  'captcha',
+  'enable javascript',
+  'access denied',
+  'attention required',
+  'אימות אבטחה',
+  'אנא הפעל javascript',
+  'הגישה נדחתה',
+];
+
+/*
+ * True when the text we scraped is a bot wall rather than the site itself.
+ *
+ * Why this matters: a wall page still has words on it, so inferAvailabilityLLM
+ * dutifully read one and returned "~50% · the site text is only a
+ * security-verification page". That is a fabricated likelihood about a shop we
+ * never actually saw, presented to the user in the same pill as a real
+ * estimate. Detecting it up front is both the honest answer and one fewer LLM
+ * call per walled nursery.
+ */
+export function looksUnreadable(text: string): boolean {
+  if (!(text || '').trim()) return true; // nothing scraped is the same story to a user
+  /*
+   * Hyphens and underscores collapse to spaces before matching. The observed
+   * failure wrote it "security-verification page" while the marker reads
+   * "security verification", and a list that misses the one case that prompted
+   * it is worse than no list at all.
+   */
+  const s = text.toLowerCase().replace(/[-_]+/g, ' ');
+  return UNREADABLE_MARKERS.some((m) => s.includes(m));
+}
+
+// --- price sanity check -----------------------------------------------------
+
+export interface PriceCandidate {
+  site: string;
+  name: string;
+  price: string;
+}
+
+export interface PriceVerdict {
+  plausible: boolean;
+  reason: string;
+}
+
+/*
+ * Last look at the prices before a user sees them.
+ *
+ * The extractor and the auditor both check a price against the SOURCE TEXT -
+ * "does the page really say ₪999.90?" - and both can be perfectly right while
+ * the number is still wrong for the product, because the page also contains
+ * phone numbers, free-shipping thresholds, cart totals and instalment plans.
+ * This pass asks the different question: is this a plausible price FOR THIS
+ * PLANT, given what every other nursery in the same search is charging.
+ *
+ * EXPENSIVE IS NOT WRONG. al-haderech genuinely sells variegated Alocasias at
+ * ₪1,499.90, and a check that flagged big numbers would have "corrected" a
+ * correct price into a missing one. The prompt says so explicitly, and the
+ * cross-nursery list is what makes the distinction possible: one shop charging
+ * ₪999 for a plant three others sell at ₪45 is suspicious; every shop agreeing
+ * it is a ₪900 plant is just an expensive plant.
+ *
+ * ONE call for the whole search, not one per nursery - the comparison is the
+ * point, and a per-site call could not see the other sites.
+ *
+ * Never throws. On any failure every price is treated as plausible: this is a
+ * safety net, and a broken net must not start hiding real prices.
+ */
+export async function sanityCheckPrices(
+  query: string,
+  candidates: PriceCandidate[],
+  openaiKey: string,
+  classify: ClassifyFn = callOpenAIJson
+): Promise<PriceVerdict[]> {
+  const ok = candidates.map(() => ({ plausible: true, reason: '' }));
+  if (candidates.length === 0 || !openaiKey) return ok;
+
+  const listing = candidates
+    .map((c, i) => `${i}. site=${c.site} | product="${c.name}" | price=${c.price}`)
+    .join('\n');
+
+  const prompt = `You are checking scraped prices from Israeli plant nurseries before they are shown to a shopper who searched for "${query}".
+For each row decide whether the price is a PLAUSIBLE PRICE FOR THAT PRODUCT.
+
+A price is IMPLAUSIBLE when it is clearly not the product's price, for example:
+- a phone number, address number, postcode or year read as a price
+- a free-shipping threshold, minimum order, cart total or instalment amount
+- a decimal error (₪4990 where the page means ₪49.90)
+- a number wildly out of line with what the OTHER rows charge for the same kind of plant
+
+A price is PLAUSIBLE even when it is HIGH. Rare and variegated houseplants genuinely sell for ₪500-₪1500 in Israel, and small plugs genuinely sell for ₪20-₪40. A wide spread across cultivars is normal and is NOT a reason to flag anything. Only flag a row you would be embarrassed to show a customer.
+
+Return ONLY JSON: { "results": [ { "index": <row number>, "plausible": true|false, "reason": "<short reason, empty when plausible>" } ] }
+Include one entry per row.
+
+Rows:
+${listing}`;
+
+  try {
+    // 2500: one verdict per row across every nursery in the search, after the
+    // reasoning that compares them. 900 truncated on a busy result set and the
+    // catch below then passed every price through unchecked.
+    const out = await classify(prompt, openaiKey, 2500);
+    const results = Array.isArray(out?.results) ? out.results : [];
+    for (const r of results) {
+      const i = Number(r?.index);
+      if (!Number.isInteger(i) || i < 0 || i >= ok.length) continue;
+      // Only an explicit false flags a row - a missing or malformed verdict
+      // must not silently remove a price we have no evidence against.
+      if (r?.plausible === false) {
+        ok[i] = { plausible: false, reason: String(r?.reason ?? '').slice(0, 200) };
+      }
+    }
+    return ok;
+  } catch {
+    return ok;
+  }
+}
+
+// --- query translation ------------------------------------------------------
+
+/* Any Hebrew letter. A query already in Hebrew needs no translating. */
+const HEBREW_RE = /[֐-׿]/;
+
+export function hasHebrew(s: string): boolean {
+  return HEBREW_RE.test(s || '');
+}
+
+/*
+ * Translate a plant name to Hebrew for the site search.
+ *
+ * Israeli nursery sites index their catalogue in Hebrew, so searching them for
+ * "alocasia regal shield" returns nothing - not because the shop lacks the
+ * plant, but because the string never appears on the page. The extractor has
+ * always been told to match either language; the SEARCH URL was the half still
+ * asking in English.
+ *
+ * Called ONCE per search rather than per site: the answer is the same for every
+ * nursery, and per-site would multiply a cheap call by the fan-out width.
+ * Returns the original on any failure - a search in the wrong language still
+ * beats no search.
+ */
+export async function translateQuery(
+  name: string,
+  openaiKey: string,
+  classify: ClassifyFn = callOpenAIJson
+): Promise<string> {
+  const query = (name || '').trim();
+  if (!query || hasHebrew(query)) return query;
+
+  const prompt = `Translate this plant name into Hebrew as an Israeli plant nursery would list it on its website.
+Transliterate the genus and cultivar rather than translating them literally - Israeli nurseries write "Alocasia Regal Shield" as "אלוקסיה ריגל שילד", not as a description of a shield.
+Return ONLY JSON: { "hebrew": "<the Hebrew name>" }
+Plant name: ${query}`;
+
+  try {
+    // 1500: an empty answer here silently searches Israeli catalogues in
+    // English, which matches nothing - the failure looks like "shop does not
+    // stock it" rather than like a truncated model reply.
+    const out = await classify(prompt, openaiKey, 1500);
+    const hebrew = typeof out?.hebrew === 'string' ? out.hebrew.trim() : '';
+    // Guard against the model echoing the English back, or answering in prose.
+    return hebrew && hasHebrew(hebrew) ? hebrew : query;
+  } catch {
+    return query;
+  }
+}
 
 export interface AvailabilityEstimate {
   confidence: number; // 0–100: likelihood the nursery carries the queried plant

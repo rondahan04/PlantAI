@@ -24,6 +24,11 @@ import {
   createSearcher,
   createLimiter,
   retryDelayMs,
+  looksUnreadable,
+  translateQuery,
+  hasHebrew,
+  sanityCheckPrices,
+  callOpenAIJson,
 } from './core.ts';
 import type { ScrapeFn, ClassifyFn, Plant, VerificationReport } from './core.ts';
 
@@ -664,4 +669,217 @@ test('retryDelayMs: Retry-After wins over the backoff, but is capped', () => {
   // Junk or absent headers fall through to the exponential path.
   assert.equal(retryDelayMs(1, 'Wed, 21 Oct 2026 07:28:00 GMT', () => 0.5), 1000);
   assert.equal(retryDelayMs(1, '0', () => 0.5), 1000);
+});
+
+// --- bot-wall detection ----------------------------------------------------
+
+test('looksUnreadable: catches the walls that produced fabricated estimates', () => {
+  // The observed case: the model was handed a Cloudflare page and returned
+  // "~50% · the site text is only a security-verification page".
+  for (const page of [
+    'Security Verification required to continue',
+    'Please verify you are human',
+    'Checking your browser before accessing',
+    '<div id="cf-browser-verification">',
+    'Complete the CAPTCHA to continue',
+    'Please enable JavaScript to view this site',
+    'Access Denied',
+    'Attention Required! | Cloudflare',
+    'נדרש אימות אבטחה כדי להמשיך',
+    '',
+    '   ',
+  ]) {
+    assert.equal(looksUnreadable(page), true, `should be unreadable: ${JSON.stringify(page)}`);
+  }
+});
+
+test('looksUnreadable: a real catalogue is not mistaken for a wall', () => {
+  // A loose marker list would downgrade working shops, which is worse than the
+  // bug being fixed - these are the negatives that keep the list honest.
+  for (const page of [
+    '##### [מרווה רפואית](https://x.co.il/products/sage)\n₪49',
+    'We verify every plant before shipping. Free delivery over ₪200.',
+    'Our security policy protects your payment details.',
+    'משתלה אורגנית - צמחי תבלין, ורדים ועצי פרי',
+  ]) {
+    assert.equal(looksUnreadable(page), false, `should be readable: ${JSON.stringify(page)}`);
+  }
+});
+
+// --- query translation -----------------------------------------------------
+
+test('translateQuery: an English name becomes the Hebrew a nursery would list', async () => {
+  /*
+   * Israeli nurseries index their catalogues in Hebrew, so searching them for
+   * "alocasia regal shield" matches nothing - the shop may stock the plant, the
+   * string just never appears on the page.
+   */
+  const out = await translateQuery(
+    'alocasia regal shield',
+    'k',
+    fakeClassify({ hebrew: 'אלוקסיה ריגל שילד' })
+  );
+  assert.equal(out, 'אלוקסיה ריגל שילד');
+});
+
+test('translateQuery: a query already in Hebrew costs nothing', async () => {
+  let calls = 0;
+  const counting: ClassifyFn = async () => {
+    calls += 1;
+    return {};
+  };
+  assert.equal(await translateQuery('מרווה', 'k', counting), 'מרווה');
+  assert.equal(calls, 0, 'no round trip for a query that needs none');
+});
+
+test('translateQuery: a useless answer falls back to the original', async () => {
+  // Better to search in the wrong language than not to search at all.
+  assert.equal(await translateQuery('monstera', 'k', fakeClassify({ hebrew: '' })), 'monstera');
+  assert.equal(
+    await translateQuery('monstera', 'k', fakeClassify({ hebrew: 'Monstera deliciosa' })),
+    'monstera',
+    'an English echo is not a translation'
+  );
+  const throwing: ClassifyFn = async () => {
+    throw new Error('LLM down');
+  };
+  assert.equal(await translateQuery('monstera', 'k', throwing), 'monstera');
+});
+
+test('hasHebrew distinguishes the two scripts', () => {
+  assert.equal(hasHebrew('אלוקסיה'), true);
+  assert.equal(hasHebrew('alocasia'), false);
+  assert.equal(hasHebrew('Alocasia אלוקסיה'), true);
+  assert.equal(hasHebrew(''), false);
+});
+
+// --- price sanity check ----------------------------------------------------
+
+test('sanityCheckPrices: an explicit false is the only thing that flags a row', async () => {
+  const candidates = [
+    { site: 'a.co.il', name: 'Monstera', price: '₪89' },
+    { site: 'b.co.il', name: 'Monstera', price: '₪0521234567' },
+  ];
+  const out = await sanityCheckPrices(
+    'monstera',
+    candidates,
+    'k',
+    fakeClassify({
+      results: [
+        { index: 0, plausible: true, reason: '' },
+        { index: 1, plausible: false, reason: 'that is a phone number' },
+      ],
+    })
+  );
+
+  assert.equal(out[0].plausible, true);
+  assert.equal(out[1].plausible, false);
+  assert.equal(out[1].reason, 'that is a phone number');
+});
+
+test('sanityCheckPrices: a broken or missing verdict never hides a real price', async () => {
+  /*
+   * This is a safety net, and a torn net must not start dropping prices. Only
+   * an explicit `plausible: false` removes a number; silence, junk indexes and
+   * outright failure all leave every row intact.
+   */
+  const candidates = [{ site: 'a.co.il', name: 'Monstera', price: '₪89' }];
+  const allPlausible = (out: { plausible: boolean }[]) =>
+    assert.ok(out.every((v) => v.plausible));
+
+  allPlausible(await sanityCheckPrices('monstera', candidates, 'k', fakeClassify({})));
+  allPlausible(await sanityCheckPrices('monstera', candidates, 'k', fakeClassify({ results: [] })));
+  allPlausible(
+    await sanityCheckPrices(
+      'monstera',
+      candidates,
+      'k',
+      fakeClassify({ results: [{ index: 99, plausible: false, reason: 'out of range' }] })
+    )
+  );
+  const throwing: ClassifyFn = async () => {
+    throw new Error('LLM down');
+  };
+  allPlausible(await sanityCheckPrices('monstera', candidates, 'k', throwing));
+  // No key and no rows are both no-ops rather than errors.
+  allPlausible(await sanityCheckPrices('monstera', candidates, '', fakeClassify({})));
+  assert.deepEqual(await sanityCheckPrices('monstera', [], 'k', fakeClassify({})), []);
+});
+
+test('sanityCheckPrices: the prompt tells the model that expensive is not wrong', async () => {
+  /*
+   * al-haderech genuinely sells variegated Alocasias at ₪1,499.90. A check that
+   * flagged big numbers would have turned a correct price into a missing one,
+   * so the instruction is part of the contract, not decoration.
+   */
+  let seen = '';
+  const capture: ClassifyFn = async (prompt) => {
+    seen = prompt;
+    return { results: [] };
+  };
+  await sanityCheckPrices('alocasia', [{ site: 'a', name: 'x', price: '₪1,499.90' }], 'k', capture);
+
+  assert.match(seen, /PLAUSIBLE even when it is HIGH/);
+  assert.match(seen, /₪500-₪1500/);
+  assert.match(seen, /phone number/);
+  assert.match(seen, /free-shipping threshold/i);
+});
+
+// --- callOpenAIJson: reasoning models can spend the whole token budget -------
+//
+// The Deliver tab bug: a 200 OK whose content is '' because finish_reason was
+// 'length'. The old code fed that straight to JSON.parse and threw a parse
+// error, which scrapeOne recorded as "we could not read this shop".
+
+function openAiFetchStub(replies: { content: string; finish: string }[]) {
+  const caps: number[] = [];
+  const fn = (async (_url: string, init: any) => {
+    caps.push(JSON.parse(init.body).max_completion_tokens);
+    const r = replies[Math.min(caps.length - 1, replies.length - 1)];
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ choices: [{ message: { content: r.content }, finish_reason: r.finish }] }),
+    };
+  }) as unknown as typeof fetch;
+  return { fn, caps };
+}
+
+test('callOpenAIJson: truncated empty reply retries once at double the budget', async () => {
+  const original = globalThis.fetch;
+  const { fn, caps } = openAiFetchStub([
+    { content: '', finish: 'length' },
+    { content: '{"plants":[{"name":"מונסטרה"}]}', finish: 'stop' },
+  ]);
+  globalThis.fetch = fn;
+  try {
+    const out = await callOpenAIJson('p', 'k', 2000);
+    assert.deepEqual(caps, [2000, 4000]);
+    assert.equal(out.plants[0].name, 'מונסטרה');
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('callOpenAIJson: still empty after the retry → names the truncation, not a parse error', async () => {
+  const original = globalThis.fetch;
+  const { fn } = openAiFetchStub([{ content: '', finish: 'length' }]);
+  globalThis.fetch = fn;
+  try {
+    await assert.rejects(() => callOpenAIJson('p', 'k', 2000), /finish_reason=length/);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test('callOpenAIJson: a good first answer costs no second call', async () => {
+  const original = globalThis.fetch;
+  const { fn, caps } = openAiFetchStub([{ content: '{"ok":true}', finish: 'stop' }]);
+  globalThis.fetch = fn;
+  try {
+    assert.deepEqual(await callOpenAIJson('p', 'k', 6000), { ok: true });
+    assert.deepEqual(caps, [6000]);
+  } finally {
+    globalThis.fetch = original;
+  }
 });

@@ -22,7 +22,7 @@ import { RootStackParamList } from './src/types';
 import { getTheme } from './src/theme';
 import { onboarding } from './src/services/onboarding';
 import OnboardingScreen from './src/screens/OnboardingScreen';
-import HomeScreen from './src/screens/HomeScreen';
+import Tabs from './src/navigation/Tabs';
 import CameraScreen from './src/screens/CameraScreen';
 import DiagnosisScreen from './src/screens/DiagnosisScreen';
 import NurseriesScreen from './src/screens/NurseriesScreen';
@@ -118,7 +118,9 @@ export default function App() {
               component={OnboardingScreen}
               options={{ animation: 'fade' }}
             />
-            <Stack.Screen name="Home" component={HomeScreen} />
+            {/* The bottom-tab navigator, registered under the name `Home` so
+                every existing navigate('Home') keeps working. */}
+            <Stack.Screen name="Home" component={Tabs} />
             <Stack.Screen
               name="Camera"
               component={CameraScreen}

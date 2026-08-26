@@ -12,35 +12,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as Location from 'expo-location';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, DeliveryMode } from '../types';
 import { Theme, useTheme } from '../theme';
 import { directionalIconStyle } from '../lib/rtl';
-import { prefetchNearbyNurseries } from '../services/nurseryService';
+import { useNurserySearch } from '../hooks/useNurserySearch';
 import { plantLibrary } from '../services/plantLibrary';
 import { plantPhotos } from '../services/photos';
 import { identityConfidence } from '../lib/confidence';
-
-// Tel Aviv center - used as fallback when location permission is denied
-const FALLBACK_LAT = 32.1624;
-const FALLBACK_LNG = 34.8443;
-
-// Resolve the device location, falling back to Herzliya center when permission
-// is denied or GPS is unavailable.
-async function resolveCoords(): Promise<{ lat: number; lng: number }> {
-  try {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status === 'granted') {
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      return { lat: loc.coords.latitude, lng: loc.coords.longitude };
-    }
-  } catch {
-    // fall through to fallback
-  }
-  return { lat: FALLBACK_LAT, lng: FALLBACK_LNG };
-}
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Diagnosis'>;
@@ -65,8 +45,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
   const s = useMemo(() => makeStyles(t), [t]);
   const { imageUri, diagnosis } = route.params;
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('delivery');
-  const [findingNurseries, setFindingNurseries] = useState(false);
-  const coordsRef = useRef<{ lat: number; lng: number } | null>(null);
+  const { busy: findingNurseries, search: findNurseries, prefetch } = useNurserySearch();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
 
@@ -77,21 +56,13 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
     ]).start();
   }, []);
 
-  // Resolve the user's location and PREFETCH the nursery scrape as soon as the
-  // diagnosis is shown, so the (30-60s) scrape is already in flight by the time
-  // the user taps "Find" - the nurseries screen then loads with minimal wait.
+  /*
+   * Warm the scrape as soon as the diagnosis is shown, so the 30-90s run is
+   * already in flight by the time the user taps Find.
+   */
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const coords = await resolveCoords();
-      if (cancelled) return;
-      coordsRef.current = coords;
-      prefetchNearbyNurseries(diagnosis.plantName, coords.lat, coords.lng);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    prefetch(diagnosis.plantName);
+  }, [prefetch, diagnosis.plantName]);
 
   const conditionColor: Record<string, string> = {
     healthy: t.color.conditionHealthy,
@@ -105,28 +76,12 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
     color: conditionColor[diagnosis.condition] || conditionColor.moderate,
   };
 
-  const identity = identityConfidence(diagnosis.confidence, diagnosis.plantName);
+  const identity = identityConfidence(diagnosis.confidence, diagnosis.plantName, {
+    genus: diagnosis.genus,
+    genusPercent: diagnosis.genusConfidence,
+  });
 
-  const handleFindReplacement = async () => {
-    // Coordinates are usually already resolved by the mount effect (and the
-    // scrape prefetched). If the user taps before that finishes, resolve now.
-    let coords = coordsRef.current;
-    if (!coords) {
-      setFindingNurseries(true);
-      coords = await resolveCoords();
-      coordsRef.current = coords;
-      prefetchNearbyNurseries(diagnosis.plantName, coords.lat, coords.lng);
-      setFindingNurseries(false);
-    }
-    // NurseriesScreen awaits the same (prefetched) request, so its loading time
-    // is minimal. We only pass the query params here.
-    navigation.navigate('Nurseries', {
-      plantName: diagnosis.plantName,
-      lat: coords.lat,
-      lng: coords.lng,
-      mode: deliveryMode,
-    });
-  };
+  const handleFindReplacement = () => findNurseries(diagnosis.plantName, deliveryMode);
 
 
   /*
@@ -238,16 +193,42 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
           <Text
             style={s.plantName}
             accessibilityLabel={
-              identity.needsCaveat
-                ? `${identity.namePrefix} ${diagnosis.plantName}. ${identity.label}. ${identity.noteTitle}.`
-                : `${diagnosis.plantName}. ${identity.label}.`
+              /* The bar below can carry two numbers. A screen reader gets none
+                 of that from geometry, so the label states both explicitly. */
+              [
+                identity.namePrefix,
+                identity.headline + '.',
+                identity.genusLed ? `${identity.genusLabel}.` : '',
+                identity.genusLed ? `Closest species ${diagnosis.plantName}, ${identity.label}.` : `${identity.label}.`,
+                identity.needsCaveat ? `${identity.noteTitle}.` : '',
+              ]
+                .filter(Boolean)
+                .join(' ')
             }
           >
-            {diagnosis.plantName}
+            {identity.headline}
           </Text>
-          {!!diagnosis.variety && <Text style={s.variety}>{diagnosis.variety}</Text>}
+          {identity.genusLed ? (
+            <Text style={s.variety}>Closest species: {diagnosis.plantName}</Text>
+          ) : (
+            !!diagnosis.variety && <Text style={s.variety}>{diagnosis.variety}</Text>
+          )}
           <View style={s.confidenceRow}>
             <View style={s.confidenceBar}>
+              {/* Two layers when we have a genus: the muted fill is how sure we
+                  are of the group, the darker one how sure of the species. */}
+              {identity.genusLed && (
+                <View
+                  style={[
+                    s.confidenceFill,
+                    {
+                      position: 'absolute',
+                      width: `${diagnosis.genusConfidence ?? 0}%`,
+                      backgroundColor: t.color.border,
+                    },
+                  ]}
+                />
+              )}
               <View
                 style={[
                   s.confidenceFill,
@@ -255,7 +236,9 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
                 ]}
               />
             </View>
-            <Text style={s.confidenceText}>{identity.label}</Text>
+            <Text style={s.confidenceText}>
+              {identity.genusLed ? identity.genusLabel : identity.label}
+            </Text>
           </View>
         </Animated.View>
 
