@@ -26,6 +26,19 @@ export interface PlantDiagnosis {
    * failure; never render an empty label for it.
    */
   variety?: string;
+  /*
+   * The genus, and PlantNet's score summed across every candidate species in
+   * it. `confidence` above scores ONE species, and PlantNet splits its
+   * probability across a genus's siblings - so a photo the app correctly calls
+   * an Anthurium can score 23% on the species while the genus is near certain.
+   *
+   * Optional in both directions on purpose: an older server never sends these,
+   * and every plant saved before this field existed has none. Read them through
+   * `identityConfidence()` in src/lib/confidence.ts, which falls back to the
+   * species-only behaviour when they are absent.
+   */
+  genus?: string;
+  genusConfidence?: number;
 }
 
 export interface CarePlan {

@@ -67,6 +67,20 @@ export interface StoredPlant {
    */
   wateringLog?: string[];
   /*
+   * Repotting / soil change and feeding, same shape and same rules as the
+   * watering pair above: a denormalized "last" field for anything that renders
+   * per-card, and a bounded newest-first log for the history calendar. Read
+   * both through `careHistory(plant, kind)`.
+   *
+   * Optional and absent-tolerant on purpose - exactly how `wateringLog` was
+   * introduced - so plants saved before this feature keep loading with no
+   * LIBRARY_VERSION bump and no migration step.
+   */
+  lastRepottedAt?: string;
+  repotLog?: string[];
+  lastFertilizedAt?: string;
+  fertilizerLog?: string[];
+  /*
    * Identifier of the scheduled local notification, so the next watering can
    * cancel the one it replaces. Absent when nothing is scheduled: no OS
    * permission, no interval in the care plan, or the reminder already fired.
@@ -125,7 +139,28 @@ export type UpdateResult =
  * Roughly three years of daily watering. Far past any real use, and low enough
  * that a pathological log cannot bloat the blob the app parses on every launch.
  */
-export const MAX_WATERING_LOG = 1000;
+export const MAX_CARE_LOG = 1000;
+
+/* Kept as the original name so existing callers and tests are untouched. */
+export const MAX_WATERING_LOG = MAX_CARE_LOG;
+
+/*
+ * The three things a user logs against a plant. Each maps to one bounded log
+ * plus one denormalized "last" field; the pair is the same design in all three
+ * cases, so the behaviour lives in one place rather than being copied per kind.
+ */
+export type CareKind = 'water' | 'repot' | 'fertilizer';
+
+interface CareFields {
+  logKey: 'wateringLog' | 'repotLog' | 'fertilizerLog';
+  lastKey: 'lastWateredAt' | 'lastRepottedAt' | 'lastFertilizedAt';
+}
+
+const CARE_FIELDS: Record<CareKind, CareFields> = {
+  water: { logKey: 'wateringLog', lastKey: 'lastWateredAt' },
+  repot: { logKey: 'repotLog', lastKey: 'lastRepottedAt' },
+  fertilizer: { logKey: 'fertilizerLog', lastKey: 'lastFertilizedAt' },
+};
 
 function sameDay(a: string, b: string): boolean {
   const x = new Date(a);
@@ -145,12 +180,14 @@ function sameDay(a: string, b: string): boolean {
  * on it, which reads as data loss rather than as a feature that arrived late.
  * Junk entries are dropped instead of reaching the calendar as `Invalid Date`.
  */
-export function wateringHistory(plant: StoredPlant): string[] {
-  const raw = Array.isArray(plant.wateringLog) ? plant.wateringLog : [];
+export function careHistory(plant: StoredPlant, kind: CareKind = 'water'): string[] {
+  const { logKey, lastKey } = CARE_FIELDS[kind];
+  const stored = plant[logKey];
+  const raw = Array.isArray(stored) ? stored : [];
   const seen = new Set<string>();
   const out: string[] = [];
 
-  for (const entry of [...raw, plant.lastWateredAt].filter((e): e is string => typeof e === 'string')) {
+  for (const entry of [...raw, plant[lastKey]].filter((e): e is string => typeof e === 'string')) {
     const t = Date.parse(entry);
     if (Number.isNaN(t) || seen.has(entry)) continue;
     seen.add(entry);
@@ -158,6 +195,11 @@ export function wateringHistory(plant: StoredPlant): string[] {
   }
 
   return out.sort((a, b) => Date.parse(b) - Date.parse(a));
+}
+
+/* The watering-specific name this started as. Every existing caller uses it. */
+export function wateringHistory(plant: StoredPlant): string[] {
+  return careHistory(plant, 'water');
 }
 
 function isTreatmentish(v: unknown): boolean {
@@ -371,7 +413,12 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
    */
   function update(
     id: string,
-    patch: Partial<Pick<StoredPlant, 'lastWateredAt' | 'reminderId' | 'photoUri'>>
+    patch: Partial<
+      Pick<
+        StoredPlant,
+        'lastWateredAt' | 'lastRepottedAt' | 'lastFertilizedAt' | 'reminderId' | 'photoUri'
+      >
+    >
   ): UpdateResult {
     const current = load().plants;
     const target = current.find((p) => p.id === id);
@@ -386,7 +433,12 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
      * and a patch that silently ignored it would leave a dangling handle.
      */
     const updated: StoredPlant = { ...target, ...patch };
-    for (const key of ['lastWateredAt', 'reminderId'] as const) {
+    for (const key of [
+      'lastWateredAt',
+      'lastRepottedAt',
+      'lastFertilizedAt',
+      'reminderId',
+    ] as const) {
       if (key in patch && patch[key] === undefined) delete updated[key];
     }
     /*
@@ -408,15 +460,16 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
    * moved, so keeping it would fire a reminder for a plant already watered.
    * Scheduling the replacement is the caller's job - it needs the OS.
    */
-  function markWatered(id: string, at: number = now()): UpdateResult {
+  function markCare(id: string, kind: CareKind, at: number = now()): UpdateResult {
+    const { logKey, lastKey } = CARE_FIELDS[kind];
     const current = load().plants;
     const target = current.find((p) => p.id === id);
     if (!target) return { ok: false, reason: 'not_found' };
 
     const stamp = new Date(at).toISOString();
-    const history = wateringHistory(target);
+    const history = careHistory(target, kind);
     /*
-     * A double tap must not become two waterings on the same day. The calendar
+     * A double tap must not become two entries on the same day. The calendar
      * would show one dot either way, so a duplicate is invisible there and only
      * shows up as a wrong count - the quietest kind of wrong.
      */
@@ -424,17 +477,33 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
 
     const updated: StoredPlant = {
       ...target,
-      lastWateredAt: stamp,
+      [lastKey]: stamp,
       // Newest first, and bounded: the whole library is one JSON blob that is
       // re-read on every render, so an unbounded log is a slow leak into the
-      // cost of opening the app.
-      wateringLog: [stamp, ...log].slice(0, MAX_WATERING_LOG),
+      // cost of opening the app. Rewriting from the NORMALIZED history also
+      // self-heals a log that was stored unsorted or with junk in it.
+      [logKey]: [stamp, ...log].slice(0, MAX_CARE_LOG),
     };
-    delete updated.reminderId;
+    /*
+     * Water only. The handle points at a notification scheduled for a due date
+     * this watering has just moved, so keeping it would fire a reminder for a
+     * plant already watered. Repotting and feeding schedule nothing, and must
+     * not cancel the watering reminder as a side effect.
+     */
+    if (kind === 'water') delete updated.reminderId;
 
     const next = current.map((p) => (p.id === id ? updated : p));
     if (!persist(next)) return { ok: false, reason: 'storage_full' };
     return { ok: true, plant: updated, plants: next };
+  }
+
+  /*
+   * Log a watering. Clears the reminder handle along with it; scheduling the
+   * replacement is the caller's job - it needs the OS. Kept as its own name
+   * because every existing caller and its test suite use it.
+   */
+  function markWatered(id: string, at: number = now()): UpdateResult {
+    return markCare(id, 'water', at);
   }
 
   function remove(id: string): RemoveResult {
@@ -448,7 +517,7 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
     return { ok: true, plants: next };
   }
 
-  return { load, save, update, markWatered, remove };
+  return { load, save, update, markWatered, markCare, remove };
 }
 
 export type PlantStore = ReturnType<typeof createPlantStore>;

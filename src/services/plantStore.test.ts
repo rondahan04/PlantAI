@@ -7,7 +7,9 @@ import {
   createPlantStore,
   runMigrations,
   wateringHistory,
+  careHistory,
   MAX_WATERING_LOG,
+  MAX_CARE_LOG,
   type StorageDeps,
 } from './plantStore.ts';
 import type { PlantDiagnosis } from '../types/index.ts';
@@ -677,4 +679,154 @@ test('a watering that fails to persist leaves the log untouched', () => {
 
   s.fixWrites();
   assert.deepEqual(store.load().plants[0].wateringLog, ['2026-08-01T09:00:00.000Z']);
+});
+
+/*
+ * Repotting and feeding reuse the watering log's machinery. These tests exist
+ * because the generalization has one way to go wrong that the watering suite
+ * cannot catch: a kind leaking into another kind's fields.
+ */
+
+test('a repot and a fertilizing are logged independently of each other', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'file:///a.jpg', diagnosis });
+  const id = saved.ok && (saved.plant.id as string);
+
+  store.markCare(id as string, 'repot', Date.parse('2026-03-12T09:00:00.000Z'));
+  store.markCare(id as string, 'fertilizer', Date.parse('2026-08-01T09:00:00.000Z'));
+
+  const plant = store.load().plants[0];
+  assert.equal(plant.lastRepottedAt, '2026-03-12T09:00:00.000Z');
+  assert.equal(plant.lastFertilizedAt, '2026-08-01T09:00:00.000Z');
+  assert.deepEqual(careHistory(plant, 'repot'), ['2026-03-12T09:00:00.000Z']);
+  assert.deepEqual(careHistory(plant, 'fertilizer'), ['2026-08-01T09:00:00.000Z']);
+  assert.deepEqual(careHistory(plant, 'water'), [], 'watering is untouched by either');
+});
+
+test('watering and repotting on the same day do not collide', () => {
+  // Same-day collapse is per kind. Sharing one log would silently drop one.
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'file:///a.jpg', diagnosis });
+  const id = saved.ok && (saved.plant.id as string);
+
+  const day = Date.parse('2026-08-18T09:00:00.000Z');
+  store.markWatered(id as string, day);
+  store.markCare(id as string, 'repot', day);
+
+  const plant = store.load().plants[0];
+  assert.equal(plant.wateringLog?.length, 1);
+  assert.equal(plant.repotLog?.length, 1);
+});
+
+test('two repots on the same day count once, newest time wins', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'file:///a.jpg', diagnosis });
+  const id = saved.ok && (saved.plant.id as string);
+
+  store.markCare(id as string, 'repot', Date.parse('2026-08-18T08:00:00.000Z'));
+  store.markCare(id as string, 'repot', Date.parse('2026-08-18T20:00:00.000Z'));
+
+  const plant = store.load().plants[0];
+  assert.equal(plant.repotLog?.length, 1);
+  assert.equal(plant.lastRepottedAt, '2026-08-18T20:00:00.000Z');
+});
+
+test('repotting does NOT clear the watering reminder', () => {
+  /*
+   * markWatered deletes reminderId because the watering it just logged moved
+   * the due date. A repot moves nothing, so cancelling the pending reminder
+   * would silently stop the user being told to water.
+   */
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'file:///a.jpg', diagnosis });
+  const id = saved.ok && (saved.plant.id as string);
+
+  store.markWatered(id as string, Date.parse('2026-08-01T09:00:00.000Z'));
+  store.update(id as string, { reminderId: 'notif-1' });
+
+  store.markCare(id as string, 'repot', Date.parse('2026-08-02T09:00:00.000Z'));
+  const afterRepot = store.load().plants[0];
+  assert.equal(afterRepot.reminderId, 'notif-1', 'repot leaves the handle alone');
+  assert.equal(afterRepot.lastWateredAt, '2026-08-01T09:00:00.000Z', 'and the watering date');
+
+  store.markWatered(id as string, Date.parse('2026-08-03T09:00:00.000Z'));
+  assert.equal(store.load().plants[0].reminderId, undefined, 'but watering still clears it');
+});
+
+test('care history is newest first and drops unparseable entries', () => {
+  const messy = {
+    id: 'messy-1',
+    savedAt: '2026-07-01T00:00:00.000Z',
+    photoUri: 'file:///a.jpg',
+    diagnosis,
+    repotLog: ['2026-03-01T09:00:00.000Z', 'not-a-date', '2026-08-01T09:00:00.000Z'],
+  };
+  const s = fakeStorage({ [LIBRARY_KEY]: JSON.stringify({ version: 1, plants: [messy] }) });
+  const store = createPlantStore(s.deps, fixedOpts());
+
+  assert.deepEqual(careHistory(store.load().plants[0], 'repot'), [
+    '2026-08-01T09:00:00.000Z',
+    '2026-03-01T09:00:00.000Z',
+  ]);
+});
+
+test('each care log is bounded independently', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'file:///a.jpg', diagnosis });
+  const id = saved.ok && (saved.plant.id as string);
+
+  const start = Date.parse('2020-01-01T09:00:00.000Z');
+  for (let i = 0; i < MAX_CARE_LOG + 10; i++) {
+    store.markCare(id as string, 'fertilizer', start + i * 86_400_000);
+  }
+
+  assert.equal(store.load().plants[0].fertilizerLog!.length, MAX_CARE_LOG);
+});
+
+test('a v1 library saved before care logs existed still loads clean', () => {
+  /*
+   * The whole no-migration argument in one test: the new fields are optional,
+   * so an old blob stays valid AND stays at version 1. A LIBRARY_VERSION bump
+   * would have quarantined this library as future_version on any downgrade.
+   */
+  const legacy = {
+    id: 'old-1',
+    savedAt: '2026-07-01T00:00:00.000Z',
+    photoUri: 'file:///a.jpg',
+    diagnosis,
+    lastWateredAt: '2026-08-01T09:00:00.000Z',
+  };
+  const s = fakeStorage({
+    [LIBRARY_KEY]: JSON.stringify({ version: 1, plants: [legacy] }),
+  });
+  const store = createPlantStore(s.deps, fixedOpts());
+  const loaded = store.load();
+
+  assert.equal(loaded.ok, true);
+  assert.equal(loaded.plants.length, 1);
+  assert.deepEqual(careHistory(loaded.plants[0], 'repot'), []);
+  assert.deepEqual(careHistory(loaded.plants[0], 'fertilizer'), []);
+  assert.deepEqual(wateringHistory(loaded.plants[0]), ['2026-08-01T09:00:00.000Z']);
+  assert.equal(JSON.parse(s.data.get(LIBRARY_KEY)!).version, 1, 'still v1, no migration ran');
+});
+
+test('a failed write leaves the previous care log untouched', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'file:///a.jpg', diagnosis });
+  const id = saved.ok && (saved.plant.id as string);
+  store.markCare(id as string, 'repot', Date.parse('2026-08-01T09:00:00.000Z'));
+
+  s.breakWrites('silent');
+  const r = store.markCare(id as string, 'repot', Date.parse('2026-08-09T09:00:00.000Z'));
+  assert.equal(r.ok, false);
+  assert.equal(r.ok === false && r.reason, 'storage_full');
+
+  s.fixWrites();
+  assert.deepEqual(careHistory(store.load().plants[0], 'repot'), ['2026-08-01T09:00:00.000Z']);
 });

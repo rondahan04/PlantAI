@@ -105,7 +105,10 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
     color: conditionColor[diagnosis.condition] || conditionColor.moderate,
   };
 
-  const identity = identityConfidence(diagnosis.confidence, diagnosis.plantName);
+  const identity = identityConfidence(diagnosis.confidence, diagnosis.plantName, {
+    genus: diagnosis.genus,
+    genusPercent: diagnosis.genusConfidence,
+  });
 
   const handleFindReplacement = async () => {
     // Coordinates are usually already resolved by the mount effect (and the
@@ -238,16 +241,42 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
           <Text
             style={s.plantName}
             accessibilityLabel={
-              identity.needsCaveat
-                ? `${identity.namePrefix} ${diagnosis.plantName}. ${identity.label}. ${identity.noteTitle}.`
-                : `${diagnosis.plantName}. ${identity.label}.`
+              /* The bar below can carry two numbers. A screen reader gets none
+                 of that from geometry, so the label states both explicitly. */
+              [
+                identity.namePrefix,
+                identity.headline + '.',
+                identity.genusLed ? `${identity.genusLabel}.` : '',
+                identity.genusLed ? `Closest species ${diagnosis.plantName}, ${identity.label}.` : `${identity.label}.`,
+                identity.needsCaveat ? `${identity.noteTitle}.` : '',
+              ]
+                .filter(Boolean)
+                .join(' ')
             }
           >
-            {diagnosis.plantName}
+            {identity.headline}
           </Text>
-          {!!diagnosis.variety && <Text style={s.variety}>{diagnosis.variety}</Text>}
+          {identity.genusLed ? (
+            <Text style={s.variety}>Closest species: {diagnosis.plantName}</Text>
+          ) : (
+            !!diagnosis.variety && <Text style={s.variety}>{diagnosis.variety}</Text>
+          )}
           <View style={s.confidenceRow}>
             <View style={s.confidenceBar}>
+              {/* Two layers when we have a genus: the muted fill is how sure we
+                  are of the group, the darker one how sure of the species. */}
+              {identity.genusLed && (
+                <View
+                  style={[
+                    s.confidenceFill,
+                    {
+                      position: 'absolute',
+                      width: `${diagnosis.genusConfidence ?? 0}%`,
+                      backgroundColor: t.color.border,
+                    },
+                  ]}
+                />
+              )}
               <View
                 style={[
                   s.confidenceFill,
@@ -255,7 +284,9 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
                 ]}
               />
             </View>
-            <Text style={s.confidenceText}>{identity.label}</Text>
+            <Text style={s.confidenceText}>
+              {identity.genusLed ? identity.genusLabel : identity.label}
+            </Text>
           </View>
         </Animated.View>
 
