@@ -12,6 +12,7 @@ import { plantLibrary } from '../services/plantLibrary';
 import { plantPhotos } from '../services/photos';
 import { intervalLabel, wateringState } from '../lib/watering';
 import { careHistory, type CareKind } from '../services/plantStore';
+import { useNurserySearch } from '../hooks/useNurserySearch';
 import { cancelWateringReminder, scheduleWateringReminder } from '../services/wateringReminder';
 
 /*
@@ -72,6 +73,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
     plantLibrary.load().plants.find((p) => p.id === plantId) ?? null
   );
   const [watering, setWatering] = useState(false);
+  const { busy: searching, search: findNurseries } = useNurserySearch();
 
   /*
    * The plant is gone. Reachable if it was removed in another tab of the
@@ -429,6 +431,25 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
         )}
 
         {/*
+          Buy another one. Until now the nursery search was reachable only from
+          a fresh diagnosis, so a plant you already owned - the exact thing you
+          are most likely to want a second of - had no way to reach it.
+        */}
+        <Pressable
+          style={({ pressed }) => [s.findBtn, pressed && { opacity: 0.7 }]}
+          onPress={() => findNurseries(diagnosis.plantName, 'delivery')}
+          disabled={searching}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: searching }}
+          accessibilityLabel={`Find nurseries selling ${diagnosis.plantName}`}
+        >
+          <Ionicons name="storefront-outline" size={18} color={t.color.primary} />
+          <Text style={s.findBtnText}>
+            {searching ? 'Finding nurseries...' : 'Find this plant at a nursery'}
+          </Text>
+        </Pressable>
+
+        {/*
           Repotting and feeding. Deliberately no countdown and no "due" state:
           unlike watering, the care plan carries no interval for either, and a
           schedule invented here would be advice the app made up.
@@ -537,6 +558,19 @@ const makeStyles = (t: Theme) =>
       backgroundColor: t.color.surfaceMuted,
     },
     logBtnText: { ...t.type.label, color: t.color.foreground },
+    findBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: t.space.sm,
+      marginTop: t.space.xl,
+      paddingVertical: t.space.md,
+      borderRadius: t.radius.pill,
+      borderWidth: 1,
+      borderColor: t.color.border,
+      backgroundColor: t.color.surface,
+    },
+    findBtnText: { ...t.type.bodyStrong, color: t.color.primary },
     sectionNote: { ...t.type.caption, color: t.color.textMuted, marginTop: -t.space.xs, marginBottom: t.space.sm },
 
     /*

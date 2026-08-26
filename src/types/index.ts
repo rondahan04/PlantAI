@@ -93,9 +93,25 @@ export interface Nursery {
 
 export type DeliveryMode = 'delivery' | 'pickup';
 
+/* The three destinations in the bottom tab bar. `Scan` hosts nothing - its tab
+ * press pushes the root-stack Camera screen instead. */
+export type MainTabParamList = {
+  MyPlants: undefined;
+  Scan: undefined;
+  Find: undefined;
+};
+
 export type RootStackParamList = {
   Onboarding: undefined;
-  Home: undefined;
+  /* The bottom-tab navigator. Keeps the name `Home` so the eleven existing
+   * navigate('Home') / replace('Home') call sites are untouched - navigating to
+   * a navigator lands on its initial route, which is still My Plants.
+   *
+   * Hand-written rather than NavigatorScreenParams: tsconfig.node.json pulls
+   * this file in through the colocated test files, and importing
+   * @react-navigation here drags React Native's globals into the server
+   * program, where they redefine Blob and break server/diagnose.ts. */
+  Home: { screen?: keyof MainTabParamList } | undefined;
   Camera: undefined;
   Diagnosis: {
     imageUri: string;

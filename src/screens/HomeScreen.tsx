@@ -139,7 +139,7 @@ export default function HomeScreen({ navigation }: Props) {
    */
   if (hasPlants || library.ok === false) {
     return (
-      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <SafeAreaView style={s.container} edges={['top']} /* bottom inset belongs to the tab bar */>
         <SectionList
           sections={sections}
           keyExtractor={(item) => item.id}
@@ -220,7 +220,7 @@ export default function HomeScreen({ navigation }: Props) {
   }
 
   return (
-    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={s.container} edges={['top']} /* bottom inset belongs to the tab bar */>
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <Animated.View style={[s.header, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
