@@ -1,7 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { isHealthAssessment, normalizeAssessment, aggregateIdentification } from './diagnose.ts';
-import { NotAPlantError } from './diagnose.ts';
+import {
+  DiagnosisServiceError,
+  NotAPlantError,
+  UnsupportedImageError,
+  diagnose,
+  parseIdentification,
+  resolveIdentification,
+  type DiagnosisDeps,
+  type HealthAssessment,
+  type IdentifyHint,
+  type Identification,
+} from './diagnose.ts';
 
 /*
  * These cover the OpenAI response-shape contract, which is the one part of the
@@ -382,4 +393,431 @@ test('aggregateIdentification: no usable results still throws NotAPlantError', (
   // The 422 not_a_plant contract must survive the rewrite.
   assert.throws(() => aggregateIdentification([]), NotAPlantError);
   assert.throws(() => aggregateIdentification([res(0, 'Ficus lyrata', 'Ficus')]), NotAPlantError);
+});
+
+// ─── Identification fallback cascade ──────────────────────────────────────────
+
+/*
+ * The cascade is the whole feature: when the vision model gets to speak, and
+ * when its answer is allowed to win. Every branch is exercised with stubs so
+ * none of it needs a network call - and so a future change to the thresholds
+ * fails loudly here rather than quietly in production.
+ */
+
+const health: HealthAssessment = {
+  condition: 'healthy',
+  conditionLabel: 'Healthy',
+  issues: [],
+  treatments: [],
+  description: 'fine',
+  canBeSaved: true,
+};
+
+const ident = (over: Partial<Identification> = {}): Identification => ({
+  scientificName: 'Monstera deliciosa',
+  commonName: 'Swiss cheese plant',
+  confidence: 90,
+  ...over,
+});
+
+/* Records whether the backup was consulted at all - "did not spend the call"
+   is as much a requirement here as "picked the right answer". */
+function deps(
+  primary: () => Promise<Identification>,
+  fallback?: (hint?: IdentifyHint) => Promise<Identification>
+) {
+  const calls: { fallback: number; hints: (IdentifyHint | undefined)[] } = { fallback: 0, hints: [] };
+  const d: DiagnosisDeps = {
+    identify: primary,
+    assessHealth: async () => health,
+    ...(fallback
+      ? {
+          identifyFallback: async (_image: Buffer, hint?: IdentifyHint) => {
+            calls.fallback++;
+            calls.hints.push(hint);
+            return fallback(hint);
+          },
+        }
+      : {}),
+  };
+  return { d, calls };
+}
+
+const img = Buffer.from([0xff, 0xd8, 0xff, 0x00]);
+
+test('a confident PlantNet answer never spends a fallback call', async () => {
+  const { d, calls } = deps(
+    async () => ident({ confidence: 88 }),
+    async () => ident({ scientificName: 'Wrong plant', confidence: 99 })
+  );
+  const id = await resolveIdentification(img, d);
+
+  assert.equal(calls.fallback, 0);
+  assert.equal(id.scientificName, 'Monstera deliciosa');
+  assert.equal(id.source, 'plantnet');
+});
+
+test('a confident genus with an unnamed species asks the NARROW question', async () => {
+  // The Anthurium/Alocasia case. The genus is settled, so the second opinion is
+  // scoped to it rather than reopening the whole identification.
+  const { d, calls } = deps(
+    async () =>
+      ident({
+        scientificName: 'Anthurium andraeanum',
+        confidence: 23,
+        genus: 'Anthurium',
+        genusConfidence: 91,
+      }),
+    async (hint) =>
+      ident({ scientificName: 'Anthurium clarinervium', genus: 'Anthurium', confidence: 84 })
+  );
+  const id = await resolveIdentification(img, d);
+
+  assert.equal(calls.fallback, 1);
+  assert.deepEqual(calls.hints[0], {
+    genus: 'Anthurium',
+    closestSpecies: 'Anthurium andraeanum',
+    closestSpeciesConfidence: 23,
+  });
+  assert.equal(id.scientificName, 'Anthurium clarinervium', 'the species is resolved');
+  assert.equal(id.genus, 'Anthurium');
+  assert.equal(id.genusConfidence, 91, "PlantNet's aggregate is kept, not the model's estimate");
+  assert.equal(id.confidence, 84);
+});
+
+test('a weak identification is replaced by a confident vision model', async () => {
+  const { d, calls } = deps(
+    async () => ident({ scientificName: 'Rhaphidophora tetrasperma', confidence: 22 }),
+    async () => ident({ scientificName: 'Monstera deliciosa', confidence: 85 })
+  );
+  const id = await resolveIdentification(img, d);
+
+  assert.equal(calls.fallback, 1);
+  assert.equal(id.scientificName, 'Monstera deliciosa');
+  assert.equal(id.source, 'openai');
+});
+
+test('an unsure vision model does not get to overrule PlantNet', async () => {
+  const { d } = deps(
+    async () => ident({ scientificName: 'Rhaphidophora tetrasperma', confidence: 22 }),
+    async () => ident({ scientificName: 'Guess', confidence: 55 })
+  );
+  const id = await resolveIdentification(img, d);
+
+  assert.equal(id.scientificName, 'Rhaphidophora tetrasperma');
+  assert.equal(id.source, 'plantnet');
+});
+
+test('a confident vision model that scores no higher than PlantNet still loses', async () => {
+  // PlantNet matches against real specimens; a tie is not an improvement.
+  const { d } = deps(
+    async () => ident({ scientificName: 'Ficus lyrata', confidence: 39, genusConfidence: 39 }),
+    async () => ident({ scientificName: 'Other', confidence: 70 })
+  );
+  const strong = await resolveIdentification(img, d);
+  assert.equal(strong.scientificName, 'Other', 'sanity: 70 does beat 39');
+
+  const { d: tied } = deps(
+    async () => ident({ scientificName: 'Ficus lyrata', confidence: 39, genusConfidence: 75 }),
+    async () => ident({ scientificName: 'Other', confidence: 75 })
+  );
+  const id = await resolveIdentification(img, tied);
+  assert.equal(id.scientificName, 'Ficus lyrata', 'equal effective match keeps PlantNet');
+});
+
+test('a failing backup never costs the user a weak-but-real diagnosis', async () => {
+  const { d } = deps(
+    async () => ident({ confidence: 20 }),
+    async () => {
+      throw new DiagnosisServiceError('openai', 'boom');
+    }
+  );
+  const id = await resolveIdentification(img, d);
+
+  assert.equal(id.confidence, 20);
+  assert.equal(id.source, 'plantnet');
+});
+
+test('a dead PlantNet is rescued by a confident vision model', async () => {
+  const { d } = deps(
+    async () => {
+      throw new DiagnosisServiceError('plantnet', '503');
+    },
+    async () => ident({ confidence: 80 })
+  );
+  const id = await resolveIdentification(img, d);
+
+  assert.equal(id.source, 'openai');
+  assert.equal(id.confidence, 80);
+});
+
+test('PlantNet seeing no plant is rescued when the model actually knows the species', async () => {
+  // PlantNet 404s on ordinary houseplants that its herbarium under-covers.
+  const { d } = deps(
+    async () => {
+      throw new NotAPlantError();
+    },
+    async () => ident({ confidence: 90 })
+  );
+  const id = await resolveIdentification(img, d);
+  assert.equal(id.source, 'openai');
+});
+
+test('when the backup is unsure, the ORIGINAL failure is what the user hears', async () => {
+  // "The plant service did not answer" stays true; the backup's own opinion is
+  // not strong enough to change the story.
+  const { d } = deps(
+    async () => {
+      throw new DiagnosisServiceError('plantnet', '503');
+    },
+    async () => ident({ confidence: 40 })
+  );
+  await assert.rejects(() => resolveIdentification(img, d), DiagnosisServiceError);
+
+  const { d: notPlant } = deps(
+    async () => {
+      throw new NotAPlantError();
+    },
+    async () => ident({ confidence: 40 })
+  );
+  await assert.rejects(() => resolveIdentification(img, notPlant), NotAPlantError);
+});
+
+test('both identifiers agreeing there is no plant reports not-a-plant, not an outage', async () => {
+  const { d } = deps(
+    async () => {
+      throw new DiagnosisServiceError('plantnet', '503');
+    },
+    async () => {
+      throw new NotAPlantError();
+    }
+  );
+  await assert.rejects(() => resolveIdentification(img, d), NotAPlantError);
+});
+
+test('a broken image never spends a fallback call', async () => {
+  const { d, calls } = deps(
+    async () => {
+      throw new UnsupportedImageError('webp/riff');
+    },
+    async () => ident({ confidence: 99 })
+  );
+  await assert.rejects(() => resolveIdentification(img, d), UnsupportedImageError);
+  assert.equal(calls.fallback, 0);
+});
+
+test('with no fallback wired the old behaviour is exact', async () => {
+  const { d } = deps(async () => ident({ confidence: 5 }));
+  const id = await resolveIdentification(img, d);
+  assert.equal(id.confidence, 5);
+
+  const { d: dead } = deps(async () => {
+    throw new DiagnosisServiceError('plantnet', '503');
+  });
+  await assert.rejects(() => resolveIdentification(img, dead), DiagnosisServiceError);
+});
+
+test('diagnose carries the identification source onto the response', async () => {
+  const { d } = deps(
+    async () => ident({ confidence: 10 }),
+    async () => ident({ scientificName: 'Ficus lyrata', commonName: 'Fiddle leaf fig', confidence: 92 })
+  );
+  const result = await diagnose(img, d);
+
+  assert.equal(result.identificationSource, 'openai');
+  assert.equal(result.plantName, 'Fiddle leaf fig');
+
+  const { d: plain } = deps(async () => ident({ confidence: 90 }));
+  assert.equal((await diagnose(img, plain)).identificationSource, 'plantnet');
+});
+
+// ─── parseIdentification ──────────────────────────────────────────────────────
+
+test('parseIdentification: a well-formed response is taken as given', () => {
+  const id = parseIdentification({
+    scientificName: 'Monstera deliciosa',
+    commonName: 'Swiss cheese plant',
+    genus: 'Monstera',
+    confidence: 82,
+    genusConfidence: 95,
+    notAPlant: false,
+  });
+
+  assert.equal(id.scientificName, 'Monstera deliciosa');
+  assert.equal(id.genusConfidence, 95);
+  assert.equal(id.source, 'openai');
+});
+
+test('parseIdentification: notAPlant wins over any name the model filled in', () => {
+  assert.throws(
+    () => parseIdentification({ scientificName: 'Ficus lyrata', confidence: 80, notAPlant: true }),
+    NotAPlantError
+  );
+});
+
+test('parseIdentification: a missing confidence is rejected, never defaulted', () => {
+  // A number we cannot grade must not be allowed to sit at the threshold.
+  assert.throws(
+    () => parseIdentification({ scientificName: 'Ficus lyrata' }),
+    DiagnosisServiceError
+  );
+  assert.throws(() => parseIdentification({ confidence: 90 }), DiagnosisServiceError);
+  assert.throws(() => parseIdentification('nope'), DiagnosisServiceError);
+});
+
+test('parseIdentification: a genus figure below the species score is dropped', () => {
+  const id = parseIdentification({
+    scientificName: 'Ficus lyrata',
+    genus: 'Ficus',
+    confidence: 80,
+    genusConfidence: 40,
+  });
+  assert.equal(id.genusConfidence, undefined, 'aggregation may only strengthen');
+  assert.equal(id.genus, 'Ficus');
+});
+
+test('parseIdentification: genus and common name fall back to the binomial', () => {
+  const id = parseIdentification({ scientificName: 'Ficus lyrata', confidence: 70 });
+  assert.equal(id.genus, 'Ficus');
+  assert.equal(id.commonName, 'Ficus lyrata');
+});
+
+test('parseIdentification: out-of-range percentages are clamped, not rejected', () => {
+  assert.equal(parseIdentification({ scientificName: 'A b', confidence: 140 }).confidence, 100);
+  assert.equal(parseIdentification({ scientificName: 'A b', confidence: -5 }).confidence, 0);
+  assert.equal(parseIdentification({ scientificName: 'A b', confidence: '82' }).confidence, 82);
+});
+
+// ─── Species tiebreak within a confident genus ────────────────────────────────
+
+test('the tiebreak never fires when the species is already named confidently', async () => {
+  const { d, calls } = deps(
+    async () => ident({ confidence: 88, genus: 'Alocasia', genusConfidence: 95 }),
+    async () => ident({ scientificName: 'Alocasia amazonica', genus: 'Alocasia', confidence: 99 })
+  );
+  await resolveIdentification(img, d);
+  assert.equal(calls.fallback, 0, 'a named species is not a tie');
+});
+
+test('the 40-70 dead band is covered - the Alocasia case from 2026-08-28', async () => {
+  // PlantNet: Alocasia sanderiana at 69%, genus 92%. Too weak to show as a
+  // species, too strong to have triggered the old fallback at all - the user
+  // was shown the bare word "Alocasia" while the model could name the cultivar.
+  const { d, calls } = deps(
+    async () =>
+      ident({
+        scientificName: 'Alocasia sanderiana',
+        commonName: "Sander's Alocasia",
+        confidence: 69,
+        genus: 'Alocasia',
+        genusConfidence: 92,
+      }),
+    async () =>
+      ident({
+        scientificName: 'Alocasia × amazonica',
+        commonName: "Alocasia 'Polly'",
+        genus: 'Alocasia',
+        confidence: 88,
+      })
+  );
+  const id = await resolveIdentification(img, d);
+
+  assert.equal(calls.fallback, 1);
+  assert.equal(id.commonName, "Alocasia 'Polly'");
+  assert.equal(id.confidence, 88);
+  assert.equal(id.genusConfidence, 92);
+});
+
+test('the tiebreak is scoped to the genus - a different genus is discarded', async () => {
+  // The guard that stops this from becoming a second, weaker route for a vision
+  // guess to overrule a confident botanical match.
+  const { d } = deps(
+    async () =>
+      ident({
+        scientificName: 'Alocasia sanderiana',
+        confidence: 60,
+        genus: 'Alocasia',
+        genusConfidence: 92,
+      }),
+    async () => ident({ scientificName: 'Colocasia esculenta', genus: 'Colocasia', confidence: 95 })
+  );
+  const id = await resolveIdentification(img, d);
+
+  assert.equal(id.scientificName, 'Alocasia sanderiana', 'PlantNet keeps the genus it earned');
+  assert.equal(id.source, 'plantnet');
+});
+
+test('a tiebreak the model cannot resolve leaves the identification alone', async () => {
+  const { d } = deps(
+    async () =>
+      ident({
+        scientificName: 'Alocasia sanderiana',
+        confidence: 65,
+        genus: 'Alocasia',
+        genusConfidence: 92,
+      }),
+    async () => ident({ scientificName: 'Alocasia macrorrhizos', genus: 'Alocasia', confidence: 45 })
+  );
+  const id = await resolveIdentification(img, d);
+  assert.equal(id.scientificName, 'Alocasia sanderiana');
+});
+
+test('a tiebreak that merely agrees does not renumber the identification down', async () => {
+  const { d } = deps(
+    async () =>
+      ident({
+        scientificName: 'Alocasia sanderiana',
+        confidence: 69,
+        genus: 'Alocasia',
+        genusConfidence: 92,
+      }),
+    async () => ident({ scientificName: 'Alocasia sanderiana', genus: 'Alocasia', confidence: 69 })
+  );
+  const id = await resolveIdentification(img, d);
+  assert.equal(id.confidence, 69, 'no improvement means no change at all');
+  assert.equal(id.source, 'plantnet');
+});
+
+test('a failing tiebreak is invisible to the user', async () => {
+  const { d } = deps(
+    async () =>
+      ident({
+        scientificName: 'Alocasia sanderiana',
+        confidence: 69,
+        genus: 'Alocasia',
+        genusConfidence: 92,
+      }),
+    async () => {
+      throw new DiagnosisServiceError('openai', 'boom');
+    }
+  );
+  const id = await resolveIdentification(img, d);
+  assert.equal(id.scientificName, 'Alocasia sanderiana');
+});
+
+test('a weak genus is an open question, not a tiebreak - no hint is sent', async () => {
+  const { d, calls } = deps(
+    async () => ident({ confidence: 20, genus: 'Ficus', genusConfidence: 30 }),
+    async () => ident({ scientificName: 'Monstera deliciosa', genus: 'Monstera', confidence: 90 })
+  );
+  const id = await resolveIdentification(img, d);
+
+  assert.equal(calls.hints[0], undefined, 'nothing established, nothing to hint with');
+  assert.equal(id.scientificName, 'Monstera deliciosa', 'a cross-genus correction is allowed here');
+});
+
+test('the diagnosis is named the way a person would say it', async () => {
+  // End of the wire: whatever the identifier called the plant, the field the
+  // screen renders is the everyday name.
+  const { d } = deps(async () =>
+    ident({
+      scientificName: 'Alocasia sanderiana',
+      commonName: "Sander's Alocasia",
+      confidence: 88,
+    })
+  );
+  const result = await diagnose(img, d);
+
+  assert.equal(result.plantName, 'African mask plant');
+  assert.equal(result.scientificName, 'Alocasia sanderiana', 'the identification itself is untouched');
 });

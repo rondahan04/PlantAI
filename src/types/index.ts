@@ -39,6 +39,18 @@ export interface PlantDiagnosis {
    */
   genus?: string;
   genusConfidence?: number;
+  /*
+   * Which service named this plant. `plantnet` is a botanical database matching
+   * against herbarium specimens; `openai` is a vision model, used only as a
+   * backup when PlantNet came back weak or did not answer at all.
+   *
+   * The distinction is shown to the user rather than hidden: a visual match is
+   * a different KIND of evidence, and someone deciding whether to trust a
+   * treatment plan deserves to know which one they got. Optional in both
+   * directions - an older server never sends it, and plants saved before the
+   * backup existed have none. Absent means PlantNet.
+   */
+  identificationSource?: 'plantnet' | 'openai';
 }
 
 export interface CarePlan {

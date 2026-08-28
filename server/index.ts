@@ -42,9 +42,11 @@ import {
   UnsupportedImageError,
   diagnose,
   openAiAssessHealth,
+  openAiIdentify,
   plantNetIdentify,
   stubAssessHealth,
   type DiagnosisDeps,
+  type IdentifyHint,
 } from './diagnose.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -135,22 +137,63 @@ if (SKIP_OPENAI_DIAGNOSIS) {
 
 const identifyImpl = plantNetIdentify(PLANTNET_KEY!);
 const assessHealthImpl = SKIP_OPENAI_DIAGNOSIS ? stubAssessHealth : openAiAssessHealth(OPENAI_KEY!);
+/*
+ * The species backup. Off under DIAGNOSIS_SKIP_OPENAI for the same reason the
+ * health assessment is: that flag means "do not spend OpenAI credits", and a
+ * fallback that quietly spends them would make the flag a lie. Without it
+ * `resolveIdentification` degrades to plain PlantNet, which is the old
+ * behaviour.
+ */
+const identifyFallbackImpl = SKIP_OPENAI_DIAGNOSIS ? undefined : openAiIdentify(OPENAI_KEY!);
 
-const diagnosisDeps: DiagnosisDeps = {
-  identify: async (image) => {
-    const result = await identifyImpl(image);
-    recordSuccess('plantnet_identify');
-    return result;
-  },
-  assessHealth: async (image, id) => {
-    const result = await assessHealthImpl(image, id);
-    // Counts the labelled stub too - SKIP_OPENAI_DIAGNOSIS means "not calling
-    // OpenAI", not "the diagnosis step is down", and /health should not read
-    // as an outage during an intentional, logged cost-saving mode.
-    recordSuccess('health_assessment');
-    return result;
-  },
-};
+/*
+ * Built per request so the cascade's decisions can be logged against the rid -
+ * whether the backup ran, and whether its answer was taken, is the only way to
+ * tell a quiet fallback from a PlantNet that has silently stopped working.
+ */
+function makeDiagnosisDeps(rid: string): DiagnosisDeps {
+  return {
+    identify: async (image) => {
+      const result = await identifyImpl(image);
+      recordSuccess('plantnet_identify');
+      return result;
+    },
+    assessHealth: async (image, id) => {
+      const result = await assessHealthImpl(image, id);
+      // Counts the labelled stub too - SKIP_OPENAI_DIAGNOSIS means "not calling
+      // OpenAI", not "the diagnosis step is down", and /health should not read
+      // as an outage during an intentional, logged cost-saving mode.
+      recordSuccess('health_assessment');
+      return result;
+    },
+    ...(identifyFallbackImpl
+      ? {
+          identifyFallback: async (image: Buffer, hint?: IdentifyHint) => {
+            // The hint is logged because it changes the question asked: a
+            // tiebreak that keeps answering with the genus it was handed reads
+            // very differently from an open identification that agrees.
+            logEvent(rid, 'identify_fallback_start', { genusHint: hint?.genus });
+            const result = await identifyFallbackImpl(image, hint);
+            logEvent(rid, 'identify_fallback_done', {
+              scientificName: result.scientificName,
+              // Against `genusHint` above this is the tiebreak's own guard
+              // rail: a differing genus means the answer was thrown away.
+              genus: result.genus,
+              confidence: result.confidence,
+              genusConfidence: result.genusConfidence,
+            });
+            /*
+             * Deliberately NOT recorded against a /health provider. The backup
+             * runs only when the primary was weak or down, so its own failure
+             * is expected traffic, not an outage - counting it would make the
+             * health endpoint alarm on PlantNet having a bad day.
+             */
+            return result;
+          },
+        }
+      : {}),
+  };
+}
 
 // ─── HTTP plumbing ────────────────────────────────────────────────────────────
 
@@ -329,11 +372,12 @@ const server = http.createServer(async (req, res) => {
     const t0 = Date.now();
     logEvent(rid, 'diagnose_start', { bytes: image.length });
     try {
-      const result = await diagnose(image, diagnosisDeps);
+      const result = await diagnose(image, makeDiagnosisDeps(rid));
       logEvent(rid, 'diagnose_done', {
         plantName: result.plantName,
         confidence: result.confidence,
         condition: result.condition,
+        identificationSource: result.identificationSource,
         ms: Date.now() - t0,
       });
       json(res, 200, result);

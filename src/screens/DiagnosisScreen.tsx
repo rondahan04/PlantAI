@@ -208,11 +208,15 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
           >
             {identity.headline}
           </Text>
-          {identity.genusLed ? (
+          {/* The variety is shown in BOTH branches. It used to be dropped
+              whenever the headline fell back to the genus, which threw away the
+              most specific thing we had at exactly the moment the user was
+              being told we could not be specific - "Alocasia" alone on screen
+              while the model had already named the cultivar. */}
+          {identity.genusLed && (
             <Text style={s.variety}>Closest species: {diagnosis.plantName}</Text>
-          ) : (
-            !!diagnosis.variety && <Text style={s.variety}>{diagnosis.variety}</Text>
           )}
+          {!!diagnosis.variety && <Text style={s.variety}>{diagnosis.variety}</Text>}
           <View style={s.confidenceRow}>
             <View style={s.confidenceBar}>
               {/* Two layers when we have a genus: the muted fill is how sure we
