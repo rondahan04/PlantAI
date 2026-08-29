@@ -44,7 +44,17 @@ export default function PlantCard({
 }) {
   const t = useTheme();
   const s = React.useMemo(() => makeStyles(t), [t]);
-  const color = t.color[CONDITION_COLOR[plant.diagnosis.condition] ?? 'conditionModerate'];
+  /*
+   * A hand-added plant has no diagnosis and so no condition. It reads as
+   * healthy here because that is what the user asserted by adding it, and a
+   * grey or amber dot on a plant nobody examined would invent a worry.
+   */
+  const condition = plant.diagnosis?.condition ?? 'healthy';
+  const color = t.color[CONDITION_COLOR[condition] ?? 'conditionModerate'];
+  /* Nickname first: what the user calls the plant beats what it is called. */
+  const name =
+    plant.nickname ?? plant.species?.name ?? plant.diagnosis?.plantName ?? 'Unnamed plant';
+  const conditionLabel = plant.diagnosis?.conditionLabel ?? 'Healthy';
   const when = relativeDay(plant.savedAt, Date.now());
 
   /*
@@ -52,7 +62,7 @@ export default function PlantCard({
    * its own line rather than being folded into the meta row - condition is why
    * the plant is in the library, watering is why they opened the app now.
    */
-  const water = wateringState(plant.diagnosis.carePlan, plant.lastWateredAt, Date.now());
+  const water = wateringState(plant.diagnosis?.carePlan, plant.lastWateredAt, Date.now());
   const thirsty = needsWater(water);
 
   return (
@@ -63,7 +73,7 @@ export default function PlantCard({
       // One label rather than four separate nodes: a screen reader user wants
       // the plant and its state in a single utterance, not a tour of the row.
       accessibilityLabel={
-        `${plant.diagnosis.plantName}, ${plant.diagnosis.conditionLabel}, saved ${when}` +
+        `${name}, ${conditionLabel}, saved ${when}` +
         (thirsty ? `, watering ${water.label.toLowerCase()}` : '')
       }
     >
@@ -83,12 +93,12 @@ export default function PlantCard({
 
       <View style={s.body}>
         <Text style={s.name} numberOfLines={1}>
-          {plant.diagnosis.plantName}
+          {name}
         </Text>
         <View style={s.metaRow}>
           <View style={[s.dot, { backgroundColor: color }]} />
           <Text style={[s.condition, { color }]} numberOfLines={1}>
-            {plant.diagnosis.conditionLabel}
+            {conditionLabel}
           </Text>
           <Text style={s.when}> · {when}</Text>
         </View>

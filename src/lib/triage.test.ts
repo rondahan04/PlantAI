@@ -8,10 +8,11 @@ function plant(condition: string, savedAt: string, id = condition + savedAt): St
     id,
     savedAt,
     photoUri: 'x',
+    addedVia: 'scan',
     diagnosis: {
       plantName: 'P',
       scientificName: 'S',
-      condition: condition as StoredPlant['diagnosis']['condition'],
+      condition: condition as NonNullable<StoredPlant['diagnosis']>['condition'],
       conditionLabel: condition,
       issues: [],
       treatments: [],

@@ -94,9 +94,19 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
     );
   }
 
+  /*
+   * OPTIONAL since library v2: a plant added by hand from the Portfolio tab was
+   * never diagnosed. Everything below optional-chains through it, and the
+   * blocks that only make sense for a scanned plant - issues, treatments, the
+   * condition badge - simply do not render. A fuller Portfolio-aware detail
+   * screen is a later task; this keeps the scanned path exactly as it was.
+   */
   const { diagnosis } = plant;
-  const color = t.color[CONDITION_COLOR[diagnosis.condition] ?? 'conditionModerate'];
-  const water = wateringState(diagnosis.carePlan, plant.lastWateredAt, Date.now());
+  /* Nickname first: what the user calls the plant beats what it is called. */
+  const plantName =
+    plant.nickname ?? plant.species?.name ?? diagnosis?.plantName ?? 'Unnamed plant';
+  const color = t.color[CONDITION_COLOR[diagnosis?.condition ?? 'healthy'] ?? 'conditionModerate'];
+  const water = wateringState(diagnosis?.carePlan, plant.lastWateredAt, Date.now());
   /*
    * Watered, and not due again yet - there is no watering to log. `ok` is the
    * only status that means this: `due` and `overdue` are exactly when the
@@ -155,14 +165,14 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
       }
       setPlant(logged.plant);
 
-      const next = wateringState(diagnosis.carePlan, logged.plant.lastWateredAt, at);
+      const next = wateringState(diagnosis?.carePlan, logged.plant.lastWateredAt, at);
       if (next.nextDueAt === null) return;
 
       // Null means no permission, or a runtime that cannot schedule. Both are
       // normal: the in-app countdown above is unaffected, so there is nothing
       // to tell the user about.
       const reminderId = await scheduleWateringReminder({
-        plantName: diagnosis.plantName,
+        plantName,
         dueAt: next.nextDueAt,
         now: at,
       });
@@ -176,7 +186,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
   };
 
   const confirmRemove = () => {
-    Alert.alert('Remove this plant?', `${diagnosis.plantName} will be removed from your plants.`, [
+    Alert.alert('Remove this plant?', `${plantName} will be removed from your plants.`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Remove',
@@ -215,7 +225,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
             style={s.removeBtn}
             onPress={confirmRemove}
             accessibilityRole="button"
-            accessibilityLabel={`Remove ${diagnosis.plantName} from my plants`}
+            accessibilityLabel={`Remove ${plantName} from my plants`}
             hitSlop={8}
           >
             <Ionicons name="trash-outline" size={20} color={t.color.danger} />
@@ -229,16 +239,21 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
           <Image source={{ uri: plant.photoUri }} style={s.image} />
         </View>
 
-        <View style={[s.badge, { backgroundColor: color }]}>
-          <Text style={s.badgeText}>{diagnosis.conditionLabel}</Text>
-        </View>
+        {/* No diagnosis, no badge. An empty coloured pill would read as a
+            condition the app failed to load rather than as one it was never
+            asked for. */}
+        {!!diagnosis?.conditionLabel && (
+          <View style={[s.badge, { backgroundColor: color }]}>
+            <Text style={s.badgeText}>{diagnosis.conditionLabel}</Text>
+          </View>
+        )}
 
-        <Text style={s.name}>{diagnosis.plantName}</Text>
-        {!!diagnosis.scientificName && <Text style={s.sciName}>{diagnosis.scientificName}</Text>}
-        {!!diagnosis.variety && <Text style={s.sciName}>{diagnosis.variety}</Text>}
-        {!!diagnosis.description && <Text style={s.desc}>{diagnosis.description}</Text>}
+        <Text style={s.name}>{plantName}</Text>
+        {!!diagnosis?.scientificName && <Text style={s.sciName}>{diagnosis.scientificName}</Text>}
+        {!!diagnosis?.variety && <Text style={s.sciName}>{diagnosis.variety}</Text>}
+        {!!diagnosis?.description && <Text style={s.desc}>{diagnosis.description}</Text>}
 
-        {diagnosis.issues.length > 0 && (
+        {!!diagnosis && diagnosis.issues.length > 0 && (
           <View style={s.section}>
             <Text style={s.sectionTitle}>Issues detected</Text>
             {diagnosis.issues.map((issue, i) => (
@@ -250,7 +265,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
           </View>
         )}
 
-        {diagnosis.treatments.length > 0 && (
+        {!!diagnosis && diagnosis.treatments.length > 0 && (
           <View style={s.section}>
             <Text style={s.sectionTitle}>Treatment plan</Text>
             {diagnosis.treatments.map((tr, i) => (
@@ -273,7 +288,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
           Nothing is rendered in that case - a "Care plan" heading over three
           empty rows would read as a broken screen rather than as missing data.
         */}
-        {!!diagnosis.carePlan && (
+        {!!diagnosis && !!diagnosis.carePlan && (
           <View style={s.section}>
             <Text style={s.sectionTitle}>Care plan</Text>
             <Text style={s.sectionNote}>How to keep this plant well, once it is.</Text>
@@ -284,7 +299,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
                 // One node per row: a screen reader should say "Light: bright
                 // indirect", not read the icon and the label as separate stops.
                 accessible
-                accessibilityLabel={`${label}: ${diagnosis.carePlan![key]}`}
+                accessibilityLabel={`${label}: ${diagnosis.carePlan?.[key]}`}
               >
                 {/*
                   The water row is tinted blue so the eye connects it to the
@@ -296,7 +311,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
                 </View>
                 <View style={s.careBody}>
                   <Text style={s.logLabel}>{label}</Text>
-                  <Text style={s.careText}>{diagnosis.carePlan![key]}</Text>
+                  <Text style={s.careText}>{diagnosis.carePlan?.[key]}</Text>
                 </View>
               </View>
             ))}
@@ -325,7 +340,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
                     style={({ pressed }) => [s.historyBtn, pressed && { opacity: 0.6 }]}
                     onPress={() => navigation.navigate('WateringHistory', { plantId: plant.id })}
                     accessibilityRole="button"
-                    accessibilityLabel={`See the watering history for ${diagnosis.plantName}`}
+                    accessibilityLabel={`See the watering history for ${plantName}`}
                     hitSlop={8}
                   >
                     <Text style={s.historyBtnText}>History</Text>
@@ -333,7 +348,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
                   </Pressable>
                 </View>
 
-                <Text style={s.scheduleInterval}>{intervalLabel(diagnosis.carePlan)}</Text>
+                <Text style={s.scheduleInterval}>{intervalLabel(diagnosis?.carePlan)}</Text>
 
                 {/*
                   The countdown sits in ONE place, and which place depends on
@@ -386,8 +401,8 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
                   accessibilityState={{ disabled: watering }}
                   accessibilityLabel={
                     settled
-                      ? `${diagnosis.plantName} has been watered. ${water.label}.`
-                      : `Log a watering for ${diagnosis.plantName}. ${water.label}`
+                      ? `${plantName} has been watered. ${water.label}.`
+                      : `Log a watering for ${plantName}. ${water.label}`
                   }
                   accessibilityHint={
                     settled ? 'Double tap and hold to log an early watering' : undefined
@@ -438,11 +453,11 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
         */}
         <Pressable
           style={({ pressed }) => [s.findBtn, pressed && { opacity: 0.7 }]}
-          onPress={() => findNurseries(diagnosis.plantName, 'delivery')}
+          onPress={() => findNurseries(plantName, 'delivery')}
           disabled={searching}
           accessibilityRole="button"
           accessibilityState={{ disabled: searching }}
-          accessibilityLabel={`Find nurseries selling ${diagnosis.plantName}`}
+          accessibilityLabel={`Find nurseries selling ${plantName}`}
         >
           <Ionicons name="storefront-outline" size={18} color={t.color.primary} />
           <Text style={s.findBtnText}>
@@ -461,7 +476,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
           <Text style={s.sectionTitle}>Care log</Text>
           {CARE_LOG_ROWS.map(({ kind, label, icon, verb }) => {
             const last = careHistory(plant, kind)[0];
-            const state = careState(kind, diagnosis.carePlan, last, Date.now());
+            const state = careState(kind, diagnosis?.carePlan, last, Date.now());
             const late = state.status === 'due' || state.status === 'overdue';
             return (
               <View key={kind} style={s.logRow}>
@@ -479,7 +494,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
                     style={({ pressed }) => [s.historyBtn, pressed && { opacity: 0.6 }]}
                     onPress={() => navigation.navigate('WateringHistory', { plantId: plant.id, kind })}
                     accessibilityRole="button"
-                    accessibilityLabel={`See the ${label.toLowerCase()} history for ${diagnosis.plantName}`}
+                    accessibilityLabel={`See the ${label.toLowerCase()} history for ${plantName}`}
                     hitSlop={8}
                   >
                     <Ionicons
@@ -494,7 +509,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
                   style={({ pressed }) => [s.logBtn, pressed && { opacity: 0.7 }]}
                   onPress={() => handleCare(kind)}
                   accessibilityRole="button"
-                  accessibilityLabel={`${verb} ${diagnosis.plantName} today`}
+                  accessibilityLabel={`${verb} ${plantName} today`}
                   hitSlop={6}
                 >
                   <Text style={s.logBtnText}>{verb}</Text>

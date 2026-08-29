@@ -36,7 +36,10 @@ export default function PlantSearchScreen() {
    * likely case, and it saves typing a Latin name on a phone keyboard.
    */
   const suggestions = useMemo(() => {
-    const names = plantLibrary.load().plants.map((p) => p.diagnosis.plantName).filter(Boolean);
+    const names = plantLibrary
+      .load()
+      .plants.map((p) => p.species?.name ?? p.diagnosis?.plantName ?? '')
+      .filter(Boolean);
     return [...new Set(names)].slice(0, 6);
   }, []);
 
