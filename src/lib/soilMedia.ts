@@ -23,6 +23,17 @@ export type SoilMediumId =
   | 'perlite_mix'
   | 'water';
 
+/*
+ * A subset of the keys in Theme['color'], resolved by SoilMediumIcon.
+ *
+ * A local union rather than `keyof Theme['color']` on purpose: the theme
+ * imports react-native, and this module is pulled into the server tsconfig
+ * program through its colocated test, where those globals break the build (see
+ * the note on RootStackParamList in src/types/index.ts). This still catches the
+ * typo that a bare `string` would let through and render as a blank tint.
+ */
+export type SoilTint = 'repot' | 'feed' | 'accent' | 'warning' | 'secondary' | 'water' | 'primary';
+
 export interface SoilMedium {
   id: SoilMediumId;
   label: string;
@@ -32,7 +43,7 @@ export interface SoilMedium {
    * @expo/vector-icons import; SoilMediumIcon narrows it at the call site. */
   icon: string;
   /* A key of Theme['color'], resolved by the component. */
-  tint: string;
+  tint: SoilTint;
   /*
    * FALLBACK ONLY. Scales the base watering interval when no genus care plan
    * has been cached yet - offline, or the call failed. Once `bySoil` exists the
@@ -48,7 +59,7 @@ export const SOIL_MEDIA: SoilMedium[] = [
     id: 'potting_mix',
     label: 'Potting mix',
     description: 'Standard peat-based houseplant soil',
-    icon: 'layers',
+    icon: 'layers-outline',
     tint: 'repot',
     waterMultiplier: 1,
   },
@@ -56,7 +67,7 @@ export const SOIL_MEDIA: SoilMedium[] = [
     id: 'aroid_mix',
     label: 'Aroid mix',
     description: 'Chunky bark, perlite and coco, free-draining',
-    icon: 'grid',
+    icon: 'grid-outline',
     tint: 'feed',
     waterMultiplier: 0.8,
   },
@@ -64,7 +75,7 @@ export const SOIL_MEDIA: SoilMedium[] = [
     id: 'leca',
     label: 'LECA',
     description: 'Clay balls with a water reservoir',
-    icon: 'ellipsis-horizontal-circle',
+    icon: 'ellipsis-horizontal-circle-outline',
     tint: 'accent',
     waterMultiplier: 0.6,
   },
@@ -72,7 +83,7 @@ export const SOIL_MEDIA: SoilMedium[] = [
     id: 'pon',
     label: 'Pon',
     description: 'Pumice, zeolite and lava with slow-release feed',
-    icon: 'apps',
+    icon: 'apps-outline',
     tint: 'warning',
     waterMultiplier: 0.65,
   },
@@ -80,7 +91,7 @@ export const SOIL_MEDIA: SoilMedium[] = [
     id: 'sphagnum',
     label: 'Sphagnum moss',
     description: 'Long-fibre moss, holds a lot of water',
-    icon: 'cloud',
+    icon: 'cloud-outline',
     tint: 'secondary',
     waterMultiplier: 1.4,
   },
@@ -88,7 +99,7 @@ export const SOIL_MEDIA: SoilMedium[] = [
     id: 'bark',
     label: 'Orchid bark',
     description: 'Coarse bark, very airy, dries quickly',
-    icon: 'reorder-four',
+    icon: 'reorder-four-outline',
     tint: 'repot',
     waterMultiplier: 0.7,
   },
@@ -96,7 +107,7 @@ export const SOIL_MEDIA: SoilMedium[] = [
     id: 'perlite_mix',
     label: 'Perlite heavy',
     description: 'Mostly perlite, near-hydroponic',
-    icon: 'sparkles',
+    icon: 'sparkles-outline',
     tint: 'water',
     waterMultiplier: 0.6,
   },
@@ -104,7 +115,7 @@ export const SOIL_MEDIA: SoilMedium[] = [
     id: 'water',
     label: 'Water',
     description: 'Rooting or growing in plain water',
-    icon: 'water',
+    icon: 'water-outline',
     tint: 'water',
     waterMultiplier: 2,
   },
