@@ -364,20 +364,20 @@ export const AROID_FAMILIES: CatalogFamily[] = [
                 family: 'Aroids',
                 synonyms: [],
               },
-            ],
-          },
-          {
-            name: 'Variegated Alocasias',
-            entries: [
               {
                 id: 'alocasia-dragon-scale-mint-variegated',
                 name: 'Dragon Scale Mint Variegated',
                 scientificName: 'Alocasia baginda',
                 genus: 'Alocasia',
-                group: 'Variegated Alocasias',
+                group: 'Rare Alocasias',
                 family: 'Aroids',
                 synonyms: ['mint dragon scale', 'variegated dragon scale'],
               },
+            ],
+          },
+          {
+            name: 'Variegated Alocasias',
+            entries: [
               {
                 id: 'alocasia-macrorrhiza-variegata',
                 name: 'Variegated Giant Taro',

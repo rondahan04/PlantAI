@@ -1,6 +1,6 @@
 import type { CatalogFamily } from './catalogTypes';
-import { AROID_FAMILIES } from './catalogAroids';
-import { HOUSEPLANT_FAMILIES } from './catalogHouseplants';
+import { AROID_FAMILIES } from './catalogAroids.ts';
+import { HOUSEPLANT_FAMILIES } from './catalogHouseplants.ts';
 
 /*
  * The species a user can pick from when adding a plant by hand.
