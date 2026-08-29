@@ -5,6 +5,7 @@
  * Routes
  *   GET  /health                    → liveness + gate/job counters (O1, O3)
  *   POST /api/diagnose              → PlantDiagnosis            (A3, billable)
+ *   POST /api/care-plan             → { bySoil } per genus      (billable)
  *   POST /api/nurseries             → { jobId }                 (E12, billable)
  *   GET  /api/nurseries/job/:id     → job state / result        (E12, free)
  *
@@ -48,6 +49,7 @@ import {
   type DiagnosisDeps,
   type IdentifyHint,
 } from './diagnose.ts';
+import { CarePlanError, buildCarePlan, openAiCarePlan } from './carePlan.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -145,6 +147,7 @@ const assessHealthImpl = SKIP_OPENAI_DIAGNOSIS ? stubAssessHealth : openAiAssess
  * behaviour.
  */
 const identifyFallbackImpl = SKIP_OPENAI_DIAGNOSIS ? undefined : openAiIdentify(OPENAI_KEY!);
+const carePlanDeps = openAiCarePlan(OPENAI_KEY!);
 
 /*
  * Built per request so the cascade's decisions can be logged against the rid -
@@ -402,6 +405,70 @@ const server = http.createServer(async (req, res) => {
       const detail =
         err instanceof DiagnosisServiceError ? `${err.provider}: ${err.detail}` : errText(err);
       fail(res, rid, 502, 'diagnosis_failed', 'The plant service did not answer.', detail);
+    }
+    return;
+  }
+
+  // ── POST /api/care-plan ─────────────────────────────────────────────────────
+  // Care guidance for a whole GENUS, covering every growing medium in one
+  // answer. Billable and gated like any other model call. The client caches the
+  // result forever (src/lib/genusCarePlan.ts), so in practice this is one call
+  // per genus per install, not one per plant.
+  if (u.pathname === '/api/care-plan' && req.method === 'POST') {
+    const decision = gate.check(ip, secret);
+    if (!decision.allow) {
+      json(res, decision.status, { error: decision.code, message: decision.message });
+      return;
+    }
+
+    let genus: string;
+    let family: string;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8'));
+      genus = typeof body?.genus === 'string' ? body.genus.trim() : '';
+      family = typeof body?.family === 'string' ? body.family.trim() : '';
+      if (!genus) {
+        json(res, 400, { error: 'bad_request', message: 'genus is required.' });
+        return;
+      }
+      /*
+       * A genus is one word and a family two at most. Anything longer is not a
+       * plant name, it is someone using a billable model call as a free prompt
+       * - the text goes straight into the prompt, so the length cap is the
+       * cheap half of not being an open text-completion endpoint.
+       */
+      if (genus.length > 60 || family.length > 60) {
+        json(res, 400, { error: 'bad_request', message: 'genus and family must be plant names.' });
+        return;
+      }
+    } catch (err: unknown) {
+      const tooBig = err instanceof PayloadTooLarge;
+      fail(
+        res,
+        rid,
+        tooBig ? 413 : 400,
+        tooBig ? 'payload_too_large' : 'bad_request',
+        tooBig ? 'That request is too large to send.' : 'That request could not be read.',
+        errText(err)
+      );
+      return;
+    }
+
+    const t0 = Date.now();
+    logEvent(rid, 'care_plan_start', { genus, family });
+    try {
+      const plan = await buildCarePlan(genus, family, carePlanDeps);
+      logEvent(rid, 'care_plan_done', {
+        genus,
+        media: Object.keys(plan.bySoil).length,
+        ms: Date.now() - t0,
+      });
+      json(res, 200, plan);
+    } catch (err: unknown) {
+      // The detail names the medium that failed to validate, or carries the
+      // provider's own body - useful in the log, never in the response.
+      const detail = err instanceof CarePlanError ? err.detail : errText(err);
+      fail(res, rid, 502, 'care_plan_failed', 'The care advice service did not answer.', detail);
     }
     return;
   }
