@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { plantRepo } from './plantRepoInstance';
 import { isUniqueViolation } from '../lib/authErrors';
 import type { Session } from '@supabase/supabase-js';
 
@@ -73,6 +74,9 @@ export async function signIn(email: string, password: string): Promise<Session> 
 export async function signOut(): Promise<void> {
   const { error } = await supabase.auth.signOut();
   if (error) throw new AuthServiceError(error.message);
+  // The mirror is a cache of the account being signed out of - it must not
+  // leak into a next login on a shared device.
+  plantRepo.wipeMirror();
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {
@@ -115,11 +119,60 @@ export async function changePassword(currentPassword: string, newPassword: strin
  * migration) - the client holds no service-role key, so it can never call
  * the Supabase admin delete-user API directly. The function only ever
  * deletes auth.uid()'s own row; there is no user id to spoof.
+ *
+ * Storage cleanup happens here, client-side, via the Storage API - Supabase
+ * rejects direct `delete from storage.objects` even from a SECURITY DEFINER
+ * function (see the 2026-08-24 migration), so the RPC no longer attempts it.
+ * A failure to clear photos is not fatal to account deletion: an orphaned
+ * object under a deleted user's folder is unreachable dead weight, not a
+ * blocker to the thing the user actually asked for.
  */
+/*
+ * `list()` returns a single page (100 objects by default), so a user with
+ * more plants than that would leave the remainder behind on every delete -
+ * dead objects nobody can reach and nothing will ever clean up. Page until
+ * the folder is genuinely empty.
+ */
+const STORAGE_PAGE = 100;
+
+async function purgeUserPhotos(userId: string): Promise<void> {
+  for (;;) {
+    const { data: files, error } = await supabase.storage
+      .from('plant-photos')
+      .list(userId, { limit: STORAGE_PAGE });
+
+    if (error) {
+      console.warn(`[auth] could not list photos for deletion: ${error.message}`);
+      return;
+    }
+    if (!files || files.length === 0) return;
+
+    const { error: removeError } = await supabase.storage
+      .from('plant-photos')
+      .remove(files.map((f) => `${userId}/${f.name}`));
+
+    if (removeError) {
+      console.warn(`[auth] could not remove photos: ${removeError.message}`);
+      return;
+    }
+    // A short page means the folder is now drained; anything else would spin
+    // forever if a delete silently no-ops.
+    if (files.length < STORAGE_PAGE) return;
+  }
+}
+
 export async function deleteAccount(): Promise<void> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const userId = sessionData.session?.user.id;
+  if (userId) await purgeUserPhotos(userId);
+
   const { error } = await supabase.rpc('delete_own_account');
   if (error) throw new AuthServiceError(error.message);
   await supabase.auth.signOut();
+  // Everything local, not just the mirror - see `wipeAllLocal`. Home shows
+  // guest and cloud plants as one list, so a survivor of either key reads as
+  // the app ignoring the deletion the user just confirmed.
+  plantRepo.wipeAllLocal();
 }
 
 export interface Profile {

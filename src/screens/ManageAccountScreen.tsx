@@ -33,6 +33,8 @@ export default function ManageAccountScreen({ navigation }: Props) {
     try {
       await deleteAccount();
       navigation.navigate('Home');
+    } catch {
+      Alert.alert('Delete failed', 'Something went wrong deleting your account. Try again.');
     } finally {
       setBusy(false);
     }
@@ -41,7 +43,7 @@ export default function ManageAccountScreen({ navigation }: Props) {
   const confirmDelete = () => {
     Alert.alert(
       'Delete account?',
-      'This deletes your account immediately and permanently. There is no grace period and no undo.',
+      'This permanently deletes your account and every plant on this device, including any saved before you signed in. There is no grace period and no undo.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: performDelete },

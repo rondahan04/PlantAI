@@ -59,3 +59,10 @@ services:
       # Must match EXPO_PUBLIC_API_SECRET in .env, or every app request 401s.
       - key: API_SHARED_SECRET
         sync: false
+      # Shared nursery-scrape cache (public.nursery_searches). The service-role
+      # key bypasses RLS and must never reach the app bundle. Omit both and the
+      # cache is simply off - every search becomes a live, paid scrape.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false

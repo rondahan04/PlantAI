@@ -118,14 +118,47 @@ function toNursery(r: NurseryResultJSON): Nursery {
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-/* POST the search, get a job id back. */
-async function startJob(plantName: string, lat: number, lng: number): Promise<string> {
+/*
+ * A finished search, with the moment its stock was actually checked.
+ *
+ * The stamp is not decoration: since the server now serves results scraped up
+ * to a week ago, a screen that showed prices with no age would be presenting
+ * old stock as live. `scrapedAt` is null only for a result from a server too
+ * old to send one.
+ */
+export interface NurserySearch {
+  nurseries: Nursery[];
+  scrapedAt: number | null;
+}
+
+function toSearch(body: any): NurserySearch {
+  const results = body?.results;
+  const scrapedAt = Number(body?.scrapedAt);
+  return {
+    nurseries: Array.isArray(results) ? results.map(toNursery) : [],
+    scrapedAt: Number.isFinite(scrapedAt) ? scrapedAt : null,
+  };
+}
+
+/*
+ * POST the search. Two possible answers now: a job id for a scrape that has
+ * just started, or - when the server still holds a fresh result for this exact
+ * search - the finished results right there in the response. The second case is
+ * the whole point of the durable cache and is what makes a treatment looked up
+ * the next day open instantly.
+ */
+async function startJob(
+  plantName: string,
+  lat: number,
+  lng: number,
+  force: boolean
+): Promise<{ jobId: string } | { search: NurserySearch }> {
   let res: Response;
   try {
     res = await apiFetch('/api/nurseries', {
       method: 'POST',
       headers: apiHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ plant: plantName, lat, lng }),
+      body: JSON.stringify({ plant: plantName, lat, lng, force }),
       timeoutMs: START_TIMEOUT_MS,
     });
   } catch (err: unknown) {
@@ -138,11 +171,13 @@ async function startJob(plantName: string, lat: number, lng: number): Promise<st
   }
 
   const body = await res.json().catch(() => null);
+  if ((body as any)?.state === 'done') return { search: toSearch(body) };
+
   const jobId = (body as any)?.jobId;
   if (typeof jobId !== 'string' || !jobId) {
     throw new NurseryServiceError('start returned no jobId');
   }
-  return jobId;
+  return { jobId };
 }
 
 /*
@@ -151,7 +186,7 @@ async function startJob(plantName: string, lat: number, lng: number): Promise<st
  * run of them gives up. Losing a poll should not throw away an eight-minute
  * scrape the user already paid for.
  */
-async function awaitJob(jobId: string): Promise<Nursery[]> {
+async function awaitJob(jobId: string): Promise<NurserySearch> {
   const deadline = Date.now() + MAX_WAIT_MS;
   let interval = POLL_MIN_MS;
   let consecutiveFailures = 0;
@@ -186,10 +221,7 @@ async function awaitJob(jobId: string): Promise<Nursery[]> {
 
     consecutiveFailures = 0;
     const body = (await res.json().catch(() => null)) as any;
-    if (body?.state === 'done') {
-      const results = body.results;
-      return Array.isArray(results) ? results.map(toNursery) : [];
-    }
+    if (body?.state === 'done') return toSearch(body);
     if (body?.state === 'error') {
       throw new NurseryServiceError(`job failed: ${body.error ?? 'unknown'}`);
     }
@@ -199,8 +231,14 @@ async function awaitJob(jobId: string): Promise<Nursery[]> {
   throw new NurserySearchTimeout();
 }
 
-async function requestNurseries(plantName: string, lat: number, lng: number): Promise<Nursery[]> {
-  return awaitJob(await startJob(plantName, lat, lng));
+async function requestNurseries(
+  plantName: string,
+  lat: number,
+  lng: number,
+  force: boolean
+): Promise<NurserySearch> {
+  const started = await startJob(plantName, lat, lng, force);
+  return 'search' in started ? started.search : awaitJob(started.jobId);
 }
 
 /*
@@ -214,7 +252,7 @@ const CACHE_MAX_ENTRIES = 20;
 
 interface CacheEntry {
   at: number;
-  promise: Promise<Nursery[]>;
+  promise: Promise<NurserySearch>;
 }
 const cache = new Map<string, CacheEntry>();
 
@@ -248,7 +286,7 @@ export function fetchNearbyNurseries(
   userLat: number,
   userLng: number,
   opts: { force?: boolean } = {}
-): Promise<Nursery[]> {
+): Promise<NurserySearch> {
   const now = Date.now();
   evict(now);
 
@@ -258,7 +296,10 @@ export function fetchNearbyNurseries(
     return hit.promise;
   }
 
-  const promise = requestNurseries(plantName, userLat, userLng);
+  // `force` reaches the server too, not just this in-memory map: a retry that
+  // skipped the local cache only to be handed the same week-old row from the
+  // durable one is not the refresh the user asked for.
+  const promise = requestNurseries(plantName, userLat, userLng, opts.force === true);
   // Evict on failure so a later call (retry) starts fresh instead of re-throwing
   // the same rejected promise.
   promise.catch(() => {

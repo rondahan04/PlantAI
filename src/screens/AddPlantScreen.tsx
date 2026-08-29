@@ -42,6 +42,8 @@ import SoilCard from '../components/SoilCard';
 import { DEFAULT_SOIL_MEDIUM, type SoilMediumId } from '../lib/soilMedia';
 import { catalogEntryById, type CatalogEntry } from '../lib/catalogSearch';
 import { plantLibrary } from '../services/plantLibrary';
+import { plantRepo } from '../services/plantRepoInstance';
+import { getSessionHint } from '../services/sessionHint';
 import { plantPhotos } from '../services/photos';
 import { genusCarePlans } from '../services/genusCarePlans';
 
@@ -126,12 +128,12 @@ export default function AddPlantScreen({ navigation, route }: Props) {
     }
   }, []);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (!entry || saving) return;
     setSaving(true);
 
     const trimmed = nickname.trim();
-    const result = plantLibrary.saveManual({
+    const result = await plantRepo.saveManual({
       /*
        * The empty string is the honest record of "no photo": the store keeps
        * `photoUri` required, and a plant added from the shelf genuinely has
@@ -152,12 +154,16 @@ export default function AddPlantScreen({ navigation, route }: Props) {
 
     if (!result.ok) {
       setSaving(false);
-      // The one failure the store distinguishes: the write did not land, and
-      // it will land once there is room. Anything vaguer would send the user
-      // looking for a bug that is not there.
+      /*
+       * Name the actual failure. A logged-in save goes to the network first, so
+       * "free some space" - the only thing the local store could ever fail on -
+       * would send half the users looking for a bug that is not there.
+       */
       Alert.alert(
         "Couldn't save",
-        'Your device is out of storage space. Free some space and try again.',
+        result.reason === 'network'
+          ? "We couldn't reach your account. Check your connection and try again."
+          : 'Your device is out of storage space. Free some space and try again.',
         [{ text: 'OK' }]
       );
       return;
@@ -174,7 +180,10 @@ export default function AddPlantScreen({ navigation, route }: Props) {
      * would be gone. The worst case here is a plant whose photo never made the
      * crossing, which Home's repair pass either fixes or forgets.
      */
-    if (photoUri) {
+    // Guest-only, like DiagnosisScreen's: a logged-in save already uploaded the
+    // photo to Storage, and repointing the mirror at a local file would leave
+    // this device's copy disagreeing with every other device's.
+    if (photoUri && !getSessionHint()) {
       void plantPhotos.adopt(id, photoUri).then((persisted) => {
         if (persisted) plantLibrary.update(id, { photoUri: persisted });
       });

@@ -8,9 +8,10 @@ import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
 import { directionalIconStyle } from '../lib/rtl';
 import { LOGO_GLYPH } from '../brand';
-import { plantLibrary } from '../services/plantLibrary';
+import { plantRepo } from '../services/plantRepoInstance';
 import { plantPhotos } from '../services/photos';
-import { wateringState } from '../lib/watering';
+import { intervalLabel, wateringState } from '../lib/watering';
+import { treatmentProduct } from '../lib/treatments';
 import { CARE_KINDS, plantCarePlan, soilPlanFor } from '../lib/care';
 import type { GenusCarePlan } from '../lib/genusCarePlan';
 import type { SoilMediumId } from '../lib/soilMedia';
@@ -60,15 +61,27 @@ const CONDITION_COLOR: Record<string, keyof Theme['color']> = {
   critical: 'conditionCritical',
 };
 
+/*
+ * Why a write did not land, in the user's terms. `network` only reaches a
+ * logged-in user, and telling them to free disk space for a request that never
+ * left the phone would send them looking for the wrong problem.
+ */
+const SAVE_FAILURE: Record<string, string> = {
+  not_found: 'This plant is no longer saved.',
+  network: "We couldn't reach your account. Check your connection and try again.",
+  storage_full: 'Your device is out of storage space, so nothing was saved.',
+};
+
 export default function PlantDetailScreen({ navigation, route }: Props) {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
   const { plantId } = route.params;
 
   const [plant, setPlant] = useState(() =>
-    plantLibrary.load().plants.find((p) => p.id === plantId) ?? null
+    plantRepo.loadLocal().plants.find((p) => p.id === plantId) ?? null
   );
   const [watering, setWatering] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const { busy: searching, search: findNurseries } = useNurserySearch();
 
   /*
@@ -189,14 +202,13 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
    * to be said - silently keeping the old medium while the picker shows the
    * new one is the worst of both.
    */
-  const handleSoil = (next: SoilMediumId) => {
-    const stored = plantLibrary.update(plant.id, { soilMedium: next });
+  const handleSoil = async (next: SoilMediumId) => {
+    const stored = await plantRepo.update(plant.id, { soilMedium: next });
     if (!stored.ok) {
       Alert.alert(
         "Couldn't save that",
-        stored.reason === 'not_found'
-          ? 'This plant is no longer saved.'
-          : 'Your device is out of storage space, so the growing medium was not saved.'
+        SAVE_FAILURE[stored.reason] ??
+          'Your device is out of storage space, so the growing medium was not saved.'
       );
       return;
     }
@@ -208,19 +220,31 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
    * reminder, so there is no OS handle to cancel and no ordering constraint -
    * storage is the whole operation.
    */
-  const handleCare = (kind: CareKind) => {
-    const logged = plantLibrary.markCare(plant.id, kind, Date.now());
+  const handleCare = async (kind: Exclude<CareKind, 'water'>) => {
+    const logged = await plantRepo.markCare(plant.id, kind, Date.now());
     if (!logged.ok) {
       Alert.alert(
         "Couldn't record that",
-        logged.reason === 'not_found'
-          ? 'This plant is no longer saved.'
-          : 'Your device is out of storage space, so nothing was saved.'
+        SAVE_FAILURE[logged.reason] ?? 'Your device is out of storage space, so nothing was saved.'
       );
       return;
     }
     setPlant(logged.plant);
   };
+
+  /*
+   * The nursery scrape, reachable from a SAVED plant - not only from the
+   * diagnosis that created it. Buying the treatment is a decision people make
+   * days later, standing in front of the plant, and until now the only door to
+   * the scrape closed the moment they left the diagnosis screen.
+   *
+   * Coordinates are resolved on tap rather than on mount: this screen is opened
+   * constantly (watering, history), and a location permission prompt or GPS fix
+   * on every open would be a tax paid by everyone for a button most visits
+   * never press. The scrape is therefore not prefetched here - NurseriesScreen
+   * shows its own progress state for the wait.
+   */
+  const findNearby = (query: string) => findNurseries(query, 'delivery');
 
   /*
    * Log a watering.
@@ -242,13 +266,15 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
       await cancelWateringReminder(plant.reminderId);
 
       const at = Date.now();
-      const logged = plantLibrary.markWatered(plant.id, at);
+      const logged = await plantRepo.markWatered(plant.id, at);
       if (!logged.ok) {
         Alert.alert(
           "Couldn't record that",
           logged.reason === 'not_found'
             ? 'This plant is no longer saved.'
-            : 'Your device is out of storage space, so the watering was not saved.'
+            : logged.reason === 'network'
+              ? "Couldn't reach your account. Check your connection and try again."
+              : 'Your device is out of storage space, so the watering was not saved.'
         );
         return;
       }
@@ -273,7 +299,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
       });
       if (!reminderId) return;
 
-      const stored = plantLibrary.update(plant.id, { reminderId });
+      const stored = await plantRepo.update(plant.id, { reminderId });
       if (stored.ok) setPlant(stored.plant);
     } finally {
       setWatering(false);
@@ -286,18 +312,29 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
       {
         text: 'Remove',
         style: 'destructive',
-        onPress: () => {
-          const result = plantLibrary.remove(plant.id);
-          if (!result.ok) {
-            Alert.alert("Couldn't remove", 'Your device is out of storage space.');
-            return;
+        onPress: async () => {
+          if (removing) return;
+          setRemoving(true);
+          try {
+            const result = await plantRepo.remove(plant.id);
+            if (!result.ok) {
+              Alert.alert(
+                "Couldn't remove",
+                result.reason === 'network'
+                  ? "Couldn't reach your account. Check your connection and try again."
+                  : 'Your device is out of storage space.'
+              );
+              return;
+            }
+            // The record is gone, so its photo is unreachable - leaving the file
+            // behind would grow the document directory forever. Deleted after
+            // the write, never before: a failed removal must not cost the user a
+            // picture of a plant that is still in their library.
+            plantPhotos.discard(plant.id);
+            navigation.goBack();
+          } finally {
+            setRemoving(false);
           }
-          // The record is gone, so its photo is unreachable - leaving the file
-          // behind would grow the document directory forever. Deleted after
-          // the write, never before: a failed removal must not cost the user a
-          // picture of a plant that is still in their library.
-          plantPhotos.discard(plant.id);
-          navigation.goBack();
         },
       },
     ]);
@@ -319,6 +356,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
           <Pressable
             style={s.removeBtn}
             onPress={confirmRemove}
+            disabled={removing}
             accessibilityRole="button"
             accessibilityLabel={`Remove ${plantName} from my plants`}
             hitSlop={8}
@@ -390,17 +428,31 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
         {!!diagnosis && diagnosis.treatments.length > 0 && (
           <View style={s.section}>
             <Text style={s.sectionTitle}>Treatment plan</Text>
-            {diagnosis.treatments.map((tr, i) => (
-              <View key={i} style={s.treatmentCard}>
-                {tr.urgent && (
-                  <View style={s.urgentPill}>
-                    <Text style={s.urgentText}>URGENT</Text>
-                  </View>
-                )}
-                <Text style={s.treatmentTitle}>{tr.title}</Text>
-                <Text style={s.treatmentDesc}>{tr.description}</Text>
-              </View>
-            ))}
+            {diagnosis.treatments.map((tr, i) => {
+              const product = treatmentProduct(tr.title);
+              return (
+                <View key={i} style={s.treatmentCard}>
+                  {tr.urgent && (
+                    <View style={s.urgentPill}>
+                      <Text style={s.urgentText}>URGENT</Text>
+                    </View>
+                  )}
+                  <Text style={s.treatmentTitle}>{tr.title}</Text>
+                  <Text style={s.treatmentDesc}>{tr.description}</Text>
+                  {product && (
+                    <Pressable
+                      style={({ pressed }) => [s.shopBtn, pressed && { opacity: 0.6 }]}
+                      onPress={() => findNearby(product)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Find ${product} at nurseries near you`}
+                    >
+                      <Ionicons name="storefront-outline" size={16} color={t.color.primary} />
+                      <Text style={s.shopBtnText}>Find {product} nearby</Text>
+                    </Pressable>
+                  )}
+                </View>
+              );
+            })}
           </View>
         )}
 
@@ -479,6 +531,31 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
             {searching ? 'Finding nurseries...' : 'Find this plant at a nursery'}
           </Text>
         </Pressable>
+
+        {/*
+          The replacement door, kept open after the diagnosis screen is gone -
+          but ONLY for a plant that cannot be saved. Any other plant is already
+          served by the neutral "find this at a nursery" button above, and two
+          storefront buttons a screen apart saying nearly the same thing is how
+          a screen stops being read at all.
+        */}
+        {!!diagnosis && !diagnosis.canBeSaved && (
+          <View style={s.nurseryCard}>
+            <Text style={s.nurseryTitle}>Find a healthy replacement</Text>
+            <Text style={s.nurseryNote}>
+              This plant is too damaged to save. Find a healthy {diagnosis.plantName} near you.
+            </Text>
+            <Pressable
+              style={({ pressed }) => [s.nurseryBtn, pressed && { opacity: 0.85 }]}
+              onPress={() => findNearby(diagnosis.plantName)}
+              accessibilityRole="button"
+              accessibilityLabel={`Find ${diagnosis.plantName} at nurseries near you`}
+            >
+              <Ionicons name="storefront-outline" size={18} color={t.color.onPrimary} />
+              <Text style={s.nurseryBtnText}>Find nearby nurseries</Text>
+            </Pressable>
+          </View>
+        )}
 
         <Text style={s.savedAt}>Saved {new Date(plant.savedAt).toLocaleDateString()}</Text>
       </ScrollView>
@@ -596,6 +673,48 @@ const makeStyles = (t: Theme) =>
     urgentText: { ...t.type.caption, color: t.color.onDanger, fontSize: 10 },
     treatmentTitle: { ...t.type.bodyStrong, color: t.color.foreground, writingDirection: 'auto' },
     treatmentDesc: { ...t.type.body, color: t.color.textSecondary, marginTop: 2, writingDirection: 'auto' },
+
+    /* Quiet outline button inside a treatment card - the filled accent on this
+     * screen belongs to watering, and buying supplies must not outrank it. */
+    shopBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: t.space.xs,
+      marginTop: t.space.sm,
+      paddingVertical: t.space.xs,
+      paddingHorizontal: t.space.sm,
+      borderRadius: t.radius.md,
+      borderWidth: 1,
+      borderColor: t.color.primary,
+      minHeight: 36,
+    },
+    shopBtnText: { ...t.type.label, color: t.color.primary, writingDirection: 'auto' },
+
+    nurseryCard: {
+      backgroundColor: t.color.surface,
+      borderRadius: t.radius.lg,
+      padding: t.space.lg,
+      marginTop: t.space.xl,
+    },
+    nurseryTitle: { ...t.type.heading, color: t.color.foreground, writingDirection: 'auto' },
+    nurseryNote: {
+      ...t.type.body,
+      color: t.color.textSecondary,
+      marginTop: t.space.xs,
+      writingDirection: 'auto',
+    },
+    nurseryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: t.space.sm,
+      marginTop: t.space.md,
+      minHeight: 48,
+      borderRadius: t.radius.lg,
+      backgroundColor: t.color.primary,
+    },
+    nurseryBtnText: { ...t.type.heading, color: t.color.onPrimary },
 
     savedAt: { ...t.type.caption, color: t.color.textMuted, marginTop: t.space.xl, textAlign: 'center' },
 

@@ -18,9 +18,13 @@ import { RootStackParamList, DeliveryMode } from '../types';
 import { Theme, useTheme } from '../theme';
 import { directionalIconStyle } from '../lib/rtl';
 import { useNurserySearch } from '../hooks/useNurserySearch';
+import { plantRepo } from '../services/plantRepoInstance';
 import { plantLibrary } from '../services/plantLibrary';
 import { plantPhotos } from '../services/photos';
 import { identityConfidence } from '../lib/confidence';
+import { treatmentProduct } from '../lib/treatments';
+import { useSession } from '../hooks/useSession';
+import { getSessionHint } from '../services/sessionHint';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Diagnosis'>;
@@ -43,6 +47,9 @@ const CONDITION_ICON: Record<string, IconName> = {
 export default function DiagnosisScreen({ navigation, route }: Props) {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
+  // Side effect only - keeps sessionHint fresh even if this screen is
+  // somehow reached before Home's own useSession() instance has run.
+  useSession();
   const { imageUri, diagnosis } = route.params;
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('delivery');
   const { busy: findingNurseries, search: findNurseries, prefetch } = useNurserySearch();
@@ -62,7 +69,25 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
    */
   useEffect(() => {
     prefetch(diagnosis.plantName);
-  }, [prefetch, diagnosis.plantName]);
+
+    /*
+     * Warm the treatment searches too, not just the replacement one. The
+     * scrape now persists server-side for a week, so this is the moment that
+     * makes "where do I buy Confidor" instant tomorrow, or next Tuesday -
+     * which is when people actually go looking for it, long after this
+     * screen is gone.
+     *
+     * URGENT treatments only. Every scrape is a paid job, and urgency is the
+     * diagnosis's own statement about what the user will act on; warming the
+     * optional "wipe it down" advice would double the bill for the case
+     * nobody rushes to buy.
+     */
+    for (const treatment of diagnosis.treatments) {
+      if (!treatment.urgent) continue;
+      const product = treatmentProduct(treatment.title);
+      if (product) prefetch(product);
+    }
+  }, [prefetch, diagnosis.plantName, diagnosis.treatments]);
 
   const conditionColor: Record<string, string> = {
     healthy: t.color.conditionHealthy,
@@ -83,6 +108,14 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
 
   const handleFindReplacement = () => findNurseries(diagnosis.plantName, deliveryMode);
 
+  /*
+   * The same scrape with a different search term: what treats this plant,
+   * rather than a replacement for it. Only rendered for treatments that name
+   * something buyable (see `treatmentProduct`) - "wipe the scale off by hand"
+   * has nothing to sell.
+   */
+  const handleFindTreatment = (product: string) => findNurseries(product, deliveryMode);
+
 
   /*
    * Save to the plant library (TODOS item 7).
@@ -99,19 +132,22 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
    */
   const [saved, setSaved] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (saved) return;
     setSaved(true);
 
-    const result = plantLibrary.save({ photoUri: imageUri, diagnosis });
+    const result = await plantRepo.save({ photoUri: imageUri, diagnosis });
     if (!result.ok) {
       setSaved(false);
       // The store already distinguishes this from every other failure: the
       // write did not land, and retrying after freeing space will work.
       Alert.alert(
         "Couldn't save",
-        'Your device is out of storage space. Free some space and try again.',
+        result.reason === 'network'
+          ? "Couldn't reach your account. Check your connection and try again."
+          : 'Your device is out of storage space. Free some space and try again.',
         [{ text: 'OK' }]
       );
       return;
@@ -120,7 +156,10 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
 
     /*
      * Photo persistence (TODOS item 9), deliberately AFTER the synchronous
-     * write and deliberately not awaited.
+     * write and deliberately not awaited. Guest-only: a cloud save already
+     * uploaded the photo as part of `plantRepo.save()`, so re-adopting it
+     * into the local document directory would be pointless (and would
+     * repoint a mirror-only record's local field to a local file path).
      *
      * `imageUri` points into the cache directory, which iOS empties whenever it
      * wants the space - so the record would outlive its picture. The copy is
@@ -130,20 +169,30 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
      * photo never made it across, which the next load repairs or forgets.
      */
     const id = result.plant.id;
-    void plantPhotos.adopt(id, imageUri).then((persisted) => {
-      if (persisted) plantLibrary.update(id, { photoUri: persisted });
-    });
+    if (!getSessionHint()) {
+      void plantPhotos.adopt(id, imageUri).then((persisted) => {
+        if (persisted) plantLibrary.update(id, { photoUri: persisted });
+      });
+    }
   };
 
-  const handleUnsave = () => {
-    if (!savedId) return;
-    const result = plantLibrary.remove(savedId);
-    if (!result.ok) return;
-    // Only after the record is gone - a failed removal must not cost the photo
-    // of a plant that is still in the library.
-    plantPhotos.discard(savedId);
-    setSaved(false);
-    setSavedId(null);
+  const handleUnsave = async () => {
+    if (!savedId || removing) return;
+    setRemoving(true);
+    try {
+      const result = await plantRepo.remove(savedId);
+      if (!result.ok) return;
+      // Only after the record is gone - a failed removal must not cost the photo
+      // of a plant that is still in the library. Guest-only: a cloud save's
+      // photo lives in Supabase Storage, which `discard()` has no way to reach.
+      if (!getSessionHint()) {
+        plantPhotos.discard(savedId);
+      }
+      setSaved(false);
+      setSavedId(null);
+    } finally {
+      setRemoving(false);
+    }
   };
 
   return (
@@ -295,17 +344,31 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
               <Ionicons name="medkit-outline" size={18} color={t.color.foreground} />
               <Text style={s.sectionTitle}>Treatment plan</Text>
             </View>
-            {diagnosis.treatments.map((tr, i) => (
-              <View key={i} style={[s.treatmentCard, tr.urgent && s.treatmentUrgent]}>
-                {tr.urgent && (
-                  <View style={s.urgentBadge}>
-                    <Text style={s.urgentText}>URGENT</Text>
-                  </View>
-                )}
-                <Text style={s.treatmentTitle}>{tr.title}</Text>
-                <Text style={s.treatmentDesc}>{tr.description}</Text>
-              </View>
-            ))}
+            {diagnosis.treatments.map((tr, i) => {
+              const product = treatmentProduct(tr.title);
+              return (
+                <View key={i} style={[s.treatmentCard, tr.urgent && s.treatmentUrgent]}>
+                  {tr.urgent && (
+                    <View style={s.urgentBadge}>
+                      <Text style={s.urgentText}>URGENT</Text>
+                    </View>
+                  )}
+                  <Text style={s.treatmentTitle}>{tr.title}</Text>
+                  <Text style={s.treatmentDesc}>{tr.description}</Text>
+                  {product && (
+                    <Pressable
+                      style={({ pressed }) => [s.shopBtn, pressed && s.shopBtnPressed]}
+                      onPress={() => handleFindTreatment(product)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Find ${product} at nurseries near you`}
+                    >
+                      <Ionicons name="storefront-outline" size={16} color={t.color.primary} />
+                      <Text style={s.shopBtnText}>Find {product} nearby</Text>
+                    </Pressable>
+                  )}
+                </View>
+              );
+            })}
           </Animated.View>
         )}
 
@@ -475,6 +538,26 @@ function makeStyles(t: Theme) {
     urgentText: { ...t.type.caption, fontSize: 10, fontWeight: '800', color: t.color.onDanger, letterSpacing: 1 },
     treatmentTitle: { ...t.type.bodyStrong, fontSize: 15, color: t.color.foreground, marginBottom: t.space.xs, writingDirection: 'auto' },
     treatmentDesc: { ...t.type.label, fontWeight: '400', fontSize: 13, lineHeight: 19, color: t.color.textSecondary, writingDirection: 'auto' },
+
+    /*
+     * A quiet outline button inside the card, not a second filled CTA: the
+     * accent colour on this screen belongs to "find a replacement", and buying
+     * a treatment must not compete with it visually.
+     */
+    shopBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: t.space.xs,
+      marginTop: t.space.sm,
+      paddingVertical: t.space.xs,
+      paddingHorizontal: t.space.sm,
+      borderRadius: t.radius.md,
+      borderWidth: 1,
+      borderColor: t.color.primary,
+    },
+    shopBtnPressed: { opacity: 0.6 },
+    shopBtnText: { ...t.type.label, color: t.color.primary, writingDirection: 'auto' },
     replaceCard: {
       marginTop: t.space.xl,
       backgroundColor: t.color.surfaceMuted,

@@ -65,6 +65,31 @@ test('adopt copies a cache photo into the document directory and returns its uri
   assert.ok(fs.dirs.has(DIR), 'the photo directory is created on first adopt');
 });
 
+/*
+ * iOS can keep an app's data container and still change the UUID in its path,
+ * which strands every absolute URI already written into the library even
+ * though the files themselves never moved.
+ */
+test('adopt repoints a photo stranded under a previous container path', async () => {
+  const fs = fakeFs([`${DIR}abc123.jpg`]);
+  const store = createPhotoStore(fs.deps);
+  const stale = `file:///doc-OLD-CONTAINER/${PHOTO_DIR_NAME}/abc123.jpg`;
+
+  const uri = await store.adopt('abc123', stale);
+
+  assert.equal(uri, `${DIR}abc123.jpg`);
+  // A repoint, not a copy - the bytes were already in the right place.
+  assert.deepEqual(fs.removed, []);
+});
+
+test('adopt does not invent a photo when the stranded file is genuinely gone', async () => {
+  const fs = fakeFs();
+  const store = createPhotoStore(fs.deps);
+  const stale = `file:///doc-OLD-CONTAINER/${PHOTO_DIR_NAME}/missing.jpg`;
+
+  assert.equal(await store.adopt('missing', stale), null);
+});
+
 test('adopt preserves the source extension', async () => {
   const fs = fakeFs(['file:///cache/pick.HEIC']);
   const store = createPhotoStore(fs.deps);
