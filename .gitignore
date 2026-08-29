@@ -76,3 +76,6 @@ coverage/
 # human-readable original and its English rendering, regenerated on demand
 TODOS.original.md
 TODOS.english.md
+
+# graphify knowledge-graph output - regenerated on demand, not source
+graphify-out/
