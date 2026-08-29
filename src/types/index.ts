@@ -162,4 +162,14 @@ export type RootStackParamList = {
   ManageAccount: undefined;
   ChangePassword: undefined;
   Notifications: undefined;
+  /*
+   * The species catalog, pushed from the add-plant form. It cannot take an
+   * onPick callback - params are persisted and restored, so they have to stay
+   * serializable - so the picker returns its answer as data: it pops back to
+   * the AddPlant already below it in the stack, carrying the chosen id.
+   */
+  SpeciesPicker: undefined;
+  /* `picked` is absent on the way in and present on the way back from the
+   * picker, which is why the whole params object is optional. */
+  AddPlant: { picked?: { catalogId: string } } | undefined;
 };
