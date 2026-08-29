@@ -1035,7 +1035,7 @@ export const HOUSEPLANT_FAMILIES: CatalogFamily[] = [
               },
               {
                 id: 'peperomia-hope',
-                name: 'Peperomia Hope',
+                name: 'Hope',
                 scientificName: 'Peperomia tetraphylla',
                 genus: 'Peperomia',
                 group: 'Peperomias',
@@ -1341,7 +1341,7 @@ export const HOUSEPLANT_FAMILIES: CatalogFamily[] = [
               {
                 id: 'dracaena-warneckii',
                 name: 'Warneckii',
-                scientificName: 'Dracaena trifasciata',
+                scientificName: 'Dracaena fragrans',
                 genus: 'Dracaena',
                 group: 'Dracaenas',
                 family: 'Dracaenas',

@@ -444,7 +444,7 @@ export const AROID_FAMILIES: CatalogFamily[] = [
               {
                 id: 'alocasia-lutea-variegata',
                 name: 'Variegated Lutea',
-                scientificName: 'Alocasia lutea',
+                scientificName: 'Alocasia macrorrhizos',
                 genus: 'Alocasia',
                 group: 'Variegated Alocasias',
                 family: 'Aroids',
@@ -591,13 +591,13 @@ export const AROID_FAMILIES: CatalogFamily[] = [
                 synonyms: [],
               },
               {
-                id: 'alocasia-thai-constellation-jewel',
-                name: 'Bismarkii',
+                id: 'alocasia-bismarckii',
+                name: 'Bismarckii',
                 scientificName: 'Alocasia sp.',
                 genus: 'Alocasia',
                 group: 'Jewel Alocasias',
                 family: 'Aroids',
-                synonyms: ['bismarckii'],
+                synonyms: ['bismarkii'],
               },
               {
                 id: 'alocasia-morocco',
@@ -666,7 +666,7 @@ export const AROID_FAMILIES: CatalogFamily[] = [
               {
                 id: 'philodendron-scandens',
                 name: 'Scandens',
-                scientificName: 'Philodendron scandens',
+                scientificName: 'Philodendron hederaceum',
                 genus: 'Philodendron',
                 group: 'Climbing Philodendrons',
                 family: 'Aroids',
@@ -1856,7 +1856,7 @@ export const AROID_FAMILIES: CatalogFamily[] = [
                 genus: 'Scindapsus',
                 group: 'Scindapsus',
                 family: 'Aroids',
-                synonyms: [],
+                synonyms: ['satin pothos'],
               },
               {
                 id: 'scindapsus-jade-satin',
@@ -2020,15 +2020,6 @@ export const AROID_FAMILIES: CatalogFamily[] = [
                 group: 'Pothos',
                 family: 'Aroids',
                 synonyms: ['pinnatum variegata', 'dragon tail pothos'],
-              },
-              {
-                id: 'epipremnum-satin-pothos',
-                name: 'Satin Pothos',
-                scientificName: 'Scindapsus pictus',
-                genus: 'Epipremnum',
-                group: 'Pothos',
-                family: 'Aroids',
-                synonyms: [],
               },
               {
                 id: 'epipremnum-glacier',
