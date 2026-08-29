@@ -149,3 +149,12 @@ test('an empty genus string is treated as no genus at all', () => {
   assert.equal(c.genusLed, false);
   assert.equal(c.headline, 'Flamingo flower');
 });
+
+test('the identifying service is never named to the user', () => {
+  // Product decision 2026-08-28: the server still reports which service
+  // identified the plant and logs it, but the screen presents one number and
+  // one language regardless of who produced it.
+  const identity = identityConfidence(88, 'Monstera deliciosa');
+  assert.equal(identity.label, '88% species match');
+  assert.equal(Object.values(identity).some((v) => typeof v === 'string' && /AI|OpenAI|PlantNet/.test(v)), false);
+});

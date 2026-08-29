@@ -81,7 +81,7 @@ test('a saved plant survives a reload', () => {
   const reloaded = createPlantStore(s.deps, fixedOpts()).load();
   assert.equal(reloaded.ok, true);
   assert.equal(reloaded.plants.length, 1);
-  assert.equal(reloaded.plants[0].diagnosis.scientificName, 'Rhaphidophora tetrasperma Hook.f.');
+  assert.equal(reloaded.plants[0].diagnosis?.scientificName, 'Rhaphidophora tetrasperma Hook.f.');
   assert.equal(reloaded.plants[0].photoUri, 'file:///a.jpg');
 });
 
@@ -551,7 +551,9 @@ test('a plant saved before watering existed still loads', () => {
   const s = fakeStorage({
     [LIBRARY_KEY]: JSON.stringify({
       version: LIBRARY_VERSION,
-      plants: [{ id: 'old-1', savedAt: '2026-08-01T00:00:00.000Z', photoUri: 'file:///a.jpg', diagnosis }],
+      plants: [
+        { id: 'old-1', savedAt: '2026-08-01T00:00:00.000Z', photoUri: 'file:///a.jpg', addedVia: 'scan', diagnosis },
+      ],
     }),
   });
   const store = createPlantStore(s.deps, fixedOpts());
@@ -627,6 +629,7 @@ test('history folds in a plant watered before the log existed', () => {
     id: 'old-1',
     savedAt: '2026-08-01T00:00:00.000Z',
     photoUri: 'file:///a.jpg',
+    addedVia: 'scan' as const,
     diagnosis,
     lastWateredAt: '2026-08-10T09:00:00.000Z',
   };
@@ -635,7 +638,7 @@ test('history folds in a plant watered before the log existed', () => {
 
 test('history is empty for a plant that was never watered', () => {
   assert.deepEqual(
-    wateringHistory({ id: 'x', savedAt: '2026-08-01T00:00:00.000Z', photoUri: 'f', diagnosis }),
+    wateringHistory({ id: 'x', savedAt: '2026-08-01T00:00:00.000Z', photoUri: 'f', addedVia: 'scan', diagnosis }),
     []
   );
 });
@@ -645,6 +648,7 @@ test('history drops unreadable entries rather than passing NaN to the calendar',
     id: 'x',
     savedAt: '2026-08-01T00:00:00.000Z',
     photoUri: 'f',
+    addedVia: 'scan' as const,
     diagnosis,
     wateringLog: ['2026-08-10T09:00:00.000Z', 'last tuesday', ''],
     lastWateredAt: '2026-08-10T09:00:00.000Z',
@@ -657,6 +661,7 @@ test('history is sorted newest first even if the stored log is not', () => {
     id: 'x',
     savedAt: '2026-08-01T00:00:00.000Z',
     photoUri: 'f',
+    addedVia: 'scan' as const,
     diagnosis,
     wateringLog: ['2026-08-01T09:00:00.000Z', '2026-08-18T09:00:00.000Z', '2026-08-09T09:00:00.000Z'],
   };
@@ -790,9 +795,11 @@ test('each care log is bounded independently', () => {
 
 test('a v1 library saved before care logs existed still loads clean', () => {
   /*
-   * The whole no-migration argument in one test: the new fields are optional,
-   * so an old blob stays valid AND stays at version 1. A LIBRARY_VERSION bump
-   * would have quarantined this library as future_version on any downgrade.
+   * The care-log fields were added WITHOUT a version bump, because they are
+   * optional: an old blob stayed valid as it was. That argument is what this
+   * test was written for and it still holds - the assertion below just moved
+   * to v2, since the addedVia migration now rewrites every v1 blob on load.
+   * What matters here is unchanged: nothing in this legacy record was lost.
    */
   const legacy = {
     id: 'old-1',
@@ -812,7 +819,8 @@ test('a v1 library saved before care logs existed still loads clean', () => {
   assert.deepEqual(careHistory(loaded.plants[0], 'repot'), []);
   assert.deepEqual(careHistory(loaded.plants[0], 'fertilizer'), []);
   assert.deepEqual(wateringHistory(loaded.plants[0]), ['2026-08-01T09:00:00.000Z']);
-  assert.equal(JSON.parse(s.data.get(LIBRARY_KEY)!).version, 1, 'still v1, no migration ran');
+  assert.equal(JSON.parse(s.data.get(LIBRARY_KEY)!).version, 2, 'migrated forward, nothing dropped');
+  assert.equal(loaded.plants[0].addedVia, 'scan', 'a pre-Portfolio plant can only have been scanned');
 });
 
 test('a failed write leaves the previous care log untouched', () => {
@@ -829,4 +837,293 @@ test('a failed write leaves the previous care log untouched', () => {
 
   s.fixWrites();
   assert.deepEqual(careHistory(store.load().plants[0], 'repot'), ['2026-08-01T09:00:00.000Z']);
+});
+
+// ─── v2: a plant can exist without a diagnosis ───────────────────────────────
+//
+// The Portfolio tab lets a user add a healthy plant BY HAND, so `diagnosis` is
+// no longer the thing that makes a record real. These tests pin the two halves
+// of that change: every plant already on a device came through the camera and
+// must be stamped as such, and a hand-added plant must be storable, loadable
+// and patchable without one.
+
+test('migration v1 to v2 stamps addedVia on existing plants', () => {
+  const s = fakeStorage();
+  s.deps.setItem(
+    LIBRARY_KEY,
+    JSON.stringify({
+      version: 1,
+      plants: [
+        {
+          id: 'a',
+          savedAt: '2026-01-01T00:00:00.000Z',
+          photoUri: 'file://a.jpg',
+          diagnosis: {
+            plantName: 'Monstera',
+            condition: 'healthy',
+            issues: [],
+            treatments: [],
+          },
+        },
+      ],
+    })
+  );
+
+  const store = createPlantStore(s.deps, fixedOpts());
+  const result = store.load();
+
+  assert.equal(result.ok, true);
+  assert.equal(result.plants[0].addedVia, 'scan');
+  // The migrated shape is written back, so the next launch does not re-migrate.
+  assert.equal(JSON.parse(s.data.get(LIBRARY_KEY)!).version, 2);
+});
+
+test('saveManual stores a plant with a species and no diagnosis', () => {
+  const store = createPlantStore(fakeStorage().deps, { now: () => 0, newId: () => 'id-1' });
+
+  const result = store.saveManual({
+    photoUri: 'file://plant.jpg',
+    catalogId: 'alocasia-dragon-scale-mint-variegated',
+    species: {
+      name: 'Dragon Scale Mint Variegated',
+      scientificName: 'Alocasia baginda',
+      genus: 'Alocasia',
+      family: 'Aroids',
+    },
+    soilMedium: 'leca',
+    nickname: 'Spiky',
+  });
+
+  assert.ok(result.ok);
+  assert.equal(result.plant.addedVia, 'manual');
+  assert.equal(result.plant.diagnosis, undefined);
+  assert.equal(result.plant.species?.genus, 'Alocasia');
+  assert.equal(result.plant.soilMedium, 'leca');
+  assert.equal(result.plant.nickname, 'Spiky');
+  assert.equal(store.load().plants[0].id, 'id-1');
+});
+
+test('a record with neither diagnosis nor species is dropped', () => {
+  const s = fakeStorage();
+  s.deps.setItem(
+    LIBRARY_KEY,
+    JSON.stringify({
+      version: 2,
+      plants: [
+        { id: 'ghost', savedAt: '2026-01-01T00:00:00.000Z', photoUri: 'file://x.jpg', addedVia: 'manual' },
+        {
+          id: 'real',
+          savedAt: '2026-01-01T00:00:00.000Z',
+          photoUri: 'file://y.jpg',
+          addedVia: 'manual',
+          species: {
+            name: 'Polly',
+            scientificName: 'Alocasia x amazonica',
+            genus: 'Alocasia',
+            family: 'Aroids',
+          },
+        },
+      ],
+    })
+  );
+
+  const plants = createPlantStore(s.deps, fixedOpts()).load().plants;
+  assert.deepEqual(plants.map((p) => p.id), ['real']);
+});
+
+test('update patches soil, nickname and species', () => {
+  const store = createPlantStore(fakeStorage().deps, { now: () => 0, newId: () => 'id-1' });
+  store.saveManual({
+    photoUri: 'file://plant.jpg',
+    species: {
+      name: 'Polly',
+      scientificName: 'Alocasia x amazonica',
+      genus: 'Alocasia',
+      family: 'Aroids',
+    },
+    soilMedium: 'potting_mix',
+  });
+
+  const result = store.update('id-1', { soilMedium: 'pon', nickname: 'Ziggy' });
+
+  assert.ok(result.ok);
+  assert.equal(result.plant.soilMedium, 'pon');
+  assert.equal(result.plant.nickname, 'Ziggy');
+});
+
+test('a scanned plant still saves and loads with its diagnosis intact', () => {
+  const store = createPlantStore(fakeStorage().deps, { now: () => 0, newId: () => 'id-1' });
+  store.save({
+    photoUri: 'file://a.jpg',
+    diagnosis: {
+      plantName: 'Monstera',
+      scientificName: 'Monstera deliciosa',
+      condition: 'healthy',
+      conditionLabel: 'Healthy',
+      issues: [],
+      treatments: [],
+      canBeSaved: true,
+      confidence: 90,
+      description: '',
+    },
+  });
+
+  const plant = store.load().plants[0];
+  assert.equal(plant.addedVia, 'scan');
+  assert.equal(plant.diagnosis?.plantName, 'Monstera');
+});
+
+test('one unreadable record does not stop the rest of a v1 library migrating', () => {
+  /*
+   * The migration is the single riskiest thing this module does: it rewrites
+   * every record a user owns, in place, on launch. A library with one damaged
+   * entry is exactly the case where the cautious-looking choice - refuse the
+   * whole blob - is the destructive one, so this pins the opposite: the good
+   * records are stamped and kept, the unreadable one is dropped alone, and the
+   * blob that gets written back holds only what survived.
+   */
+  const s = fakeStorage();
+  const v1Plant = (id: string) => ({
+    id,
+    savedAt: '2026-01-01T00:00:00.000Z',
+    photoUri: `file://${id}.jpg`,
+    diagnosis,
+  });
+  s.deps.setItem(
+    LIBRARY_KEY,
+    JSON.stringify({
+      version: 1,
+      // The middle record has no diagnosis and no species: nothing to render a
+      // card from, and nothing a migration can repair.
+      plants: [v1Plant('p1'), { id: 'wreck', savedAt: '2026-01-01T00:00:00.000Z', photoUri: 'f' }, v1Plant('p3')],
+    })
+  );
+
+  const loaded = createPlantStore(s.deps, fixedOpts()).load();
+
+  assert.equal(loaded.ok, true, 'one bad record is not grounds to condemn the library');
+  assert.deepEqual(loaded.plants.map((p) => p.id), ['p1', 'p3']);
+  assert.deepEqual(loaded.plants.map((p) => p.addedVia), ['scan', 'scan']);
+  assert.equal(s.data.get(QUARANTINE_KEY), undefined, 'nothing was quarantined');
+  assert.equal(JSON.parse(s.data.get(LIBRARY_KEY)!).version, 2);
+});
+
+test('the migration write-back HIDES a damaged record, it does not delete it', () => {
+  /*
+   * The most destructive thing this module could do, and it would look like
+   * housekeeping.
+   *
+   * Before v2 the migration table was empty, so the write-back never ran and a
+   * record that failed validation was merely hidden - its bytes sat on disk,
+   * recoverable. The moment a real migration exists, that same line rewrites
+   * every library on first launch after the upgrade. Filtering there would
+   * turn "hidden until we can read it again" into "deleted", silently, with
+   * load() still reporting ok and no quarantine copy kept.
+   *
+   * So: the migrated blob is written back WHOLE. Only the value handed to the
+   * caller is filtered.
+   */
+  const s = fakeStorage();
+  const good = {
+    id: 'good',
+    savedAt: '2026-01-01T00:00:00.000Z',
+    photoUri: 'file://good.jpg',
+    diagnosis,
+  };
+  const damaged = {
+    id: 'damaged',
+    savedAt: '2026-01-01T00:00:00.000Z',
+    photoUri: 'file://damaged.jpg',
+    // Enough of a plant to be worth keeping, too broken to render: the screens
+    // map over `issues` unguarded.
+    diagnosis: { ...diagnosis, issues: 'not an array' },
+  };
+  s.deps.setItem(LIBRARY_KEY, JSON.stringify({ version: 1, plants: [good, damaged] }));
+
+  const loaded = createPlantStore(s.deps, fixedOpts()).load();
+  assert.deepEqual(loaded.plants.map((p) => p.id), ['good'], 'the damaged record is not handed out');
+
+  const written = JSON.parse(s.data.get(LIBRARY_KEY)!);
+  assert.equal(written.version, 2, 'the migration did run');
+  assert.deepEqual(
+    written.plants.map((p: any) => p.id),
+    ['good', 'damaged'],
+    'the damaged bytes are STILL on disk - hiding a record must never erase it'
+  );
+  assert.deepEqual(
+    written.plants[1].diagnosis.issues,
+    'not an array',
+    'and untouched, so a later build or a support conversation can still recover it'
+  );
+});
+
+test('a malformed species does not take a perfectly good diagnosis down with it', () => {
+  /*
+   * The two identity fields fail differently. A half-formed diagnosis is fatal
+   * because the detail screen maps over `issues` and `treatments` unguarded; a
+   * half-formed species is not, because every reader says `plant.species?.name`
+   * and gets a fallback. Dropping this plant would be data loss with no
+   * rendering risk behind it.
+   */
+  const s = fakeStorage();
+  s.deps.setItem(
+    LIBRARY_KEY,
+    JSON.stringify({
+      version: 2,
+      plants: [
+        {
+          id: 'scanned',
+          savedAt: '2026-01-01T00:00:00.000Z',
+          photoUri: 'file://a.jpg',
+          addedVia: 'scan',
+          diagnosis,
+          species: { name: 'Polly' },
+        },
+      ],
+    })
+  );
+
+  const plants = createPlantStore(s.deps, fixedOpts()).load().plants;
+  assert.deepEqual(plants.map((p) => p.id), ['scanned'], 'the plant survives its junk species');
+  assert.equal(plants[0].diagnosis?.plantName, diagnosis.plantName);
+});
+
+test('a record with an unreadable addedVia is dropped rather than mistyped', () => {
+  // Callers are handed 'scan' | 'manual' and branch on it. Letting 12345
+  // through makes the type a lie in every screen downstream.
+  const s = fakeStorage();
+  s.deps.setItem(
+    LIBRARY_KEY,
+    JSON.stringify({
+      version: 2,
+      plants: [
+        { id: 'bogus', savedAt: '2026-01-01T00:00:00.000Z', photoUri: 'f', addedVia: 12345, diagnosis },
+        { id: 'fine', savedAt: '2026-01-01T00:00:00.000Z', photoUri: 'f', addedVia: 'scan', diagnosis },
+      ],
+    })
+  );
+
+  const store = createPlantStore(s.deps, fixedOpts());
+  assert.deepEqual(store.load().plants.map((p) => p.id), ['fine']);
+  // ...and, per the rule above, not erased: nothing rewrote the blob here, but
+  // the record must still be there if something does.
+  assert.equal(JSON.parse(s.data.get(LIBRARY_KEY)!).plants.length, 2);
+});
+
+test('update refuses a half-formed species rather than writing one', () => {
+  const store = createPlantStore(fakeStorage().deps, { now: () => 0, newId: () => 'id-1' });
+  const species = {
+    name: 'Polly',
+    scientificName: 'Alocasia x amazonica',
+    genus: 'Alocasia',
+    family: 'Aroids',
+  };
+  store.saveManual({ photoUri: 'file://plant.jpg', species });
+
+  // A caller that got past TypeScript - a cast, or JSON from somewhere else.
+  const result = store.update('id-1', { species: { name: 'Polly' } as any });
+
+  assert.ok(result.ok);
+  assert.deepEqual(result.plant.species, species, 'the last good species is kept');
+  assert.deepEqual(store.load().plants.map((p) => p.id), ['id-1'], 'and the plant still loads');
 });

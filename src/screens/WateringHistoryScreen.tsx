@@ -137,7 +137,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
       fertilizer: plant.lastFertilizedAt,
     };
     for (const k of CARE_KINDS) {
-      const state = careState(k, plant.diagnosis.carePlan, lastOf[k], now);
+      const state = careState(k, plant.diagnosis?.carePlan, lastOf[k], now);
       out[k] = state.nextDueAt ? dayKey(state.nextDueAt) : '';
     }
     return out;
@@ -158,6 +158,11 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
       </SafeAreaView>
     );
   }
+
+  /* Nickname first: what the user calls the plant beats what it is called, and
+   * a hand-added plant has no diagnosis to fall back to. */
+  const plantName =
+    plant.nickname ?? plant.species?.name ?? plant.diagnosis?.plantName ?? 'Unnamed plant';
 
   /* Which kinds happened on a given day, in the fixed order of CARE_KINDS so
    * the dots never swap places between one square and the next. */
@@ -187,10 +192,10 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
             style={s.backBtn}
             onPress={() => navigation.goBack()}
             accessibilityRole="button"
-            accessibilityLabel={`Back to ${plant.diagnosis.plantName}`}
+            accessibilityLabel={`Back to ${plantName}`}
           >
             <Ionicons name="chevron-back" size={22} color={t.color.primary} style={directionalIconStyle} />
-            <Text style={s.backText}>{plant.diagnosis.plantName}</Text>
+            <Text style={s.backText}>{plantName}</Text>
           </Pressable>
         </View>
 

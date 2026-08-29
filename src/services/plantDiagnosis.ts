@@ -90,7 +90,12 @@ function isDiagnosis(value: unknown): value is PlantDiagnosis {
      * deployment into a total outage.
      */
     (d.genus === undefined || typeof d.genus === 'string') &&
-    (d.genusConfidence === undefined || typeof d.genusConfidence === 'number')
+    (d.genusConfidence === undefined || typeof d.genusConfidence === 'number') &&
+    // Same rule, same reason: absent means PlantNet, which is every response
+    // served before the identification backup existed.
+    (d.identificationSource === undefined ||
+      d.identificationSource === 'plantnet' ||
+      d.identificationSource === 'openai')
   );
 }
 

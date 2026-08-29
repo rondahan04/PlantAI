@@ -45,6 +45,15 @@ const SEVERITY: Record<string, number> = {
   healthy: 4,
 };
 
+/*
+ * A plant with no diagnosis has no condition to read - it was added by hand,
+ * which means the user believes it is fine. 'healthy' rather than the unknown
+ * bucket on purpose: "Needs attention" is a claim about a plant nobody has
+ * examined, and putting a plant there that the user just told us is fine reads
+ * as the app arguing with them.
+ */
+const NO_DIAGNOSIS = 'healthy';
+
 export function bucketFor(condition: string): TriageKey {
   // An unrecognised condition is surfaced rather than hidden: a plant whose
   // health we cannot read is not evidence that it is fine.
@@ -59,14 +68,16 @@ export function triageSections(plants: StoredPlant[]): TriageSection[] {
   const order: TriageKey[] = ['attention', 'watching', 'healthy'];
   const byKey = new Map<TriageKey, StoredPlant[]>(order.map((k) => [k, []]));
 
-  for (const p of plants) byKey.get(bucketFor(p.diagnosis.condition))!.push(p);
+  for (const p of plants) byKey.get(bucketFor(p.diagnosis?.condition ?? NO_DIAGNOSIS))!.push(p);
 
   return order
     .map((key) => ({
       key,
       title: TITLES[key],
       data: byKey.get(key)!.sort((a, b) => {
-        const sev = (SEVERITY[a.diagnosis.condition] ?? 9) - (SEVERITY[b.diagnosis.condition] ?? 9);
+        const sev =
+          (SEVERITY[a.diagnosis?.condition ?? NO_DIAGNOSIS] ?? 9) -
+          (SEVERITY[b.diagnosis?.condition ?? NO_DIAGNOSIS] ?? 9);
         if (sev !== 0) return sev;
         return b.savedAt.localeCompare(a.savedAt);
       }),

@@ -39,6 +39,18 @@ export interface PlantDiagnosis {
    */
   genus?: string;
   genusConfidence?: number;
+  /*
+   * Which service named this plant. `plantnet` is a botanical database matching
+   * against herbarium specimens; `openai` is a vision model, used only as a
+   * backup when PlantNet came back weak or did not answer at all.
+   *
+   * The distinction is shown to the user rather than hidden: a visual match is
+   * a different KIND of evidence, and someone deciding whether to trust a
+   * treatment plan deserves to know which one they got. Optional in both
+   * directions - an older server never sends it, and plants saved before the
+   * backup existed have none. Absent means PlantNet.
+   */
+  identificationSource?: 'plantnet' | 'openai';
 }
 
 export interface CarePlan {
@@ -110,7 +122,7 @@ export type DeliveryMode = 'delivery' | 'pickup';
 /* The three destinations in the bottom tab bar. `Scan` hosts nothing - its tab
  * press pushes the root-stack Camera screen instead. */
 export type MainTabParamList = {
-  MyPlants: undefined;
+  Portfolio: undefined;
   Scan: undefined;
   Find: undefined;
 };
@@ -119,7 +131,7 @@ export type RootStackParamList = {
   Onboarding: undefined;
   /* The bottom-tab navigator. Keeps the name `Home` so the eleven existing
    * navigate('Home') / replace('Home') call sites are untouched - navigating to
-   * a navigator lands on its initial route, which is still My Plants.
+   * a navigator lands on its initial route, which is now Portfolio.
    *
    * Hand-written rather than NavigatorScreenParams: tsconfig.node.json pulls
    * this file in through the colocated test files, and importing
@@ -150,4 +162,14 @@ export type RootStackParamList = {
   ManageAccount: undefined;
   ChangePassword: undefined;
   Notifications: undefined;
+  /*
+   * The species catalog, pushed from the add-plant form. It cannot take an
+   * onPick callback - params are persisted and restored, so they have to stay
+   * serializable - so the picker returns its answer as data: it pops back to
+   * the AddPlant already below it in the stack, carrying the chosen id.
+   */
+  SpeciesPicker: undefined;
+  /* `picked` is absent on the way in and present on the way back from the
+   * picker, which is why the whole params object is optional. */
+  AddPlant: { picked?: { catalogId: string } } | undefined;
 };

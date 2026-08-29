@@ -66,6 +66,14 @@ export function identityConfidence(
   const label = `${percent}% species match`;
   const { genus, genusPercent } = genusInfo;
 
+  /*
+   * WHICH SERVICE identified the plant is deliberately not surfaced here. The
+   * server sends `identificationSource` and logs it, so the pipeline stays
+   * debuggable, but naming the vendor tells the user nothing they can act on -
+   * the number beside the bar is the part that should drive their trust, and it
+   * means the same thing either way. Product decision, 2026-08-28.
+   */
+
   const hasGenus =
     typeof genus === 'string' &&
     genus.trim() !== '' &&

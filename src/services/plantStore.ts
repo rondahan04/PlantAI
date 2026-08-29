@@ -1,4 +1,5 @@
 import type { PlantDiagnosis } from '../types';
+import type { SoilMediumId } from '../lib/soilMedia';
 
 /*
  * The plant library (TODOS item 5).
@@ -33,7 +34,19 @@ export const QUARANTINE_KEY = 'plantai.library.corrupt';
  * the blob rather than the key so a migration can read the old shape in place
  * instead of hunting across keys.
  */
-export const LIBRARY_VERSION = 1;
+export const LIBRARY_VERSION = 2;
+
+/*
+ * The species a hand-added plant is, snapshotted from the catalog rather than
+ * referenced by id alone. `catalogId` can go stale when an app update rewrites
+ * the catalog; this cannot, and it is what every screen actually renders.
+ */
+export interface PlantSpecies {
+  name: string;
+  scientificName: string;
+  genus: string;
+  family: string;
+}
 
 export interface StoredPlant {
   id: string;
@@ -47,7 +60,57 @@ export interface StoredPlant {
    * Home repairs what it can on launch.
    */
   photoUri: string;
-  diagnosis: PlantDiagnosis;
+  /*
+   * OPTIONAL since v2. Until the Portfolio tab there was exactly one way a
+   * plant entered the library - photograph it, diagnose it, save the result -
+   * so a record without a diagnosis could only be damage. Adding a healthy
+   * plant by hand breaks that equivalence: the user is telling us what the
+   * plant IS, and has not asked us what is wrong with it. Synthesizing an
+   * all-clear diagnosis to keep the field required would be worse than absence,
+   * because every downstream reader would then treat an invention as a
+   * finding. Readers must optional-chain, and `addedVia` says which kind of
+   * record they are holding.
+   */
+  diagnosis?: PlantDiagnosis;
+  /*
+   * How this plant got into the library. Stored rather than inferred from
+   * `diagnosis` being present, because the two will drift: a hand-added plant
+   * can later be photographed and gain one, and it is still a plant the user
+   * added themselves. Every pre-v2 record is stamped 'scan' by the migration -
+   * not a guess, the camera was the only door.
+   */
+  addedVia: 'scan' | 'manual';
+  /*
+   * The catalog entry the species was picked from, kept for re-linking (a
+   * genus care plan, a nursery search) but never for rendering - see the note
+   * on PlantSpecies. Absent on scanned plants, which were never matched to the
+   * catalog, and on hand-added plants whose species was typed rather than
+   * picked.
+   */
+  catalogId?: string;
+  /*
+   * What the plant is, as the user asserted it. Present on hand-added plants
+   * and absent on scanned ones, whose identity lives in the diagnosis - the
+   * two are alternative sources of the same fact, which is why validation
+   * accepts a record carrying either and rejects one carrying neither.
+   */
+  species?: PlantSpecies;
+  /*
+   * What the plant is growing in, which changes how often it wants water (see
+   * lib/soilMedia.ts). Absent on every plant saved before v2 and deliberately
+   * NOT defaulted by the migration: the user has never been asked, and a
+   * medium is a fact about someone's pot that no photo and no diagnosis can
+   * reveal. Guessing it would silently rescale their watering schedule.
+   * Readers fall back to DEFAULT_SOIL_MEDIUM for display, which is a UI choice
+   * and not something we write into their data.
+   */
+  soilMedium?: SoilMediumId;
+  /*
+   * What the user calls this plant. Absent means they never named it, which is
+   * the common case - it must not be backfilled from the species, or renaming
+   * would become impossible to tell from never having named it at all.
+   */
+  nickname?: string;
   /*
    * ISO-8601, set when the user logs a watering. Absent means the schedule has
    * not been started - deliberately NOT defaulted to `savedAt`, because "you
@@ -208,20 +271,11 @@ function isTreatmentish(v: unknown): boolean {
   return typeof t.title === 'string' && typeof t.description === 'string';
 }
 
-/*
- * Validate a single stored record. Deliberately stricter than "it parsed" - a
- * plant missing its diagnosis renders a card with no condition, no issues and
- * no treatments, which looks like a bug in the diagnosis rather than damaged
- * storage.
- */
-function isStoredPlant(v: unknown): v is StoredPlant {
+/* A diagnosis complete enough to render: a name, a condition, and the two
+ * lists the detail screen maps over. Anything less is damage, not a shape. */
+function isDiagnosisish(v: unknown): boolean {
   if (typeof v !== 'object' || v === null) return false;
-  const p = v as Record<string, unknown>;
-  if (typeof p.id !== 'string' || typeof p.savedAt !== 'string' || typeof p.photoUri !== 'string') {
-    return false;
-  }
-  const d = p.diagnosis as Record<string, unknown> | undefined;
-  if (typeof d !== 'object' || d === null) return false;
+  const d = v as Record<string, unknown>;
   return (
     typeof d.plantName === 'string' &&
     typeof d.condition === 'string' &&
@@ -229,6 +283,65 @@ function isStoredPlant(v: unknown): v is StoredPlant {
     Array.isArray(d.treatments) &&
     d.treatments.every(isTreatmentish)
   );
+}
+
+/* All four fields are required together because they are written together, in
+ * one snapshot off the catalog. A half-copied species is a bug in the writer,
+ * and letting it load would spread it. */
+function isSpeciesish(v: unknown): boolean {
+  if (typeof v !== 'object' || v === null) return false;
+  const sp = v as Record<string, unknown>;
+  return (
+    typeof sp.name === 'string' &&
+    typeof sp.scientificName === 'string' &&
+    typeof sp.genus === 'string' &&
+    typeof sp.family === 'string'
+  );
+}
+
+/*
+ * Validate a single stored record. Deliberately stricter than "it parsed".
+ *
+ * The bar is IDENTITY: a record must carry either a diagnosis or a species,
+ * because those are the only two places a plant's name comes from. One with
+ * neither renders as a nameless card with no condition and nothing to act on,
+ * which a user reads as a bug in the app rather than as storage that was
+ * damaged - and a bug they cannot report, because there is nothing on the card
+ * to describe. Dropping it puts the loss where load() can account for it.
+ *
+ * Requiring BOTH is what v1 did, and would now delete every hand-added plant
+ * on load; requiring neither would let the nameless card through.
+ *
+ * Nothing here DELETES: load() filters on the way out and the bytes stay on
+ * disk. See the write-back in load() for why that distinction is load-bearing.
+ */
+function isStoredPlant(v: unknown): v is StoredPlant {
+  if (typeof v !== 'object' || v === null) return false;
+  const p = v as Record<string, unknown>;
+  if (typeof p.id !== 'string' || typeof p.savedAt !== 'string' || typeof p.photoUri !== 'string') {
+    return false;
+  }
+  if (p.addedVia !== 'scan' && p.addedVia !== 'manual') return false;
+  /*
+   * The two identity fields are treated ASYMMETRICALLY, and the difference is
+   * about what each one crashes rather than about how much we trust it.
+   *
+   * A half-formed diagnosis is fatal to the record, because readers walk into
+   * it unguarded: PlantDetailScreen does `diagnosis.issues.map(...)` and
+   * `diagnosis.treatments.map(...)` behind nothing more than a truthiness
+   * check, so a diagnosis with `issues: 'not an array'` is a red screen on
+   * open. Dropping the record trades a crash for a loss we can account for.
+   *
+   * A half-formed species is not, because every reader reaches it as
+   * `plant.species?.name` - undefined on any shape, rendered as a fallback
+   * name, never thrown. So it is treated as ABSENT: the record still loads on
+   * whatever identity it has left, and only a plant with no usable identity at
+   * ALL is dropped. Rejecting it outright would delete a scanned plant with a
+   * perfectly good diagnosis over a field its screens never dereference.
+   */
+  if (p.diagnosis !== undefined && !isDiagnosisish(p.diagnosis)) return false;
+  const speciesOk = p.species !== undefined && isSpeciesish(p.species);
+  return p.diagnosis !== undefined || speciesOk;
 }
 
 
@@ -240,17 +353,43 @@ export type Migration = (library: any) => any;
 export type Migrations = Record<number, Migration>;
 
 /*
- * The real migration table. Empty today because v1 is current - the chain
- * exists before it is needed on purpose: the first blob written without a
- * migration path is a permanent problem, and by the time v2 is required there
- * is live user data that cannot be re-created.
+ * The real migration table. The chain was built empty, before it was needed,
+ * precisely so this moment would be cheap: the first blob written without a
+ * migration path is a permanent problem, and by the time v2 arrived there was
+ * live user data that cannot be re-created.
  *
- * Adding v2 is two edits in one commit: `MIGRATIONS[1] = fn` (keyed by the
- * version it upgrades FROM) and `LIBRARY_VERSION = 2`. They must move together
- * - a bump without a step makes load() throw, and a step without a bump never
- * runs.
+ * Each entry is keyed by the version it upgrades FROM, and lands in the same
+ * commit as the `LIBRARY_VERSION` bump that makes it run - a bump without a
+ * step makes load() throw, and a step without a bump never runs.
+ *
+ * A step must be TOTAL over whatever it is handed. It runs before validation,
+ * on records this build has never seen, so it may not assume any field it did
+ * not itself write; broken records are the filter's job afterwards, and a step
+ * that throws costs the user their whole library to quarantine.
  */
-export const MIGRATIONS: Migrations = {};
+export const MIGRATIONS: Migrations = {
+  /*
+   * v1 → v2: stamp `addedVia`.
+   *
+   * Every v1 plant came through the camera, because photographing it was the
+   * only way to create one - this is a fact about the old app, not an
+   * inference about the record. Nothing else is filled in: `soilMedium`,
+   * `species` and `nickname` are all things only the user can tell us, and
+   * inventing them here would be indistinguishable, forever after, from the
+   * user having said so.
+   */
+  1: (library: any) => ({
+    ...library,
+    plants: Array.isArray(library?.plants)
+      ? library.plants.map((p: any) =>
+          // Non-objects are left exactly as they are rather than being spread
+          // into one - `{...null}` would quietly manufacture a plant-shaped
+          // record out of junk, which the validator then has to catch.
+          typeof p === 'object' && p !== null ? { ...p, addedVia: 'scan' } : p
+        )
+      : library?.plants,
+  }),
+};
 
 /*
  * Walk a library forward one version at a time until it reaches `target`.
@@ -351,8 +490,24 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
       return { ok: false, reason: 'corrupt', plants: [] };
     }
 
+    /*
+     * UNFILTERED, and it has to stay that way - do not "tidy" a
+     * `.filter(isStoredPlant)` back in here.
+     *
+     * This write is the only place the app REWRITES a library it did not just
+     * change, so it is the only place a bad record can be erased instead of
+     * merely hidden. Filtering here would delete every record this build
+     * cannot read, on launch, silently, with load() still returning ok: true
+     * and no quarantine copy kept - failure mode 2 in the header, caused by
+     * the code meant to prevent it. A record we cannot read today may be one a
+     * later build, or a support conversation, can recover.
+     *
+     * The read path below filters on the way OUT, which hides the record
+     * without touching the bytes. That is the non-destructive half, and it is
+     * what the migration's own "broken records are the filter's job" means.
+     */
     if (migrated !== lib && Array.isArray(migrated.plants)) {
-      persist(migrated.plants.filter(isStoredPlant));
+      persist(migrated.plants);
     }
     if (!Array.isArray(migrated.plants)) {
       quarantine(raw);
@@ -394,7 +549,46 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
       id: newId(),
       savedAt: new Date(now()).toISOString(),
       photoUri: input.photoUri,
+      addedVia: 'scan',
       diagnosis: input.diagnosis,
+    };
+
+    const next = [plant, ...current];
+    if (!persist(next)) return { ok: false, reason: 'storage_full' };
+    return { ok: true, plant, plants: next };
+  }
+
+  /*
+   * Save a plant the user added BY HAND, with no diagnosis behind it.
+   *
+   * A sibling of `save` rather than an optional-diagnosis branch inside it: the
+   * two have different required fields, and a single entry point taking both as
+   * optional would accept `{ photoUri }` alone and write the nameless record
+   * that `isStoredPlant` exists to reject. Two functions make the store's rule
+   * - every plant carries an identity - a thing the type checker enforces at
+   * the call site instead of something the loader discovers later.
+   *
+   * Optional fields are OMITTED rather than written as `undefined`, so the blob
+   * holds no keys with null meanings and `'soilMedium' in plant` keeps working
+   * as "the user chose one".
+   */
+  function saveManual(input: {
+    photoUri: string;
+    species: PlantSpecies;
+    catalogId?: string;
+    soilMedium?: SoilMediumId;
+    nickname?: string;
+  }): SaveResult {
+    const current = load().plants;
+    const plant: StoredPlant = {
+      id: newId(),
+      savedAt: new Date(now()).toISOString(),
+      photoUri: input.photoUri,
+      addedVia: 'manual',
+      species: input.species,
+      ...(input.catalogId !== undefined ? { catalogId: input.catalogId } : {}),
+      ...(input.soilMedium !== undefined ? { soilMedium: input.soilMedium } : {}),
+      ...(input.nickname !== undefined ? { nickname: input.nickname } : {}),
     };
 
     const next = [plant, ...current];
@@ -405,18 +599,29 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
   /*
    * Patch one plant in place.
    *
-   * Narrow by design: the two fields the watering schedule owns, plus
-   * `photoUri` once item 9's copy into the document directory finishes. A
-   * general `update(id, patch)` would let a caller overwrite a diagnosis - the
-   * one thing in a stored plant that came from a paid call and cannot be
-   * re-derived.
+   * Narrow by design: the fields the watering schedule owns, `photoUri` once
+   * item 9's copy into the document directory finishes, and the four the user
+   * edits directly on a hand-added plant. A general `update(id, patch)` would
+   * let a caller overwrite a diagnosis - the one thing in a stored plant that
+   * came from a paid call and cannot be re-derived. That still holds with
+   * diagnosis optional: `soilMedium`, `nickname`, `catalogId` and `species` are
+   * all things the user typed and can retype, so losing one to a bad patch
+   * costs a correction rather than a call.
    */
   function update(
     id: string,
     patch: Partial<
       Pick<
         StoredPlant,
-        'lastWateredAt' | 'lastRepottedAt' | 'lastFertilizedAt' | 'reminderId' | 'photoUri'
+        | 'lastWateredAt'
+        | 'lastRepottedAt'
+        | 'lastFertilizedAt'
+        | 'reminderId'
+        | 'photoUri'
+        | 'soilMedium'
+        | 'nickname'
+        | 'catalogId'
+        | 'species'
       >
     >
   ): UpdateResult {
@@ -438,8 +643,31 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
       'lastRepottedAt',
       'lastFertilizedAt',
       'reminderId',
+      'soilMedium',
+      'nickname',
+      'catalogId',
+      'species',
     ] as const) {
       if (key in patch && patch[key] === undefined) delete updated[key];
+    }
+    /*
+     * ...but not to the point of erasing the plant. A hand-added plant's
+     * species is its only identity, so clearing it writes a record that fails
+     * `isStoredPlant` and vanishes on the next load - the same trap `photoUri`
+     * has below, and the same answer. A plant with a diagnosis still carries a
+     * name without it, so there the clear goes through.
+     */
+    if (updated.species === undefined && updated.diagnosis === undefined) {
+      updated.species = target.species;
+    }
+    /*
+     * Same trap one step earlier: a patch carrying a half-formed species object
+     * writes a record that may fail validation and vanish on the next load.
+     * TypeScript stops an honest caller, but the guard above is worthless if a
+     * malformed value walks past it, so the last good species wins.
+     */
+    if (patch.species !== undefined && !isSpeciesish(patch.species)) {
+      updated.species = target.species;
     }
     /*
      * `photoUri` is required, so unlike the optional fields above it cannot be
@@ -517,7 +745,7 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
     return { ok: true, plants: next };
   }
 
-  return { load, save, update, markWatered, markCare, remove };
+  return { load, save, saveManual, update, markWatered, markCare, remove };
 }
 
 export type PlantStore = ReturnType<typeof createPlantStore>;
