@@ -1,11 +1,13 @@
 /**
- * The app's three destinations: your plants, the camera, and nursery search.
+ * The app's three destinations: your portfolio, the camera, and nursery search.
  *
  * Registered in the root stack under the route name `Home`, deliberately. Eleven
  * call sites already navigate or replace to 'Home'; naming the tab host anything
  * else would mean editing all of them, and a stale OTA bundle still calling
  * navigate('Home') would throw at runtime. Navigating to a navigator lands on
- * its initial route, so every existing call keeps meaning "go to My Plants".
+ * its initial route, so every existing call keeps meaning "go to the first tab",
+ * which is now Portfolio - the tab that replaced My Plants and holds every
+ * plant the user owns, scanned or hand-added.
  *
  * Only destinations live here. Camera is a full-screen capture flow, so the tab
  * intercepts its own press and pushes the root-stack screen instead of hosting
@@ -19,7 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MainTabParamList, RootStackParamList } from '../types';
-import HomeScreen from '../screens/HomeScreen';
+import PortfolioScreen from '../screens/PortfolioScreen';
 import PlantSearchScreen from '../screens/PlantSearchScreen';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
@@ -47,10 +49,10 @@ export default function Tabs() {
       }}
     >
       <Tab.Screen
-        name="MyPlants"
-        component={HomeScreen}
+        name="Portfolio"
+        component={PortfolioScreen}
         options={{
-          title: 'My Plants',
+          title: 'Portfolio',
           tabBarIcon: ({ color, size }) => <Ionicons name="leaf-outline" size={size} color={color} />,
         }}
       />
