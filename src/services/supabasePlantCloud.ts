@@ -38,7 +38,13 @@ const deps: CloudDeps = {
 
     const { data, error } = await supabase
       .from('plants')
-      .select('id, user_id, saved_at, photo_path, diagnosis, last_watered_at, watering_log, reminder_id')
+      /* Every column CloudRow declares, as ONE string literal - supabase-js
+       * parses it at the type level, and a concatenated expression degrades the
+       * result to an unusable type. A field added to CloudRow must be added
+       * here too, or it reads null forever. */
+      .select(
+        'id, user_id, saved_at, photo_path, diagnosis, added_via, catalog_id, species, soil_medium, nickname, last_watered_at, watering_log, last_repotted_at, repot_log, last_fertilized_at, fertilizer_log, reminder_id'
+      )
       .eq('user_id', userId)
       .order('saved_at', { ascending: false });
     if (error || !data) return [];

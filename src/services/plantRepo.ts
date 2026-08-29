@@ -1,6 +1,49 @@
 import type { PlantDiagnosis } from '../types';
-import type { PlantStore, StoredPlant, LoadResult } from './plantStore';
-import type { CloudPlantLibrary, ImportBatchResult } from './plantCloud';
+import type { SoilMediumId } from '../lib/soilMedia';
+import type { CareKind, PlantStore, StoredPlant, LoadResult } from './plantStore';
+import type { CloudPlantLibrary, ImportBatchResult, ManualInput } from './plantCloud';
+
+/*
+ * `careHistory` and `sameDay` re-implemented here rather than imported from
+ * plantStore.
+ *
+ * Not an oversight and not duplication for its own sake: a RUNTIME import
+ * across modules needs an explicit `.ts` in the specifier to run under bare
+ * `node --test`, and Metro - the bundler this app actually ships with - does
+ * not resolve that specifier in production source. plantCloud.ts carries the
+ * same note over `photoExtension`. Type-only imports are erased and are fine.
+ *
+ * The two must stay in step with plantStore's originals: a logged-in tap has to
+ * produce the identical record a logged-out one does, since `replace()` writes
+ * the mirror verbatim and derives nothing.
+ */
+const CARE_LAST: Record<CareKind, keyof StoredPlant> = {
+  water: 'lastWateredAt',
+  repot: 'lastRepottedAt',
+  fertilizer: 'lastFertilizedAt',
+};
+const CARE_LOG: Record<CareKind, keyof StoredPlant> = {
+  water: 'wateringLog',
+  repot: 'repotLog',
+  fertilizer: 'fertilizerLog',
+};
+
+function historyOf(plant: StoredPlant, kind: CareKind): string[] {
+  const log = (plant[CARE_LOG[kind]] as string[] | undefined) ?? [];
+  const last = plant[CARE_LAST[kind]] as string | undefined;
+  const all = last && !log.includes(last) ? [last, ...log] : log;
+  return all.filter((s) => !Number.isNaN(new Date(s).getTime())).sort((a, b) => (a < b ? 1 : -1));
+}
+
+function sameDay(a: string, b: string): boolean {
+  const x = new Date(a);
+  const y = new Date(b);
+  return (
+    x.getFullYear() === y.getFullYear() &&
+    x.getMonth() === y.getMonth() &&
+    x.getDate() === y.getDate()
+  );
+}
 
 export type RepoResult<T extends Record<string, unknown> = Record<string, unknown>> =
   | ({ ok: true } & T)
@@ -83,6 +126,40 @@ export function createPlantRepo(deps: RepoDeps) {
     return { ok: true, plant: result.plant };
   }
 
+  /*
+   * The Portfolio tab's hand-added plant, on the same write-through rule as
+   * `save`. Kept as its own method rather than folded into `save` with an
+   * optional diagnosis, because the two carry different identity and the
+   * cloud row records which door the plant came through.
+   *
+   * No photo re-read after the insert: a hand-added plant frequently has no
+   * photo at all, and when it has one `savePlant`'s object path is resolved by
+   * the very next `refreshFromCloud` the Portfolio screen runs on focus.
+   */
+  async function saveManual(input: ManualInput): Promise<RepoResult<{ plant: StoredPlant }>> {
+    if (!isLoggedIn()) {
+      const result = guest.saveManual(input);
+      return result.ok ? { ok: true, plant: result.plant } : { ok: false, reason: result.reason };
+    }
+
+    const userId = getUserId();
+    if (!userId) return { ok: false, reason: 'network' };
+
+    const result = await cloud.saveManualPlant(userId, input);
+    if (!result.ok) return { ok: false, reason: 'network' };
+
+    try {
+      const refreshed = await refreshFromCloud();
+      const resolved = refreshed.plants.find((p) => p.id === result.plant.id);
+      if (resolved) return { ok: true, plant: resolved };
+    } catch {
+      /* fall through to the un-resolved row below */
+    }
+
+    mirror.replace([result.plant, ...mirror.load().plants]);
+    return { ok: true, plant: result.plant };
+  }
+
   async function markWatered(id: string, at: number): Promise<RepoResult<{ plant: StoredPlant }>> {
     if (!isLoggedIn()) {
       const result = guest.markWatered(id, at);
@@ -93,7 +170,11 @@ export function createPlantRepo(deps: RepoDeps) {
     if (!current) return { ok: false, reason: 'not_found' };
 
     const stamp = new Date(at).toISOString();
-    const log = [stamp, ...(current.wateringLog ?? [])];
+    const history = historyOf(current, 'water');
+    const log = [
+      stamp,
+      ...(history[0] && sameDay(history[0], stamp) ? history.slice(1) : history),
+    ];
     const cloudResult = await cloud.updatePlant(id, { lastWateredAt: stamp, reminderId: null, wateringLog: log });
     if (!cloudResult.ok) return { ok: false, reason: cloudResult.reason };
 
@@ -105,9 +186,54 @@ export function createPlantRepo(deps: RepoDeps) {
     return { ok: true, plant: updated };
   }
 
+  /*
+   * Repot and feed, the two care kinds that schedule nothing. Watering keeps
+   * its own method: it cancels a notification handle and is the only kind the
+   * reminder is built on, so collapsing the two would put an OS concern in the
+   * path of a plain log entry.
+   *
+   * The same-day fold is duplicated from `plantStore.markCare` rather than
+   * reached through it - the mirror is written with `replace`, which does no
+   * derivation, and a logged-in tap must produce the identical record a
+   * logged-out one does.
+   */
+  async function markCare(
+    id: string,
+    kind: Exclude<CareKind, 'water'>,
+    at: number
+  ): Promise<RepoResult<{ plant: StoredPlant }>> {
+    if (!isLoggedIn()) {
+      const result = guest.markCare(id, kind, at);
+      return result.ok ? { ok: true, plant: result.plant } : { ok: false, reason: result.reason };
+    }
+
+    const current = mirror.load().plants.find((p) => p.id === id);
+    if (!current) return { ok: false, reason: 'not_found' };
+
+    const stamp = new Date(at).toISOString();
+    const history = historyOf(current, kind);
+    const log = [stamp, ...(history[0] && sameDay(history[0], stamp) ? history.slice(1) : history)];
+
+    const cloudPatch =
+      kind === 'repot'
+        ? { lastRepottedAt: stamp, repotLog: log }
+        : { lastFertilizedAt: stamp, fertilizerLog: log };
+    const cloudResult = await cloud.updatePlant(id, cloudPatch);
+    if (!cloudResult.ok) return { ok: false, reason: cloudResult.reason };
+
+    const fresh = mirror.load().plants;
+    const latest = fresh.find((p) => p.id === id) ?? current;
+    const updated: StoredPlant =
+      kind === 'repot'
+        ? { ...latest, lastRepottedAt: stamp, repotLog: log }
+        : { ...latest, lastFertilizedAt: stamp, fertilizerLog: log };
+    mirror.replace(fresh.map((p) => (p.id === id ? updated : p)));
+    return { ok: true, plant: updated };
+  }
+
   async function update(
     id: string,
-    patch: Partial<Pick<StoredPlant, 'reminderId'>>
+    patch: Partial<Pick<StoredPlant, 'reminderId' | 'soilMedium' | 'nickname'>>
   ): Promise<RepoResult<{ plant: StoredPlant }>> {
     if (!isLoggedIn()) {
       const result = guest.update(id, patch);
@@ -117,14 +243,19 @@ export function createPlantRepo(deps: RepoDeps) {
     const current = mirror.load().plants.find((p) => p.id === id);
     if (!current) return { ok: false, reason: 'not_found' };
 
-    const reminderPatch = 'reminderId' in patch ? { reminderId: patch.reminderId ?? null } : {};
-    const cloudResult = await cloud.updatePlant(id, reminderPatch);
+    const cloudPatch: Parameters<typeof cloud.updatePlant>[1] = {};
+    if ('reminderId' in patch) cloudPatch.reminderId = patch.reminderId ?? null;
+    if ('soilMedium' in patch) cloudPatch.soilMedium = patch.soilMedium ?? null;
+    if ('nickname' in patch) cloudPatch.nickname = patch.nickname ?? null;
+    const cloudResult = await cloud.updatePlant(id, cloudPatch);
     if (!cloudResult.ok) return { ok: false, reason: cloudResult.reason };
 
     const fresh = mirror.load().plants;
     const latest = fresh.find((p) => p.id === id) ?? current;
     const updated: StoredPlant = { ...latest, ...patch };
-    if ('reminderId' in patch && patch.reminderId === undefined) delete updated.reminderId;
+    for (const key of ['reminderId', 'soilMedium', 'nickname'] as const) {
+      if (key in patch && patch[key] === undefined) delete updated[key];
+    }
     mirror.replace(fresh.map((p) => (p.id === id ? updated : p)));
     return { ok: true, plant: updated };
   }
@@ -197,7 +328,9 @@ export function createPlantRepo(deps: RepoDeps) {
     loadLocal,
     refreshFromCloud,
     save,
+    saveManual,
     markWatered,
+    markCare,
     update,
     remove,
     hasUnimportedGuestPlants,

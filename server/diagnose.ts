@@ -19,6 +19,8 @@
  * anywhere; that bug does not get to come back on the server.
  */
 
+import { friendlyName } from './commonNames.ts';
+
 const PLANTNET_URL = 'https://my-api.plantnet.org/v2/identify/all';
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 
@@ -77,12 +79,37 @@ export interface PlantDiagnosis {
   description: string;
   carePlan?: CarePlan;
   variety?: string;
+  /* Genus and its aggregated score. Optional - see `Identification`. */
+  genus?: string;
+  genusConfidence?: number;
+  /*
+   * Which identifier named this plant. Absent means PlantNet, which is what
+   * every response before the fallback existed meant - the client must keep
+   * rendering those, so this is never required.
+   */
+  identificationSource?: IdentificationSource;
 }
+
+/*
+ * PlantNet is a botanical database matching against herbarium photos; the
+ * vision model is a general recognizer. They fail differently, which is the
+ * whole point of having both - but the user deserves to know which one spoke.
+ */
+export type IdentificationSource = 'plantnet' | 'openai';
 
 export interface Identification {
   scientificName: string;
   commonName: string;
+  /* The identifier's score for THIS SPECIES. See `genusConfidence` for why that
+   * is often the wrong number to show a user. */
   confidence: number;
+  /* Optional on purpose: an older server omits both, and the client must keep
+   * rendering plants saved before they existed. Never make these required. */
+  genus?: string;
+  genusConfidence?: number;
+  /* Set by the identifier itself so the cascade below can compare like for
+   * like and the response can say who answered. */
+  source?: IdentificationSource;
 }
 
 export interface HealthAssessment {
@@ -109,6 +136,72 @@ export interface HealthAssessment {
 export interface DiagnosisDeps {
   identify(image: Buffer): Promise<Identification>;
   assessHealth(image: Buffer, id: Identification): Promise<HealthAssessment>;
+  /*
+   * Second opinion on the species, used only when the primary identifier is
+   * weak or down. OPTIONAL: without it `diagnose` behaves exactly as it did
+   * before the cascade existed, which is what keeps every existing test and
+   * the DIAGNOSIS_SKIP_OPENAI dev mode honest.
+   */
+  identifyFallback?(image: Buffer, hint?: IdentifyHint): Promise<Identification>;
+}
+
+/*
+ * What the primary identifier already established, handed to the backup.
+ *
+ * Only sent on the tiebreak path, where PlantNet has a confident GENUS and an
+ * unconvincing species. Naming the genus turns an open-ended "what is this?"
+ * into the narrow question we actually have - "which Alocasia is this?" - and
+ * a narrow question is one a vision model answers far better.
+ */
+export interface IdentifyHint {
+  genus: string;
+  closestSpecies: string;
+  closestSpeciesConfidence: number;
+}
+
+/*
+ * Below this, PlantNet has not really identified the plant - it has ranked
+ * guesses. Deliberately the same number as `UNSURE_BELOW` in
+ * src/lib/confidence.ts, which is the point at which the app stops leading with
+ * the species name: the tier the user would have been shown as "we could not
+ * identify this plant" is exactly the tier worth a second opinion.
+ */
+export const LOW_MATCH_BELOW = 40;
+
+/*
+ * The vision model only gets to overrule PlantNet when it is genuinely sure.
+ * Same number as `CONFIDENT_AT_OR_ABOVE` client-side, for the same reason:
+ * swapping a weak botanical match for an equally weak visual guess buys the
+ * user nothing and loses PlantNet's herbarium grounding.
+ */
+export const LLM_ID_ACCEPT_AT_OR_ABOVE = 70;
+
+/*
+ * Below this the SPECIES is not really named, even when the genus is certain.
+ *
+ * THE GAP THIS CLOSES. PlantNet returned Alocasia sanderiana at 69% on
+ * 2026-08-28: too weak for the app to lead with the species, too strong to look
+ * weak. The user saw the headline collapse to the bare genus, "Alocasia", while
+ * a vision model handed the same photo names the cultivar without hesitating.
+ * 40 to 70 was a dead band where we had a confident group and no species and
+ * asked nobody about it.
+ *
+ * Same number as `CONFIDENT_AT_OR_ABOVE` client-side because it is the same
+ * decision: the point at which the app stops presenting the species plainly is
+ * the point at which the species is worth a second opinion.
+ */
+export const SPECIES_UNSURE_BELOW = 70;
+
+/*
+ * What the identification is actually worth, as one number.
+ *
+ * The genus sum is the honest headline when it exists (see
+ * `aggregateIdentification`): an Anthurium at 23% species / 91% genus is a
+ * confident identification, and re-running it through a vision model would
+ * spend a call to be told the same thing less reliably.
+ */
+export function effectiveMatch(id: Identification): number {
+  return Math.max(id.confidence, id.genusConfidence ?? 0);
 }
 
 /*
@@ -159,12 +252,168 @@ export class DiagnosisServiceError extends Error {
   }
 }
 
+/*
+ * Identify the plant, with the vision model as a backstop.
+ *
+ * WHY. PlantNet is a herbarium matcher and it has two failure modes the app
+ * used to dead-end on: it answers with a weak spread of guesses (the 23%-across-
+ * eight-species case, or a genuine cross-genus miss), or it does not answer at
+ * all - a 5xx, or a 404 "no plant here" on a perfectly ordinary houseplant that
+ * is under-represented in its dataset. In both cases we already have a vision
+ * model in the pipeline, holding the same photo, that can name the species.
+ *
+ * THE RULES, in order of how much they cost the user:
+ *   - Format errors never fall back. The bytes are wrong; a second opinion on
+ *     an image nobody can read is a wasted call and a slower error.
+ *   - A confident PlantNet answer never falls back. No extra call, no latency.
+ *   - A weak answer gets a second opinion, and the model replaces it only when
+ *     the model is confident AND beats what we had. A tie keeps PlantNet: it is
+ *     matching against real herbarium specimens, the model is recognizing.
+ *   - A weak answer whose second opinion fails is still served. The fallback is
+ *     an enhancement on this path and must never turn a served diagnosis into
+ *     an error.
+ *   - A dead PlantNet gets a second opinion, and there the model is all we have
+ *     - so a confident answer is used and anything else re-throws the ORIGINAL
+ *     error, because "the plant service did not answer" is still the true
+ *     sentence about what happened.
+ */
+export async function resolveIdentification(
+  image: Buffer,
+  deps: DiagnosisDeps
+): Promise<Identification> {
+  const fallback = deps.identifyFallback;
+
+  let primary: Identification;
+  try {
+    primary = await deps.identify(image);
+  } catch (err) {
+    // About the file, not about the identifier - see UnsupportedImageError.
+    if (err instanceof UnsupportedImageError || !fallback) throw err;
+
+    let rescue: Identification;
+    try {
+      rescue = await fallback(image);
+    } catch (fallbackErr) {
+      // The photo having no plant in it is a better answer than a service
+      // error, and it is the one message that helps the user. Otherwise the
+      // original failure stands - the backup's own failure is noise.
+      if (fallbackErr instanceof NotAPlantError) throw fallbackErr;
+      throw err;
+    }
+
+    if (effectiveMatch(rescue) < LLM_ID_ACCEPT_AT_OR_ABOVE) throw err;
+    return { ...rescue, source: 'openai' };
+  }
+
+  const keep = (): Identification => ({ ...primary, source: primary.source ?? 'plantnet' });
+
+  if (!fallback) return keep();
+
+  // The whole identification is weak - ask the open question.
+  if (effectiveMatch(primary) < LOW_MATCH_BELOW) {
+    let second: Identification;
+    try {
+      second = await fallback(image);
+    } catch {
+      // Enhancement only: a weak identification still beats no diagnosis.
+      return keep();
+    }
+
+    const better =
+      effectiveMatch(second) >= LLM_ID_ACCEPT_AT_OR_ABOVE &&
+      effectiveMatch(second) > effectiveMatch(primary);
+
+    return better ? { ...second, source: 'openai' } : keep();
+  }
+
+  // Confident group, unconvincing species - ask the narrow question instead.
+  if (isGenusLed(primary)) return tiebreakSpecies(image, primary, fallback);
+
+  return keep();
+}
+
+/*
+ * True when PlantNet is sure of the group and not of the species - the state in
+ * which the app shows a bare genus as the plant's name. Mirrors `genusLed` in
+ * src/lib/confidence.ts; if that rule moves, this one moves with it, because
+ * the tiebreak exists precisely to stop that headline from happening.
+ */
+function isGenusLed(id: Identification): boolean {
+  return (
+    typeof id.genus === 'string' &&
+    id.genus.trim() !== '' &&
+    id.genusConfidence !== undefined &&
+    id.genusConfidence >= LLM_ID_ACCEPT_AT_OR_ABOVE &&
+    id.confidence < SPECIES_UNSURE_BELOW
+  );
+}
+
+/*
+ * Resolve the species WITHIN a genus PlantNet has already established.
+ *
+ * The result is a deliberate hybrid: PlantNet keeps the genus and its
+ * aggregated score, because summing real herbarium matches is evidence the
+ * model cannot produce, and the model supplies only the species name and its
+ * own confidence in it. Neither half is asked to do the other's job.
+ *
+ * The genus check is the guard that makes this safe. A model that answers with
+ * a different genus is not breaking the tie we asked about - it is relitigating
+ * a question PlantNet answered well - so its answer is dropped rather than
+ * promoted. Without that check this path would quietly become a second, weaker
+ * route for a vision guess to overrule a confident botanical match.
+ */
+async function tiebreakSpecies(
+  image: Buffer,
+  primary: Identification,
+  fallback: NonNullable<DiagnosisDeps['identifyFallback']>
+): Promise<Identification> {
+  const keep = (): Identification => ({ ...primary, source: primary.source ?? 'plantnet' });
+
+  let second: Identification;
+  try {
+    second = await fallback(image, {
+      genus: primary.genus!,
+      closestSpecies: primary.scientificName,
+      closestSpeciesConfidence: primary.confidence,
+    });
+  } catch {
+    return keep();
+  }
+
+  const sameGenus =
+    typeof second.genus === 'string' &&
+    second.genus.trim().toLowerCase() === primary.genus!.trim().toLowerCase();
+
+  const decisive =
+    second.confidence >= LLM_ID_ACCEPT_AT_OR_ABOVE && second.confidence > primary.confidence;
+
+  if (!sameGenus || !decisive) return keep();
+
+  return {
+    scientificName: second.scientificName,
+    commonName: second.commonName,
+    confidence: second.confidence,
+    genus: primary.genus,
+    // PlantNet's aggregate, not the model's estimate - it is the better number
+    // and the one the genus half of the identification actually rests on.
+    genusConfidence: primary.genusConfidence,
+    source: 'openai',
+  };
+}
+
 export async function diagnose(image: Buffer, deps: DiagnosisDeps): Promise<PlantDiagnosis> {
-  const id = await deps.identify(image);
+  const id = await resolveIdentification(image, deps);
   const health = await deps.assessHealth(image, id);
 
   return {
-    plantName: id.commonName,
+    /*
+     * The one place the displayed name is decided. Renaming here rather than in
+     * the client means a plant SAVED to the library keeps the everyday name
+     * too, and that the name is identical on every screen that reads a stored
+     * diagnosis. `scientificName` below is deliberately untouched: this changes
+     * what we call the plant, never what we think it is.
+     */
+    plantName: friendlyName(id.scientificName, id.commonName),
     scientificName: id.scientificName,
     condition: health.condition,
     conditionLabel: health.conditionLabel,
@@ -177,6 +426,9 @@ export async function diagnose(image: Buffer, deps: DiagnosisDeps): Promise<Plan
     // way, and an absent key is what the client's optional field expects.
     ...(health.carePlan ? { carePlan: health.carePlan } : {}),
     ...(health.variety ? { variety: health.variety } : {}),
+    ...(id.genus ? { genus: id.genus } : {}),
+    ...(id.genusConfidence !== undefined ? { genusConfidence: id.genusConfidence } : {}),
+    ...(id.source ? { identificationSource: id.source } : {}),
   };
 }
 
@@ -207,6 +459,82 @@ function describeBytes(image: Buffer): string {
   return `unknown (${image.subarray(0, 4).toString('hex')})`;
 }
 
+/*
+ * Turn PlantNet's ranked species list into one identification.
+ *
+ * THE PROBLEM THIS SOLVES. PlantNet scores SPECIES, and it splits its
+ * probability mass across every species it considered. Photograph an Anthurium
+ * and it may return eight Anthurium species at 23%, 19%, 14%... Reporting the
+ * top species score alone renders a confident genus match as "23%", and the
+ * client's low-confidence tier then tells the user we could not identify their
+ * plant - while the name on screen is right. The number was never wrong; it was
+ * answering "which species is this?" when the user asked "what is this?".
+ *
+ * Summing the same-genus scores answers the second question. Crucially it does
+ * NOT paper over real errors: the Aug 2026 case where a Monstera deliciosa came
+ * back as Rhaphidophora tetrasperma at 48% is a CROSS-genus mistake, so the
+ * genus sum stays low there and the caveat still fires. Same-genus doubt gets
+ * quieter; genuinely-wrong identifications do not.
+ *
+ * We report the genus OF THE TOP CANDIDATE rather than the heaviest genus. A
+ * heaviest-genus rule can print "Ficus 40% · best guess Monstera deliciosa 35%",
+ * a headline its own subtitle contradicts. Aggregation may only ever strengthen
+ * what the top result already said.
+ *
+ * Pure and exported so the whole cascade is testable without a network call.
+ */
+export function aggregateIdentification(results: any[]): Identification {
+  const candidates = (Array.isArray(results) ? results : [])
+    .map((r) => ({
+      score: Number(r?.score) || 0,
+      scientificName: r?.species?.scientificName ?? '',
+      commonName: r?.species?.commonNames?.[0] ?? r?.species?.scientificName ?? '',
+      genus: genusOf(r),
+    }))
+    .filter((c) => c.score > 0)
+    // Do not trust the upstream ordering; the top score decides the headline.
+    .sort((a, b) => b.score - a.score);
+
+  if (candidates.length === 0) throw new NotAPlantError();
+
+  const top = candidates[0];
+  const base: Identification = {
+    scientificName: top.scientificName,
+    commonName: top.commonName,
+    confidence: Math.round(top.score * 100),
+  };
+
+  if (!top.genus) return base; // no genus to aggregate on - species score stands
+
+  const key = top.genus.toLowerCase();
+  const sum = candidates
+    .filter((c) => c.genus && c.genus.toLowerCase() === key)
+    .reduce((acc, c) => acc + c.score, 0);
+
+  return {
+    ...base,
+    genus: top.genus,
+    // Clamped: nb-results truncation plus float error can push a sum past 1.
+    genusConfidence: Math.max(0, Math.min(100, Math.round(sum * 100))),
+  };
+}
+
+/*
+ * The genus for one PlantNet result. Prefers the structured field; falls back
+ * to the first token of the scientific name, but only when it LOOKS like a
+ * genus - capitalized, alphabetic, three or more letters. That guard rejects
+ * hybrid markers ("×Fatshedera") and junk, which would otherwise become their
+ * own bucket and silently split a genus in two.
+ */
+function genusOf(result: any): string | null {
+  const structured = result?.species?.genus?.scientificNameWithoutAuthor;
+  if (typeof structured === 'string' && structured.trim()) return structured.trim();
+
+  const name = result?.species?.scientificNameWithoutAuthor ?? result?.species?.scientificName;
+  const first = typeof name === 'string' ? name.trim().split(/\s+/)[0] : '';
+  return /^[A-Z][a-z-]{2,}$/.test(first) ? first : null;
+}
+
 export function plantNetIdentify(apiKey: string) {
   return async function identify(image: Buffer): Promise<Identification> {
     const kind = sniffImage(image);
@@ -220,7 +548,9 @@ export function plantNetIdentify(apiKey: string) {
     );
     form.append('organs', 'auto');
 
-    const res = await fetch(`${PLANTNET_URL}?api-key=${apiKey}&nb-results=1&lang=en`, {
+    // 10, not 1: aggregateIdentification needs the genus's siblings to sum. The
+    // tail past ten is noise, and PlantNet charges per request, not per result.
+    const res = await fetch(`${PLANTNET_URL}?api-key=${apiKey}&nb-results=10&lang=en`, {
       method: 'POST',
       body: form,
     });
@@ -232,15 +562,184 @@ export function plantNetIdentify(apiKey: string) {
     }
 
     const data: any = await res.json();
-    const top = data.results?.[0];
-    if (!top) throw new NotAPlantError();
-
-    return {
-      scientificName: top.species?.scientificName ?? '',
-      commonName: top.species?.commonNames?.[0] ?? top.species?.scientificName ?? '',
-      confidence: Math.round((top.score ?? 0) * 100),
-    };
+    // Throws NotAPlantError on an empty result set, exactly as before.
+    return aggregateIdentification(data.results ?? []);
   };
+}
+
+// ─── OpenAI species identification (backup) ───────────────────────────────────
+
+/*
+ * Name the species from the photo alone, as a backup for `plantNetIdentify`.
+ *
+ * This is NOT a general-purpose identifier and is not wired as one: it runs
+ * only through the cascade in `resolveIdentification`, which decides whether
+ * the answer is good enough to use. The model is asked for its own confidence
+ * and told, in the prompt, that a low number is a perfectly acceptable answer -
+ * the cascade's whole safety property is that an unsure model gets discarded,
+ * and a model that always answers "95%" destroys it. That is also why the
+ * prompt forbids a genus figure below the species one: `effectiveMatch` takes
+ * the larger of the two, so an inflated genus number would be the easiest way
+ * for a guess to smuggle itself past the threshold.
+ */
+export function openAiIdentify(apiKey: string) {
+  return async function identifyFallback(
+    image: Buffer,
+    hint?: IdentifyHint
+  ): Promise<Identification> {
+    const kind = sniffImage(image);
+    if (!kind) throw new UnsupportedImageError(describeBytes(image));
+
+    const res = await fetch(OPENAI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'gpt-5.6-luna',
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: identifyPrompt(hint) },
+              {
+                type: 'image_url',
+                image_url: { url: `data:${kind.mime};base64,${image.toString('base64')}` },
+              },
+            ],
+          },
+        ],
+        response_format: { type: 'json_object' },
+        // A name and two numbers. Small on purpose: this call is on the slow
+        // path of an already-slow request, and a truncated JSON body here
+        // costs the user the backup they were falling back to.
+        max_completion_tokens: 300,
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new DiagnosisServiceError('openai', `identify ${res.status} ${body.slice(0, 300)}`);
+    }
+
+    const data: any = await res.json();
+    const content = data?.choices?.[0]?.message?.content;
+    if (typeof content !== 'string') {
+      throw new DiagnosisServiceError(
+        'openai',
+        `identify: no message content: ${JSON.stringify(data).slice(0, 300)}`
+      );
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      throw new DiagnosisServiceError('openai', `identify: not JSON: ${content.slice(0, 300)}`);
+    }
+
+    return parseIdentification(parsed);
+  };
+}
+
+/*
+ * Turn a parsed identification response into an `Identification`.
+ *
+ * Exported for tests: every branch here is a way the backup can be wrong, and
+ * they should not need a network call to exercise.
+ *
+ * `notAPlant` is honoured before anything else because a model looking at a
+ * photo of a desk will still fill in the name fields if asked to - the flag is
+ * the only thing that distinguishes "no plant" from "a plant I cannot place",
+ * and the two produce different sentences in the app.
+ */
+export function parseIdentification(value: unknown): Identification {
+  if (typeof value !== 'object' || value === null) {
+    throw new DiagnosisServiceError('openai', `identify: not an object: ${String(value)}`);
+  }
+  const o = value as Record<string, unknown>;
+
+  if (o.notAPlant === true) throw new NotAPlantError();
+
+  const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+  const scientificName = str(o.scientificName);
+  const commonName = str(o.commonName) || scientificName;
+  const genus = str(o.genus) || scientificName.split(/\s+/)[0] || '';
+
+  // A percentage the model did not actually give is not a zero, it is a
+  // response we cannot grade - and an ungradable answer must never be allowed
+  // to sit at the threshold. Reject rather than default.
+  const pct = (v: unknown): number | null => {
+    const n = Number(v);
+    return Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : null;
+  };
+  const confidence = pct(o.confidence);
+
+  if (!scientificName || confidence === null) {
+    throw new DiagnosisServiceError(
+      'openai',
+      `identify: unusable response: ${JSON.stringify(value).slice(0, 300)}`
+    );
+  }
+
+  const genusConfidence = pct(o.genusConfidence);
+
+  return {
+    scientificName,
+    commonName,
+    confidence,
+    source: 'openai',
+    ...(genus ? { genus } : {}),
+    /*
+     * Dropped when it undercuts the species score. Aggregation may only ever
+     * strengthen the species number (the client asserts the same invariant in
+     * identityConfidence), and a genus figure below it means the model was
+     * answering something other than what we asked.
+     */
+    ...(genus && genusConfidence !== null && genusConfidence >= confidence
+      ? { genusConfidence }
+      : {}),
+  };
+}
+
+function identifyPrompt(hint?: IdentifyHint): string {
+  return `${hint ? tiebreakPreamble(hint) : openPreamble()} Return ONLY valid JSON in this exact shape:
+{
+  "scientificName": "Monstera deliciosa",
+  "commonName": "Swiss cheese plant",
+  "genus": "Monstera",
+  "confidence": 82,
+  "genusConfidence": 95,
+  "notAPlant": false
+}
+"confidence" is how sure you are of the SPECIES, 0-100. "genusConfidence" is how sure you are of the GENUS alone, 0-100, and it can never be lower than "confidence" - being sure of the species implies being at least as sure of the group it belongs to.
+
+BE HONEST ABOUT DOUBT. A low number is a useful, acceptable answer - it is discarded and the user is simply told we are unsure, which is the correct outcome. An inflated number instead hands them a confident diagnosis and a shopping list for a plant they do not own. If the photo is blurry, too far away, shows only soil or a stem, or shows a plant you genuinely cannot place, say so with a low "confidence" rather than naming the most common houseplant that roughly fits.
+
+Set "notAPlant" to true ONLY when the photo contains no plant at all - a person, a room, an object, a blank wall. A plant you cannot identify is NOT "notAPlant"; give it a name and a low confidence. Return ONLY the JSON object.`;
+}
+
+/* No prior: the primary identifier failed outright or produced nothing usable. */
+function openPreamble(): string {
+  return 'You are a botanist identifying a plant from a photograph. Name the plant in the photo as precisely as the image actually supports.';
+}
+
+/*
+ * The narrow question.
+ *
+ * The genus is stated as established fact and the model is asked only to pick
+ * the species inside it - "which Alocasia is this?" rather than "what is this?".
+ * The closest species and its score are included and explicitly labelled as
+ * unconvincing: without that the model does not know what has already been
+ * ruled inadequate, and hiding it invites it to return the same weak answer.
+ *
+ * It is told it may keep that candidate, so agreement stays available as a real
+ * answer rather than something the phrasing pushes it away from - and told that
+ * naming a cultivar is in scope, because 'Polly' is exactly the kind of answer
+ * a database of species cannot give and a photograph can.
+ */
+function tiebreakPreamble(hint: IdentifyHint): string {
+  return `You are a botanist. A botanical database has confidently placed the plant in this photograph in the genus ${hint.genus}. Treat the genus as settled. Its best guess at the species is ${hint.closestSpecies}, but only at ${hint.closestSpeciesConfidence}% - not enough to show anyone. Your job is to name the species, and where the photo supports it the cultivar or hybrid, within ${hint.genus}.
+
+Keep ${hint.closestSpecies} if the photo really does support it; agreeing is a valid answer. Name a different ${hint.genus} species when the leaf shape, venation, margins, petiole or variegation point somewhere else. Common cultivar and hybrid names are in scope and are often the truest answer for a houseplant - name one when the photo shows it. If the photo cannot separate the species within ${hint.genus}, give your closest species with a low "confidence"; do not invent precision. If the plant is plainly NOT a ${hint.genus} at all, say so by answering with the genus you actually see - a mismatched genus is discarded rather than used, so answer honestly.`;
 }
 
 // ─── OpenAI health assessment ─────────────────────────────────────────────────

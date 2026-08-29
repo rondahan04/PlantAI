@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { discoverNurseries, resolvePhotoUrl } from './places.ts';
+import { discoverNurseries, resolvePhotoUrl, isNonStoreHost } from './places.ts';
 
 // Build a fake fetch returning a fixed status + JSON body, capturing the request.
 const fakeFetch = (
@@ -160,4 +160,27 @@ test('resolvePhotoUrl returns the photoUri for a photo name', async () => {
 test('resolvePhotoUrl returns undefined on failure', async () => {
   const fake = (async () => ({ ok: false, status: 500, json: async () => ({}) })) as unknown as typeof fetch;
   assert.equal(await resolvePhotoUrl('places/ABC/photos/XYZ', 'KEY', fake), undefined);
+});
+
+test('isNonStoreHost: social pages are not storefronts', () => {
+  for (const u of [
+    'https://www.facebook.com/somenursery',
+    'https://m.facebook.com/x',
+    'https://www.instagram.com/almogim123/',
+    'https://wa.me/972500000000',
+    'https://linktr.ee/nursery',
+  ]) {
+    assert.equal(isNonStoreHost(u), true, `should be filtered: ${u}`);
+  }
+});
+
+test('isNonStoreHost: real nursery sites pass through', () => {
+  for (const u of [
+    'https://decogarden.co.il/',
+    'http://www.peer-nursery.co.il/',
+    'https://notfacebook.co.il/', // substring, not the domain
+    'https://facebook.co.il/', // different TLD
+  ]) {
+    assert.equal(isNonStoreHost(u), false, `should NOT be filtered: ${u}`);
+  }
 });

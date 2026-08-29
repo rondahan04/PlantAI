@@ -4,6 +4,13 @@ import { createCloudPlantLibrary, type CloudDeps, type CloudRow } from './plantC
 import type { PlantDiagnosis } from '../types/index.ts';
 import type { StoredPlant } from './plantStore.ts';
 
+const species = {
+  name: 'Monstera Deliciosa',
+  scientificName: 'Monstera deliciosa',
+  genus: 'Monstera',
+  family: 'Araceae',
+};
+
 const diagnosis: PlantDiagnosis = {
   plantName: 'Mini monstera',
   scientificName: 'Rhaphidophora tetrasperma',
@@ -19,6 +26,9 @@ const diagnosis: PlantDiagnosis = {
 function fakeDeps(seed: { rows?: CloudRow[]; uploadFails?: Set<string>; insertFails?: Set<string> } = {}) {
   const rows = new Map((seed.rows ?? []).map((r) => [r.id, r]));
   const uploads: string[] = [];
+  /* Rows exactly as written, in order - `rows` is keyed and merged, so it
+   * cannot show what a single insert actually carried. */
+  const inserted: CloudRow[] = [];
 
   const deps: CloudDeps = {
     fetchPlants: async () => [...rows.values()],
@@ -29,6 +39,7 @@ function fakeDeps(seed: { rows?: CloudRow[]; uploadFails?: Set<string>; insertFa
     },
     insertPlant: async (row) => {
       if (seed.insertFails?.has(row.id)) return false;
+      inserted.push(row);
       rows.set(row.id, row);
       return true;
     },
@@ -43,7 +54,7 @@ function fakeDeps(seed: { rows?: CloudRow[]; uploadFails?: Set<string>; insertFa
       return true;
     },
   };
-  return { deps, rows, uploads };
+  return { deps, rows, uploads, inserted };
 }
 
 test('fetchAll() maps cloud rows back to StoredPlant shape', async () => {
@@ -120,7 +131,6 @@ test('savePlant() normalises the photo extension the same way photoStore does', 
     ['file:///x/no-dot', 'jpg'],
     ['file:///x/a.verylongextension', 'jpg'],
     ['file:///x.dir/name', 'jpg'],
-    ['', 'jpg'],
   ];
 
   for (const [photoUri, expectedExt] of cases) {
@@ -132,6 +142,80 @@ test('savePlant() normalises the photo extension the same way photoStore does', 
     assert.equal(uploads[0], `u1/fixed-id.${expectedExt}`);
     if (result.ok) assert.equal(result.plant.photoUri, `u1/fixed-id.${expectedExt}`);
   }
+});
+
+test('a plant with no photo is inserted without uploading one', async () => {
+  const { deps, uploads } = fakeDeps();
+  const cloud = createCloudPlantLibrary(deps, { newId: () => 'fixed-id' });
+
+  // The Portfolio tab's hand-added plant: no picture is a real answer, and
+  // pushing a zero-byte object for it would leave an object the sweep has to
+  // reason about and a path the reader cannot render.
+  const result = await cloud.saveManualPlant('u1', { photoUri: '', species });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(uploads, []);
+  if (result.ok) {
+    assert.equal(result.plant.photoUri, '');
+    assert.equal(result.plant.addedVia, 'manual');
+    assert.deepEqual(result.plant.species, species);
+    assert.equal(result.plant.diagnosis, undefined);
+  }
+});
+
+test('saveManualPlant() carries the whole hand-added record to the row', async () => {
+  const { deps, inserted } = fakeDeps();
+  const cloud = createCloudPlantLibrary(deps, { newId: () => 'fixed-id' });
+
+  const result = await cloud.saveManualPlant('u1', {
+    photoUri: 'file:///cache/a.png',
+    species,
+    catalogId: 'cat-1',
+    soilMedium: 'leca',
+    nickname: 'Steve',
+  });
+
+  assert.equal(result.ok, true);
+  const row = inserted[0];
+  assert.equal(row.added_via, 'manual');
+  assert.equal(row.catalog_id, 'cat-1');
+  assert.equal(row.soil_medium, 'leca');
+  assert.equal(row.nickname, 'Steve');
+  assert.equal(row.diagnosis, null);
+  assert.equal(row.photo_path, 'u1/fixed-id.png');
+  // Round-trips back to exactly what was asked for - the mirror is written
+  // from this, so a field dropped here is a field the user loses.
+  if (result.ok) {
+    assert.equal(result.plant.nickname, 'Steve');
+    assert.equal(result.plant.soilMedium, 'leca');
+    assert.equal(result.plant.catalogId, 'cat-1');
+  }
+});
+
+test('an imported plant keeps its portfolio fields', async () => {
+  const { deps, inserted } = fakeDeps();
+  const cloud = createCloudPlantLibrary(deps, {});
+
+  await cloud.importBatch('u1', [
+    {
+      id: 'p1',
+      savedAt: '2026-08-01T00:00:00.000Z',
+      photoUri: 'file:///cache/a.jpg',
+      addedVia: 'manual',
+      species,
+      soilMedium: 'leca',
+      nickname: 'Steve',
+      lastRepottedAt: '2026-08-02T00:00:00.000Z',
+      repotLog: ['2026-08-02T00:00:00.000Z'],
+    },
+  ]);
+
+  const row = inserted[0];
+  assert.equal(row.added_via, 'manual');
+  assert.equal(row.nickname, 'Steve');
+  assert.equal(row.soil_medium, 'leca');
+  assert.equal(row.last_repotted_at, '2026-08-02T00:00:00.000Z');
+  assert.deepEqual(row.repot_log, ['2026-08-02T00:00:00.000Z']);
 });
 
 test('updatePlant() patches an existing row', async () => {

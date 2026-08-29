@@ -82,7 +82,20 @@ function isDiagnosis(value: unknown): value is PlantDiagnosis {
     Array.isArray(d.treatments) &&
     typeof d.canBeSaved === 'boolean' &&
     typeof d.confidence === 'number' &&
-    typeof d.description === 'string'
+    typeof d.description === 'string' &&
+    /*
+     * PRESENCE-CONDITIONAL, never required. A server that predates genus
+     * aggregation omits both keys; requiring them here would fail shape
+     * validation on every diagnosis it serves and turn a working older
+     * deployment into a total outage.
+     */
+    (d.genus === undefined || typeof d.genus === 'string') &&
+    (d.genusConfidence === undefined || typeof d.genusConfidence === 'number') &&
+    // Same rule, same reason: absent means PlantNet, which is every response
+    // served before the identification backup existed.
+    (d.identificationSource === undefined ||
+      d.identificationSource === 'plantnet' ||
+      d.identificationSource === 'openai')
   );
 }
 

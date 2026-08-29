@@ -1,5 +1,6 @@
 import type { PlantDiagnosis } from '../types';
-import type { StoredPlant } from './plantStore';
+import type { SoilMediumId } from '../lib/soilMedia';
+import type { PlantSpecies, StoredPlant } from './plantStore';
 
 /*
  * Cloud sync for the plant library (Epic 3a).
@@ -52,9 +53,23 @@ export interface CloudRow {
   user_id: string;
   saved_at: string;
   photo_path: string | null;
-  diagnosis: PlantDiagnosis;
+  /*
+   * NULLABLE since the Portfolio tab: a plant added by hand has never been
+   * diagnosed. Mirrors `StoredPlant.diagnosis`, and for the same reason - a
+   * synthesized all-clear finding would be indistinguishable from a real one.
+   */
+  diagnosis: PlantDiagnosis | null;
+  added_via: 'scan' | 'manual';
+  catalog_id: string | null;
+  species: PlantSpecies | null;
+  soil_medium: SoilMediumId | null;
+  nickname: string | null;
   last_watered_at: string | null;
   watering_log: string[] | null;
+  last_repotted_at: string | null;
+  repot_log: string[] | null;
+  last_fertilized_at: string | null;
+  fertilizer_log: string[] | null;
   reminder_id: string | null;
 }
 
@@ -85,22 +100,102 @@ export type CloudSaveResult =
 
 export type CloudMutateResult = { ok: true } | { ok: false; reason: 'network' };
 
+/* What `saveManualPlant` needs to build a row: identity plus whatever the add
+ * form collected. Everything else on a fresh plant is absent by definition. */
+export interface ManualInput {
+  photoUri: string;
+  species: PlantSpecies;
+  catalogId?: string;
+  soilMedium?: SoilMediumId;
+  nickname?: string;
+}
+
+/*
+ * Every field a logged-in mutation can change after the insert. Deliberately
+ * NOT `Partial<StoredPlant>`: identity (species, catalogId, addedVia, savedAt)
+ * is written once and never patched, and letting it through here would make a
+ * cloud row silently disagree with the record that created it.
+ */
+export type CloudPatch = Partial<{
+  lastWateredAt: string | null;
+  reminderId: string | null;
+  wateringLog: string[];
+  lastRepottedAt: string | null;
+  repotLog: string[];
+  lastFertilizedAt: string | null;
+  fertilizerLog: string[];
+  soilMedium: SoilMediumId | null;
+  nickname: string | null;
+}>;
+
 export interface ImportBatchResult {
   imported: string[];
   failed: string[];
 }
 
+/*
+ * Every optional field is OMITTED rather than set to undefined when the column
+ * is null. `plantStore.isStoredPlant` accepts either, but the mirror is
+ * compared against locally-written records all over the app, and a record
+ * carrying `nickname: undefined` is not the same object as one that never had
+ * the key - which is exactly the distinction "they never named it" rests on.
+ */
 function toStoredPlant(row: CloudRow): StoredPlant {
   const plant: StoredPlant = {
     id: row.id,
     savedAt: row.saved_at,
     photoUri: row.photo_path ?? '',
-    diagnosis: row.diagnosis,
+    /* Pre-Portfolio rows have no `added_via` column value only if this ran
+     * against an unmigrated table; 'scan' is what the migration backfills. */
+    addedVia: row.added_via ?? 'scan',
   };
+  if (row.diagnosis) plant.diagnosis = row.diagnosis;
+  if (row.catalog_id) plant.catalogId = row.catalog_id;
+  if (row.species) plant.species = row.species;
+  if (row.soil_medium) plant.soilMedium = row.soil_medium;
+  if (row.nickname) plant.nickname = row.nickname;
   if (row.last_watered_at) plant.lastWateredAt = row.last_watered_at;
   if (row.watering_log && row.watering_log.length > 0) plant.wateringLog = row.watering_log;
+  if (row.last_repotted_at) plant.lastRepottedAt = row.last_repotted_at;
+  if (row.repot_log && row.repot_log.length > 0) plant.repotLog = row.repot_log;
+  if (row.last_fertilized_at) plant.lastFertilizedAt = row.last_fertilized_at;
+  if (row.fertilizer_log && row.fertilizer_log.length > 0) {
+    plant.fertilizerLog = row.fertilizer_log;
+  }
   if (row.reminder_id) plant.reminderId = row.reminder_id;
   return plant;
+}
+
+/*
+ * The inverse. Written once and shared by save, saveManual and importBatch so
+ * a field added to `StoredPlant` cannot be carried by one write path and
+ * dropped by another - which is how a hand-added plant would arrive on a second
+ * device with its nickname missing.
+ *
+ * `reminder_id` is never written from here: a local notification handle is
+ * meaningless on any other device, so it is patched in separately by the
+ * device that scheduled it.
+ */
+function toRow(userId: string, plant: StoredPlant, photoPath: string | null): CloudRow {
+  return {
+    id: plant.id,
+    user_id: userId,
+    saved_at: plant.savedAt,
+    photo_path: photoPath,
+    diagnosis: plant.diagnosis ?? null,
+    added_via: plant.addedVia,
+    catalog_id: plant.catalogId ?? null,
+    species: plant.species ?? null,
+    soil_medium: plant.soilMedium ?? null,
+    nickname: plant.nickname ?? null,
+    last_watered_at: plant.lastWateredAt ?? null,
+    watering_log: plant.wateringLog ?? [],
+    last_repotted_at: plant.lastRepottedAt ?? null,
+    repot_log: plant.repotLog ?? [],
+    last_fertilized_at: plant.lastFertilizedAt ?? null,
+    fertilizer_log: plant.fertilizerLog ?? [],
+    reminder_id: null,
+  };
 }
 
 export function createCloudPlantLibrary(deps: CloudDeps, opts: CloudOptions = {}) {
@@ -124,33 +219,55 @@ export function createCloudPlantLibrary(deps: CloudDeps, opts: CloudOptions = {}
     userId: string,
     input: { photoUri: string; diagnosis: PlantDiagnosis }
   ): Promise<CloudSaveResult> {
-    const id = newId();
-    const path = `${userId}/${id}.${photoExtension(input.photoUri)}`;
-    const uploaded = await deps.uploadPhoto(path, input.photoUri);
+    return insertNew(userId, { ...input, addedVia: 'scan' });
+  }
 
-    const row: CloudRow = {
-      id,
-      user_id: userId,
-      saved_at: new Date(now()).toISOString(),
-      photo_path: uploaded,
-      diagnosis: input.diagnosis,
-      last_watered_at: null,
-      watering_log: [],
-      reminder_id: null,
-    };
+  /*
+   * The Portfolio tab's second door: a plant the user already owns, typed in
+   * rather than photographed. Same insert as `savePlant` - the only difference
+   * is which fields carry the identity, and `toRow` is what keeps the two from
+   * drifting apart.
+   *
+   * The photo is OPTIONAL here in a way it never was for a scan: a plant added
+   * from the shelf may genuinely have no picture, and an empty `photoUri` must
+   * skip the upload rather than push a zero-byte object.
+   */
+  async function saveManualPlant(
+    userId: string,
+    input: ManualInput
+  ): Promise<CloudSaveResult> {
+    return insertNew(userId, { ...input, addedVia: 'manual' });
+  }
+
+  async function insertNew(
+    userId: string,
+    input: (ManualInput | { photoUri: string; diagnosis: PlantDiagnosis }) & {
+      addedVia: 'scan' | 'manual';
+    }
+  ): Promise<CloudSaveResult> {
+    const id = newId();
+    const uploaded = input.photoUri
+      ? await deps.uploadPhoto(`${userId}/${id}.${photoExtension(input.photoUri)}`, input.photoUri)
+      : null;
+
+    const draft = { ...input, id, savedAt: new Date(now()).toISOString() } as StoredPlant;
+    const row = toRow(userId, draft, uploaded);
 
     if (!(await deps.insertPlant(row))) return { ok: false, reason: 'network' };
     return { ok: true, plant: toStoredPlant(row) };
   }
 
-  async function updatePlant(
-    id: string,
-    patch: Partial<{ lastWateredAt: string | null; reminderId: string | null; wateringLog: string[] }>
-  ): Promise<CloudMutateResult> {
+  async function updatePlant(id: string, patch: CloudPatch): Promise<CloudMutateResult> {
     const rowPatch: Partial<CloudRow> = {};
     if ('lastWateredAt' in patch) rowPatch.last_watered_at = patch.lastWateredAt ?? null;
     if ('reminderId' in patch) rowPatch.reminder_id = patch.reminderId ?? null;
     if ('wateringLog' in patch) rowPatch.watering_log = patch.wateringLog ?? [];
+    if ('lastRepottedAt' in patch) rowPatch.last_repotted_at = patch.lastRepottedAt ?? null;
+    if ('repotLog' in patch) rowPatch.repot_log = patch.repotLog ?? [];
+    if ('lastFertilizedAt' in patch) rowPatch.last_fertilized_at = patch.lastFertilizedAt ?? null;
+    if ('fertilizerLog' in patch) rowPatch.fertilizer_log = patch.fertilizerLog ?? [];
+    if ('soilMedium' in patch) rowPatch.soil_medium = patch.soilMedium ?? null;
+    if ('nickname' in patch) rowPatch.nickname = patch.nickname ?? null;
 
     return (await deps.updatePlant(id, rowPatch)) ? { ok: true } : { ok: false, reason: 'network' };
   }
@@ -172,16 +289,9 @@ export function createCloudPlantLibrary(deps: CloudDeps, opts: CloudOptions = {}
       const path = `${userId}/${plant.id}.${photoExtension(plant.photoUri)}`;
       const uploaded = plant.photoUri ? await deps.uploadPhoto(path, plant.photoUri) : null;
 
-      const row: CloudRow = {
-        id: plant.id,
-        user_id: userId,
-        saved_at: plant.savedAt,
-        photo_path: uploaded,
-        diagnosis: plant.diagnosis,
-        last_watered_at: plant.lastWateredAt ?? null,
-        watering_log: plant.wateringLog ?? [],
-        reminder_id: null, // device-local notification handles never travel to another device
-      };
+      // `toRow` writes reminder_id as null - a device-local notification handle
+      // never travels to another device.
+      const row = toRow(userId, plant, uploaded);
 
       if (await deps.insertPlant(row)) imported.push(plant.id);
       else failed.push(plant.id);
@@ -190,7 +300,7 @@ export function createCloudPlantLibrary(deps: CloudDeps, opts: CloudOptions = {}
     return { imported, failed };
   }
 
-  return { fetchAll, savePlant, updatePlant, removePlant, importBatch };
+  return { fetchAll, savePlant, saveManualPlant, updatePlant, removePlant, importBatch };
 }
 
 export type CloudPlantLibrary = ReturnType<typeof createCloudPlantLibrary>;

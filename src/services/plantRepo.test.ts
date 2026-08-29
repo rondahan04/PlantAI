@@ -288,3 +288,144 @@ test('logged in: remove() leaves the mirror untouched on a cloud failure', async
   assert.equal(result.ok, false);
   assert.ok(mirror.load().plants.find((p) => p.id === id));
 });
+
+/*
+ * The Portfolio tab's paths through the facade. Everything below exercises a
+ * plant that was typed in rather than photographed, and the care kinds that
+ * schedule nothing - the two doors added after Epic 3a was first written, and
+ * the two that would have silently stayed guest-only.
+ */
+
+const species = {
+  name: 'Monstera Deliciosa',
+  scientificName: 'Monstera deliciosa',
+  genus: 'Monstera',
+  family: 'Araceae',
+};
+
+test('logged out: saveManual() passes straight through to the guest store', async () => {
+  const { repo, guest } = makeRepo({ hint: false });
+  const result = await repo.saveManual({ photoUri: '', species, nickname: 'Steve' });
+  assert.equal(result.ok, true);
+  assert.equal(guest.load().plants.length, 1);
+  assert.equal(guest.load().plants[0].addedVia, 'manual');
+});
+
+test('logged in: saveManual() writes the whole record to the cloud', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const result = await repo.saveManual({
+    photoUri: '',
+    species,
+    catalogId: 'cat-1',
+    soilMedium: 'leca',
+    nickname: 'Steve',
+  });
+
+  assert.equal(result.ok, true);
+  const row = [...rows.values()][0];
+  assert.equal(row.added_via, 'manual');
+  assert.equal(row.nickname, 'Steve');
+  assert.equal(row.soil_medium, 'leca');
+  assert.equal(row.catalog_id, 'cat-1');
+  assert.equal(row.diagnosis, null);
+  // The mirror is the read path for every screen - a field that reached the
+  // cloud but not the mirror looks like data loss until the next cold start.
+  assert.equal(mirror.load().plants[0].nickname, 'Steve');
+});
+
+test('logged in: a failed manual save leaves nothing behind, not even locally', async () => {
+  const { repo, guest, mirror, rows } = makeRepo({ hint: true, cloudFail: { insert: true } });
+  const result = await repo.saveManual({ photoUri: '', species });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.reason, 'network');
+  assert.equal(rows.size, 0);
+  assert.equal(mirror.load().plants.length, 0);
+  // The guest key in particular: a plant stranded there is invisible to
+  // wipeMirror() and to account deletion.
+  assert.equal(guest.load().plants.length, 0);
+});
+
+test('logged in: markCare() logs a repot to the cloud and the mirror together', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species });
+  assert.equal(saved.ok, true);
+  if (!saved.ok) return;
+
+  const at = Date.parse('2026-08-20T09:00:00.000Z');
+  const logged = await repo.markCare(saved.plant.id, 'repot', at);
+  assert.equal(logged.ok, true);
+
+  const row = rows.get(saved.plant.id);
+  assert.equal(row?.last_repotted_at, '2026-08-20T09:00:00.000Z');
+  assert.deepEqual(row?.repot_log, ['2026-08-20T09:00:00.000Z']);
+  assert.equal(mirror.load().plants[0].lastRepottedAt, '2026-08-20T09:00:00.000Z');
+});
+
+test('logged in: two repots on the same day count once, exactly as the guest store folds them', async () => {
+  const { repo, rows } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species });
+  assert.equal(saved.ok, true);
+  if (!saved.ok) return;
+
+  const morning = new Date(2026, 7, 20, 9, 0, 0);
+  const evening = new Date(2026, 7, 20, 18, 0, 0);
+  await repo.markCare(saved.plant.id, 'repot', morning.getTime());
+  await repo.markCare(saved.plant.id, 'repot', evening.getTime());
+
+  assert.deepEqual(rows.get(saved.plant.id)?.repot_log, [evening.toISOString()]);
+});
+
+test('logged in: a repot that fails in the cloud is not shown as recorded', async () => {
+  const { repo, mirror } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species });
+  assert.equal(saved.ok, true);
+  if (!saved.ok) return;
+
+  const { repo: broken } = makeRepo({ hint: true, cloudFail: { update: true } });
+  const loggedOnBroken = await broken.markCare('missing', 'fertilizer', Date.now());
+  assert.equal(loggedOnBroken.ok, false);
+  assert.equal(mirror.load().plants[0].lastFertilizedAt, undefined);
+});
+
+test('logged in: update() carries a growing-medium change to the cloud', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species, soilMedium: 'potting_mix' });
+  assert.equal(saved.ok, true);
+  if (!saved.ok) return;
+
+  const updated = await repo.update(saved.plant.id, { soilMedium: 'leca' });
+  assert.equal(updated.ok, true);
+  assert.equal(rows.get(saved.plant.id)?.soil_medium, 'leca');
+  assert.equal(mirror.load().plants[0].soilMedium, 'leca');
+});
+
+test('logged in: clearing a nickname clears it in the cloud, rather than leaving the old one', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species, nickname: 'Steve' });
+  assert.equal(saved.ok, true);
+  if (!saved.ok) return;
+
+  const updated = await repo.update(saved.plant.id, { nickname: undefined });
+  assert.equal(updated.ok, true);
+  assert.equal(rows.get(saved.plant.id)?.nickname, null);
+  assert.equal(mirror.load().plants[0].nickname, undefined);
+});
+
+test('logged in: a watered plant carries its full record back from the cloud', async () => {
+  const { repo, rows } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species, nickname: 'Steve' });
+  assert.equal(saved.ok, true);
+  if (!saved.ok) return;
+
+  await repo.markWatered(saved.plant.id, Date.parse('2026-08-20T09:00:00.000Z'));
+  const refreshed = await repo.refreshFromCloud();
+
+  // The round trip through `fetchAll` is where a column missing from `toRow`
+  // or `toStoredPlant` shows up as a field the user silently loses.
+  const plant = refreshed.plants.find((p) => p.id === saved.plant.id);
+  assert.equal(plant?.nickname, 'Steve');
+  assert.equal(plant?.addedVia, 'manual');
+  assert.equal(plant?.lastWateredAt, '2026-08-20T09:00:00.000Z');
+  assert.equal(rows.get(saved.plant.id)?.added_via, 'manual');
+});

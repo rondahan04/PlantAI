@@ -22,7 +22,7 @@ import { RootStackParamList } from './src/types';
 import { getTheme } from './src/theme';
 import { onboarding } from './src/services/onboarding';
 import OnboardingScreen from './src/screens/OnboardingScreen';
-import HomeScreen from './src/screens/HomeScreen';
+import Tabs from './src/navigation/Tabs';
 import CameraScreen from './src/screens/CameraScreen';
 import DiagnosisScreen from './src/screens/DiagnosisScreen';
 import NurseriesScreen from './src/screens/NurseriesScreen';
@@ -37,6 +37,8 @@ import EditProfileFieldScreen from './src/screens/EditProfileFieldScreen';
 import ManageAccountScreen from './src/screens/ManageAccountScreen';
 import ChangePasswordScreen from './src/screens/ChangePasswordScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
+import AddPlantScreen from './src/screens/AddPlantScreen';
+import SpeciesPickerScreen from './src/screens/SpeciesPickerScreen';
 
 // issue #1: reset-password emails deep-link back via plantai://reset-password
 // (app.json "scheme"). supabase-js parses the recovery token from the URL
@@ -118,11 +120,30 @@ export default function App() {
               component={OnboardingScreen}
               options={{ animation: 'fade' }}
             />
-            <Stack.Screen name="Home" component={HomeScreen} />
+            {/* The bottom-tab navigator, registered under the name `Home` so
+                every existing navigate('Home') keeps working. */}
+            <Stack.Screen name="Home" component={Tabs} />
             <Stack.Screen
               name="Camera"
               component={CameraScreen}
               options={{ animation: 'slide_from_bottom' }}
+            />
+            {/* Adding a plant by hand. It slides up like the camera does:
+                both are "start something new", and both leave by replacing
+                themselves with the plant they produced. */}
+            <Stack.Screen
+              name="AddPlant"
+              component={AddPlantScreen}
+              options={{ animation: 'slide_from_bottom' }}
+            />
+            {/* Modal, because it is a question asked ON TOP of the add form
+                rather than a place you go: the form stays alive underneath with
+                everything already filled in, and the picker hands its answer
+                back down with popTo. */}
+            <Stack.Screen
+              name="SpeciesPicker"
+              component={SpeciesPickerScreen}
+              options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
             />
             <Stack.Screen name="Diagnosis" component={DiagnosisScreen} />
             <Stack.Screen name="PlantDetail" component={PlantDetailScreen} />

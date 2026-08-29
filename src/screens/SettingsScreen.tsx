@@ -110,6 +110,12 @@ export default function SettingsScreen({ navigation }: Props) {
             onPress={() => navigation.navigate('EditProfileField', { field: 'username', current: profile.username })}
           />
           <SettingsRow icon="mail-outline" label="Email address" value={email} showChevron={false} />
+          <SettingsRow
+            icon="chatbubble-ellipses-outline"
+            label="Bio"
+            value={profile.bio ?? undefined}
+            onPress={() => navigation.navigate('EditProfileField', { field: 'bio', current: profile.bio ?? '' })}
+          />
         </SettingsCard>
 
         <SettingsCard>

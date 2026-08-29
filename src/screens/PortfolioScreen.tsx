@@ -20,7 +20,17 @@ import { Theme, useTheme } from '../theme';
 import { plantRepo } from '../services/plantRepoInstance';
 import { plantLibrary } from '../services/plantLibrary';
 import { plantPhotos } from '../services/photos';
+import { genusCarePlans } from '../services/genusCarePlans';
 import { triageSections } from '../lib/triage';
+import {
+  dueSoon,
+  filterPortfolio,
+  plantDisplayName,
+  type DueItem,
+  type PortfolioFilter,
+} from '../lib/portfolio';
+import { directionalIconStyle } from '../lib/rtl';
+import type { CareKind, StoredPlant } from '../services/plantStore';
 import { APP_LOGO } from '../brand';
 import { FEATURES } from '../content/features';
 import { onboarding } from '../services/onboarding';
@@ -30,17 +40,52 @@ import PlantCard from '../components/PlantCard';
 import ImportBanner from '../components/ImportBanner';
 import { seedMockPlants, mockDiagnosisParams } from '../services/devSeed';
 
+/*
+ * The Portfolio tab - every plant the user owns, not just the ones they
+ * photographed.
+ *
+ * This replaces the old "My Plants" screen, which could only ever show scanned
+ * plants because the camera was the only way a record got created. A user with
+ * nine plants and two problems had a library of two. The tab now holds both
+ * kinds of record, with a two-chip filter that answers the question the user
+ * actually asked for - "which of these have I had checked" - and a strip of
+ * what is due this week so nobody has to open nine plants to find out.
+ *
+ * Everything about WHICH plants and WHAT they are called is decided in
+ * src/lib/portfolio.ts, under `node --test`. This file is a renderer over it,
+ * which is what keeps the interesting cases testable without a device.
+ */
+
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
 };
 
-export default function HomeScreen({ navigation }: Props) {
+/* The care kinds' glyphs and tints, matching ScheduleCard so the same kind is
+ * the same colour wherever the user meets it. Palette keys rather than
+ * literals: the theme owns light and dark. */
+const KIND_ICON: Record<CareKind, { icon: keyof typeof Ionicons.glyphMap; tint: keyof Theme['color'] }> = {
+  water: { icon: 'water-outline', tint: 'water' },
+  fertilizer: { icon: 'nutrition-outline', tint: 'feed' },
+  repot: { icon: 'flower-outline', tint: 'repot' },
+};
+
+/*
+ * The strip is a nudge, not a task list. Four rows is roughly one plant's worth
+ * of screen: enough that the common case (a couple of thirsty plants) is shown
+ * whole, and short enough that a library where everything came due at once
+ * cannot push the portfolio itself below the fold - which would leave the user
+ * scrolling past a wall of reminders to reach the thing they opened the tab
+ * for. The overflow is not hidden, it is counted, so a truncated strip says so.
+ */
+const DUE_ROW_CAP = 4;
+
+export default function PortfolioScreen({ navigation }: Props) {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
 
   /*
-   * Adaptive Home (D8/H2): marketing copy on first run, library once a plant
-   * is saved.
+   * Adaptive Portfolio (D8/H2): marketing copy on first run, the library once a
+   * plant exists.
    *
    * The lazy useState initializer is the whole reason the store is
    * synchronous. Reading in an effect would render the first-run layout for a
@@ -61,12 +106,18 @@ export default function HomeScreen({ navigation }: Props) {
    * The name from onboarding, read synchronously for the same reason the
    * library is: the header would otherwise render "Plant Doctor" and then swap
    * to the greeting a frame later. Read once - it cannot change while the app
-   * is running, since onboarding only precedes Home.
+   * is running, since onboarding only precedes this tab.
    */
   const [profileName] = useState(() => onboarding.load()?.name);
   const [showImportBanner, setShowImportBanner] = useState(() => plantRepo.hasUnimportedGuestPlants());
 
-  // A plant saved on the Diagnosis screen has to appear on the way back.
+  /* All or diagnosed. Local, not persisted: the chip is a lens the user holds
+   * for a moment, and a filter that survived a relaunch would look like plants
+   * had gone missing. */
+  const [filter, setFilter] = useState<PortfolioFilter>('all');
+
+  // A plant saved on the Diagnosis screen - or on the add-plant form - has to
+  // appear on the way back.
   useFocusEffect(
     useCallback(() => {
       setLibrary(plantRepo.loadLocal());
@@ -138,7 +189,50 @@ export default function HomeScreen({ navigation }: Props) {
     // focus effect above re-reads it constantly and this must not run each time.
   }, [session]);
 
-  const sections = useMemo(() => triageSections(library.plants), [library]);
+  const visible = useMemo(() => filterPortfolio(library.plants, filter), [library, filter]);
+
+  /*
+   * Triage grouping stays exactly where it was, and ONLY on the All view. The
+   * user asked for a filter, not a reorganisation: a chip that both narrows the
+   * list and regroups it is two changes at once, and the second one is the kind
+   * that makes a user think plants moved. Diagnosed renders flat, in the
+   * library's own newest-first order, which is what `filterPortfolio` preserves.
+   */
+  const sections = useMemo<{ key: string; title: string; data: StoredPlant[] }[]>(
+    () =>
+      filter === 'all'
+        ? triageSections(visible)
+        : /* One untitled section, so SectionList renders a flat list without a
+           * second code path for it. `TriageKey` is deliberately not widened to
+           * hold a 'diagnosed' bucket - this is a rendering shape, not a triage
+           * bucket, and triage.ts should not learn about the filter. */
+          [{ key: 'diagnosed', title: '', data: visible }],
+    [visible, filter]
+  );
+
+  /*
+   * Due this week, computed from the WHOLE library rather than the filtered
+   * view: what needs water this week does not change because the user is
+   * looking at a subset, and a strip that emptied when the chip moved would
+   * read as care disappearing.
+   *
+   * `peek`, never `get`. The strip renders on the first frame and there is one
+   * lookup per plant, so a network call per genus would either block the paint
+   * or fill the strip in a frame later, under the user's thumb. A genus with no
+   * cached plan simply gets null, and `dueSoon` degrades to the diagnosis's own
+   * interval - which is exactly what the card showed before this feature
+   * existed, so the miss costs nothing that was ever there.
+   */
+  const due = useMemo(() => {
+    return dueSoon(library.plants, Date.now(), (plant: StoredPlant) => {
+      const genus = plant.species?.genus ?? plant.diagnosis?.genus;
+      return genus ? genusCarePlans.peek(genus) : null;
+    });
+    // `library` is the input; the clock is read once per library read on
+    // purpose - re-running this on a timer would reshuffle the strip under a
+    // user mid-scroll for a day boundary they cannot see.
+  }, [library]);
+
   const hasPlants = library.plants.length > 0;
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -165,6 +259,56 @@ export default function HomeScreen({ navigation }: Props) {
     });
     return () => loop?.stop();
   }, []);
+
+  const renderChip = (value: PortfolioFilter, label: string) => {
+    const active = filter === value;
+    return (
+      <Pressable
+        key={value}
+        onPress={() => setFilter(value)}
+        style={({ pressed }) => [s.chip, active && s.chipActive, pressed && s.chipPressed]}
+        accessibilityRole="button"
+        // Selected state announced rather than left to colour alone (a11y).
+        accessibilityState={{ selected: active }}
+        accessibilityLabel={
+          value === 'all' ? 'Show all plants' : 'Show only plants you have diagnosed'
+        }
+      >
+        <Text style={[s.chipText, active && s.chipTextActive]}>{label}</Text>
+      </Pressable>
+    );
+  };
+
+  const renderDueRow = (item: DueItem) => {
+    const kind = KIND_ICON[item.kind];
+    const tint = t.color[kind.tint];
+    const name = plantDisplayName(item.plant);
+    return (
+      <Pressable
+        key={`${item.plant.id}:${item.kind}`}
+        style={({ pressed }) => [s.dueRow, pressed && s.dueRowPressed]}
+        onPress={() => navigation.navigate('PlantDetail', { plantId: item.plant.id })}
+        accessibilityRole="button"
+        accessibilityLabel={`${name}, ${item.label}`}
+      >
+        <View style={[s.dueIcon, { backgroundColor: t.color.surfaceMuted }]}>
+          <Ionicons name={kind.icon} size={14} color={tint} />
+        </View>
+        <Text style={s.dueName} numberOfLines={1}>
+          {name}
+        </Text>
+        <Text style={[s.dueLabel, { color: tint }]} numberOfLines={1}>
+          {item.label}
+        </Text>
+        <Ionicons
+          name="chevron-forward"
+          size={14}
+          color={t.color.textMuted}
+          style={directionalIconStyle}
+        />
+      </Pressable>
+    );
+  };
 
   /*
    * Dev fixtures (`__DEV__` only, stripped from any release bundle): seed the
@@ -206,7 +350,7 @@ export default function HomeScreen({ navigation }: Props) {
    */
   if (hasPlants || library.ok === false) {
     return (
-      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <SafeAreaView style={s.container} edges={['top']} /* bottom inset belongs to the tab bar */>
         <SectionList
           sections={sections}
           keyExtractor={(item) => item.id}
@@ -274,11 +418,42 @@ export default function HomeScreen({ navigation }: Props) {
               {devTools}
 
               <Text style={s.libTitle}>My Plants</Text>
+              {due.length > 0 && (
+                <View style={s.dueCard}>
+                  <Text style={s.dueTitle}>Due this week</Text>
+                  {due.slice(0, DUE_ROW_CAP).map(renderDueRow)}
+                  {due.length > DUE_ROW_CAP && (
+                    <Text style={s.dueMore}>
+                      +{due.length - DUE_ROW_CAP} more in your plants below
+                    </Text>
+                  )}
+                </View>
+              )}
+
+              <Text style={s.libTitle}>Portfolio</Text>
+
+              <View style={s.chipRow}>
+                {renderChip('all', 'All')}
+                {renderChip('diagnosed', 'Diagnosed')}
+              </View>
+
+              {/*
+                A filter that matches nothing is not an empty library, and the
+                copy has to say so - otherwise the Diagnosed chip on a
+                hand-built portfolio reads as data loss.
+              */}
+              {visible.length === 0 && filter === 'diagnosed' && (
+                <Text style={s.emptyFilter}>
+                  None of your plants have been diagnosed yet. Scan one to see what it needs.
+                </Text>
+              )}
             </>
           }
-          renderSectionHeader={({ section }) => (
-            <Text style={s.sectionHeader}>{section.title}</Text>
-          )}
+          renderSectionHeader={({ section }) =>
+            /* Flat on the Diagnosed view: one section with no title, so the
+             * list is a list rather than a group of one. */
+            section.title ? <Text style={s.sectionHeader}>{section.title}</Text> : null
+          }
           renderItem={({ item }) => (
             <PlantCard
               plant={item}
@@ -297,12 +472,29 @@ export default function HomeScreen({ navigation }: Props) {
             </Pressable>
           }
         />
+
+        {/*
+          The second way in, floating rather than in the footer: adding a plant
+          you already own has to be reachable from anywhere in a long list, and
+          it is the one action on this tab that the camera CTA cannot cover.
+          Secondary styling on purpose - diagnosing is still the app's job, and
+          two filled accent buttons would leave neither one primary.
+        */}
+        <Pressable
+          style={({ pressed }) => [s.fab, pressed && s.fabPressed]}
+          onPress={() => navigation.navigate('AddPlant')}
+          accessibilityRole="button"
+          accessibilityLabel="Add a plant you already own"
+        >
+          <Ionicons name="add" size={20} color={t.color.onPrimary} />
+          <Text style={s.fabText}>Add plant</Text>
+        </Pressable>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={s.container} edges={['top']} /* bottom inset belongs to the tab bar */>
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <Animated.View style={[s.header, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
@@ -333,7 +525,13 @@ export default function HomeScreen({ navigation }: Props) {
           </Text>
         </Animated.View>
 
-        {/* Primary CTA (the one accent action on this screen) */}
+        {/*
+          Two ways in, not one. The camera keeps the accent - it is what the app
+          is for, and it is the only action here that produces an answer - but a
+          user whose plants are all fine had no way to start a portfolio at all
+          before this, and a first run that only offers the camera teaches them
+          this tab is for sick plants.
+        */}
         <Animated.View style={[s.ctaWrap, { opacity: fadeAnim, transform: [{ scale: pulseAnim }] }]}>
           <Pressable
             style={({ pressed }) => [s.ctaBtn, pressed && s.ctaBtnPressed]}
@@ -347,6 +545,17 @@ export default function HomeScreen({ navigation }: Props) {
         </Animated.View>
 
         {devTools}
+        <Animated.View style={[s.secondaryWrap, { opacity: fadeAnim }]}>
+          <Pressable
+            style={({ pressed }) => [s.secondaryBtn, pressed && s.secondaryBtnPressed]}
+            onPress={() => navigation.navigate('AddPlant')}
+            accessibilityRole="button"
+            accessibilityLabel="Add a plant you already own, without a photo"
+          >
+            <Ionicons name="add-circle-outline" size={20} color={t.color.primary} />
+            <Text style={s.secondaryText}>Add a plant I already own</Text>
+          </Pressable>
+        </Animated.View>
 
         {/* Features */}
         <Animated.View style={[s.features, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
@@ -381,7 +590,9 @@ function makeStyles(t: Theme) {
     scroll: { paddingBottom: t.space['2xl'], paddingHorizontal: t.space.xl },
 
     // ── Returning-user library layout ──────────────────────────────────────
-    libScroll: { paddingBottom: t.space['2xl'], paddingHorizontal: t.space.xl },
+    // The extra bottom padding clears the floating Add plant button, so the
+    // last card is scrollable out from under it rather than trapped beneath.
+    libScroll: { paddingBottom: t.space['3xl'] + t.space['2xl'], paddingHorizontal: t.space.xl },
     libTitle: { ...t.type.title, color: t.color.foreground, marginTop: t.space.lg, marginBottom: t.space.sm },
     // Sections carry the grouping, so headers stay quiet - the condition
     // colour on each card is what should draw the eye.
@@ -394,6 +605,84 @@ function makeStyles(t: Theme) {
       marginBottom: t.space.sm,
     },
     libCta: { marginTop: t.space.xl },
+
+    chipRow: { flexDirection: 'row', gap: t.space.sm, marginBottom: t.space.md },
+    chip: {
+      paddingHorizontal: t.space.lg,
+      paddingVertical: t.space.sm,
+      borderRadius: t.radius.pill,
+      borderWidth: 1,
+      borderColor: t.color.border,
+      backgroundColor: t.color.surface,
+      minHeight: 36,
+      justifyContent: 'center',
+    },
+    chipActive: { backgroundColor: t.color.primaryWash, borderColor: t.color.primary },
+    chipPressed: { opacity: 0.7 },
+    chipText: { ...t.type.label, color: t.color.textSecondary },
+    chipTextActive: { color: t.color.primary },
+    emptyFilter: {
+      ...t.type.body,
+      color: t.color.textSecondary,
+      marginTop: t.space.md,
+      marginBottom: t.space.sm,
+    },
+
+    dueCard: {
+      backgroundColor: t.color.surface,
+      borderRadius: t.radius.lg,
+      borderWidth: 1,
+      borderColor: t.color.border,
+      paddingHorizontal: t.space.md,
+      paddingVertical: t.space.sm,
+      marginTop: t.space.md,
+      ...t.elevation.card,
+    },
+    dueTitle: {
+      ...t.type.caption,
+      color: t.color.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      marginTop: t.space.xs,
+      marginBottom: t.space.xs,
+    },
+    dueRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: t.space.sm,
+      minHeight: 44, // H6 minimum target
+    },
+    dueRowPressed: { opacity: 0.6 },
+    dueIcon: {
+      width: 26,
+      height: 26,
+      borderRadius: t.radius.pill,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    // Name takes the slack so the state label always sits on the trailing edge,
+    // in either writing direction - `textAlign: 'right'` would pin it to the
+    // wrong side of a mirrored row.
+    dueName: { ...t.type.label, color: t.color.foreground, flex: 1, writingDirection: 'auto' },
+    dueLabel: { ...t.type.caption, flexShrink: 0, writingDirection: 'auto' },
+    dueMore: { ...t.type.caption, color: t.color.textMuted, marginTop: t.space.xs, marginBottom: t.space.xs },
+
+    fab: {
+      position: 'absolute',
+      end: t.space.xl,
+      bottom: t.space.xl,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: t.space.xs,
+      backgroundColor: t.color.secondary,
+      borderRadius: t.radius.pill,
+      paddingHorizontal: t.space.lg,
+      minHeight: 48,
+      ...t.elevation.raised,
+    },
+    fabPressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
+    fabText: { ...t.type.label, color: t.color.onPrimary },
+
     warnCard: {
       flexDirection: 'row',
       backgroundColor: t.color.warningWash,
@@ -444,7 +733,7 @@ function makeStyles(t: Theme) {
     heroTitle: { ...t.type.display, color: t.color.foreground, textAlign: 'center', marginBottom: t.space.md },
     heroSub: { ...t.type.body, color: t.color.textSecondary, textAlign: 'center' },
 
-    ctaWrap: { marginBottom: t.space['2xl'] },
+    ctaWrap: { marginBottom: t.space.md },
     ctaBtn: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -470,6 +759,21 @@ function makeStyles(t: Theme) {
       borderColor: t.color.textSecondary,
     },
     devText: { ...t.type.caption, color: t.color.textSecondary },
+    secondaryWrap: { marginBottom: t.space['2xl'] },
+    secondaryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: t.space.sm,
+      borderRadius: t.radius.xl,
+      borderWidth: 1,
+      borderColor: t.color.border,
+      backgroundColor: t.color.surface,
+      paddingVertical: t.space.md,
+      minHeight: 48,
+    },
+    secondaryBtnPressed: { backgroundColor: t.color.surfaceMuted },
+    secondaryText: { ...t.type.bodyStrong, color: t.color.primary },
 
     features: { marginBottom: t.space.sm },
     featuresTitle: { ...t.type.heading, color: t.color.foreground, marginBottom: t.space.lg },

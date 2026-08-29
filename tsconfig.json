@@ -2,7 +2,16 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    /*
+     * `src/lib` modules import each other by their real filename (./watering.ts)
+     * so `node --test` can run them directly - node resolves no extensions of
+     * its own. Metro strips the extension happily, and tsc never emits here
+     * (Babel does the transpiling), so the pair below is bookkeeping rather
+     * than a change to how anything is built.
+     */
+    "allowImportingTsExtensions": true,
+    "noEmit": true
   },
   "exclude": ["node_modules", "scripts", "scraper", "dashboard", "server", "**/*.test.ts"]
 }

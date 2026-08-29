@@ -5,6 +5,7 @@
  * Routes
  *   GET  /health                    → liveness + gate/job counters (O1, O3)
  *   POST /api/diagnose              → PlantDiagnosis            (A3, billable)
+ *   POST /api/care-plan             → { bySoil } per genus      (billable)
  *   POST /api/nurseries             → { jobId }                 (E12, billable)
  *   GET  /api/nurseries/job/:id     → job state / result        (E12, free)
  *
@@ -25,7 +26,10 @@ import {
   loadEnv,
   env,
   createSearcher,
+  hostOf,
   extractAndVerifyPlants,
+  translateQuery,
+  sanityCheckPrices,
   inferAvailabilityLLM,
   scrapeUrl,
 } from '../scraper/core.ts';
@@ -40,10 +44,13 @@ import {
   UnsupportedImageError,
   diagnose,
   openAiAssessHealth,
+  openAiIdentify,
   plantNetIdentify,
   stubAssessHealth,
   type DiagnosisDeps,
+  type IdentifyHint,
 } from './diagnose.ts';
+import { CarePlanError, buildCarePlan, openAiCarePlan } from './carePlan.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -85,14 +92,17 @@ const nurseryCache = createNurseryCache<NurseryResult[]>({
  */
 const CORS_ORIGIN = env('CORS_ORIGIN');
 
-const NATIONAL_NURSERIES = [
-  'https://al-haderech.co.il/',
-  'https://rootine.co.il/',
-  'https://www.peer-nursery.co.il/',
-  'https://www.plantit.co.il/',
-  'https://netaplants.co.il/',
-  'https://decogarden.co.il/',
-];
+/*
+ * The nurseries that actually ship nationally. These are scraped on EVERY
+ * search, not only when nothing local matches, because they are the whole
+ * content of the Deliver tab - a user who opens it wants delivery whether or
+ * not a local shop happened to have the plant.
+ *
+ * Kept to the two confirmed shippers. The others on this list were general
+ * nurseries with no delivery, so including them padded the tab with rows that
+ * could not be delivered and cost a scrape each.
+ */
+const NATIONAL_NURSERIES = ['https://al-haderech.co.il/', 'https://rootine.co.il/'];
 
 const searcher = createSearcher(FIRECRAWL_KEY, {
   openaiKey: OPENAI_KEY,
@@ -105,7 +115,20 @@ const deps: PipelineDeps = {
     discoverNurseries(lat, lng, GOOGLE_KEY!, { radiusM, richFields: true }),
   search: (website, query, host) => searcher.fetchSearchMarkdown(website, query, host),
   extract: (o) => extractAndVerifyPlants({ ...o, openaiKey: OPENAI_KEY }),
-  scrapeHome: (origin) => scrapeUrl(origin, FIRECRAWL_KEY!, { tavilyKey: TAVILY_KEY }),
+  /* English in, Hebrew out - see translateQuery. One call per search. */
+  translate: (plantName) => translateQuery(plantName, OPENAI_KEY!),
+  /* One call for the whole search - the cross-nursery comparison is the point. */
+  checkPrices: (query, candidates) => sanityCheckPrices(query, candidates, OPENAI_KEY!),
+  /*
+   * Reached only when structured extraction found 0 items - the slow, common
+   * path. Platform identification already read this homepage moments ago, so
+   * prefer that copy over paying a second Firecrawl round trip for the same
+   * bytes. A warm host (cached platform, no identification this run) has no
+   * cached homepage and falls through to a real scrape.
+   */
+  scrapeHome: async (origin) =>
+    searcher.cachedHomeMarkdown(hostOf(origin)) ||
+    scrapeUrl(origin, FIRECRAWL_KEY!, { tavilyKey: TAVILY_KEY }),
   infer: (homeMd, query, site) => inferAvailabilityLLM(homeMd, query, site, OPENAI_KEY!),
   resolvePhoto: (photoName) => resolvePhotoUrl(photoName, GOOGLE_KEY!),
   readFallbackUrls: () =>
@@ -128,22 +151,64 @@ if (SKIP_OPENAI_DIAGNOSIS) {
 
 const identifyImpl = plantNetIdentify(PLANTNET_KEY!);
 const assessHealthImpl = SKIP_OPENAI_DIAGNOSIS ? stubAssessHealth : openAiAssessHealth(OPENAI_KEY!);
+/*
+ * The species backup. Off under DIAGNOSIS_SKIP_OPENAI for the same reason the
+ * health assessment is: that flag means "do not spend OpenAI credits", and a
+ * fallback that quietly spends them would make the flag a lie. Without it
+ * `resolveIdentification` degrades to plain PlantNet, which is the old
+ * behaviour.
+ */
+const identifyFallbackImpl = SKIP_OPENAI_DIAGNOSIS ? undefined : openAiIdentify(OPENAI_KEY!);
+const carePlanDeps = openAiCarePlan(OPENAI_KEY!);
 
-const diagnosisDeps: DiagnosisDeps = {
-  identify: async (image) => {
-    const result = await identifyImpl(image);
-    recordSuccess('plantnet_identify');
-    return result;
-  },
-  assessHealth: async (image, id) => {
-    const result = await assessHealthImpl(image, id);
-    // Counts the labelled stub too - SKIP_OPENAI_DIAGNOSIS means "not calling
-    // OpenAI", not "the diagnosis step is down", and /health should not read
-    // as an outage during an intentional, logged cost-saving mode.
-    recordSuccess('health_assessment');
-    return result;
-  },
-};
+/*
+ * Built per request so the cascade's decisions can be logged against the rid -
+ * whether the backup ran, and whether its answer was taken, is the only way to
+ * tell a quiet fallback from a PlantNet that has silently stopped working.
+ */
+function makeDiagnosisDeps(rid: string): DiagnosisDeps {
+  return {
+    identify: async (image) => {
+      const result = await identifyImpl(image);
+      recordSuccess('plantnet_identify');
+      return result;
+    },
+    assessHealth: async (image, id) => {
+      const result = await assessHealthImpl(image, id);
+      // Counts the labelled stub too - SKIP_OPENAI_DIAGNOSIS means "not calling
+      // OpenAI", not "the diagnosis step is down", and /health should not read
+      // as an outage during an intentional, logged cost-saving mode.
+      recordSuccess('health_assessment');
+      return result;
+    },
+    ...(identifyFallbackImpl
+      ? {
+          identifyFallback: async (image: Buffer, hint?: IdentifyHint) => {
+            // The hint is logged because it changes the question asked: a
+            // tiebreak that keeps answering with the genus it was handed reads
+            // very differently from an open identification that agrees.
+            logEvent(rid, 'identify_fallback_start', { genusHint: hint?.genus });
+            const result = await identifyFallbackImpl(image, hint);
+            logEvent(rid, 'identify_fallback_done', {
+              scientificName: result.scientificName,
+              // Against `genusHint` above this is the tiebreak's own guard
+              // rail: a differing genus means the answer was thrown away.
+              genus: result.genus,
+              confidence: result.confidence,
+              genusConfidence: result.genusConfidence,
+            });
+            /*
+             * Deliberately NOT recorded against a /health provider. The backup
+             * runs only when the primary was weak or down, so its own failure
+             * is expected traffic, not an outage - counting it would make the
+             * health endpoint alarm on PlantNet having a bad day.
+             */
+            return result;
+          },
+        }
+      : {}),
+  };
+}
 
 // ─── HTTP plumbing ────────────────────────────────────────────────────────────
 
@@ -322,11 +387,12 @@ const server = http.createServer(async (req, res) => {
     const t0 = Date.now();
     logEvent(rid, 'diagnose_start', { bytes: image.length });
     try {
-      const result = await diagnose(image, diagnosisDeps);
+      const result = await diagnose(image, makeDiagnosisDeps(rid));
       logEvent(rid, 'diagnose_done', {
         plantName: result.plantName,
         confidence: result.confidence,
         condition: result.condition,
+        identificationSource: result.identificationSource,
         ms: Date.now() - t0,
       });
       json(res, 200, result);
@@ -351,6 +417,70 @@ const server = http.createServer(async (req, res) => {
       const detail =
         err instanceof DiagnosisServiceError ? `${err.provider}: ${err.detail}` : errText(err);
       fail(res, rid, 502, 'diagnosis_failed', 'The plant service did not answer.', detail);
+    }
+    return;
+  }
+
+  // ── POST /api/care-plan ─────────────────────────────────────────────────────
+  // Care guidance for a whole GENUS, covering every growing medium in one
+  // answer. Billable and gated like any other model call. The client caches the
+  // result forever (src/lib/genusCarePlan.ts), so in practice this is one call
+  // per genus per install, not one per plant.
+  if (u.pathname === '/api/care-plan' && req.method === 'POST') {
+    const decision = gate.check(ip, secret);
+    if (!decision.allow) {
+      json(res, decision.status, { error: decision.code, message: decision.message });
+      return;
+    }
+
+    let genus: string;
+    let family: string;
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8'));
+      genus = typeof body?.genus === 'string' ? body.genus.trim() : '';
+      family = typeof body?.family === 'string' ? body.family.trim() : '';
+      if (!genus) {
+        json(res, 400, { error: 'bad_request', message: 'genus is required.' });
+        return;
+      }
+      /*
+       * A genus is one word and a family two at most. Anything longer is not a
+       * plant name, it is someone using a billable model call as a free prompt
+       * - the text goes straight into the prompt, so the length cap is the
+       * cheap half of not being an open text-completion endpoint.
+       */
+      if (genus.length > 60 || family.length > 60) {
+        json(res, 400, { error: 'bad_request', message: 'genus and family must be plant names.' });
+        return;
+      }
+    } catch (err: unknown) {
+      const tooBig = err instanceof PayloadTooLarge;
+      fail(
+        res,
+        rid,
+        tooBig ? 413 : 400,
+        tooBig ? 'payload_too_large' : 'bad_request',
+        tooBig ? 'That request is too large to send.' : 'That request could not be read.',
+        errText(err)
+      );
+      return;
+    }
+
+    const t0 = Date.now();
+    logEvent(rid, 'care_plan_start', { genus, family });
+    try {
+      const plan = await buildCarePlan(genus, family, carePlanDeps);
+      logEvent(rid, 'care_plan_done', {
+        genus,
+        media: Object.keys(plan.bySoil).length,
+        ms: Date.now() - t0,
+      });
+      json(res, 200, plan);
+    } catch (err: unknown) {
+      // The detail names the medium that failed to validate, or carries the
+      // provider's own body - useful in the log, never in the response.
+      const detail = err instanceof CarePlanError ? err.detail : errText(err);
+      fail(res, rid, 502, 'care_plan_failed', 'The care advice service did not answer.', detail);
     }
     return;
   }

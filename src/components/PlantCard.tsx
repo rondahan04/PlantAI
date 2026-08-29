@@ -5,6 +5,7 @@ import { Theme, useTheme } from '../theme';
 import { directionalIconStyle } from '../lib/rtl';
 import { LOGO_GLYPH } from '../brand';
 import { needsWater, wateringState } from '../lib/watering';
+import { plantDisplayName, plantSecondaryName } from '../lib/portfolio';
 import type { StoredPlant } from '../services/plantStore';
 
 /*
@@ -44,7 +45,28 @@ export default function PlantCard({
 }) {
   const t = useTheme();
   const s = React.useMemo(() => makeStyles(t), [t]);
-  const color = t.color[CONDITION_COLOR[plant.diagnosis.condition] ?? 'conditionModerate'];
+  /*
+   * A hand-added plant has no diagnosis and so NO condition - not a healthy
+   * one, and not a grey one either. An absent condition is not a condition:
+   * the row drops the dot and the label entirely rather than asserting a
+   * health state for a plant nobody has examined. The "Diagnosed" badge on the
+   * trailing edge is the other half of the same idea - it is what tells the
+   * user, at a glance down the list, which plants have been through the camera
+   * and which are still just theirs.
+   */
+  const diagnosis = plant.diagnosis;
+  const color = diagnosis
+    ? t.color[CONDITION_COLOR[diagnosis.condition] ?? 'conditionModerate']
+    : t.color.textMuted;
+  /*
+   * Naming is portfolio.ts's job, not this row's: the same two lines have to
+   * read identically wherever a plant is listed, and the fallback order
+   * (nickname, then asserted species, then the model's guess) is a product
+   * decision that belongs next to the filter that uses it.
+   */
+  const name = plantDisplayName(plant);
+  const secondary = plantSecondaryName(plant);
+  const conditionLabel = diagnosis?.conditionLabel;
   const when = relativeDay(plant.savedAt, Date.now());
 
   /*
@@ -52,7 +74,7 @@ export default function PlantCard({
    * its own line rather than being folded into the meta row - condition is why
    * the plant is in the library, watering is why they opened the app now.
    */
-  const water = wateringState(plant.diagnosis.carePlan, plant.lastWateredAt, Date.now());
+  const water = wateringState(plant.diagnosis?.carePlan, plant.lastWateredAt, Date.now());
   const thirsty = needsWater(water);
 
   return (
@@ -63,7 +85,9 @@ export default function PlantCard({
       // One label rather than four separate nodes: a screen reader user wants
       // the plant and its state in a single utterance, not a tour of the row.
       accessibilityLabel={
-        `${plant.diagnosis.plantName}, ${plant.diagnosis.conditionLabel}, saved ${when}` +
+        `${name}${secondary ? `, ${secondary}` : ''}` +
+        (conditionLabel ? `, diagnosed ${conditionLabel}` : ', not diagnosed') +
+        `, saved ${when}` +
         (thirsty ? `, watering ${water.label.toLowerCase()}` : '')
       }
     >
@@ -83,14 +107,25 @@ export default function PlantCard({
 
       <View style={s.body}>
         <Text style={s.name} numberOfLines={1}>
-          {plant.diagnosis.plantName}
+          {name}
         </Text>
-        <View style={s.metaRow}>
-          <View style={[s.dot, { backgroundColor: color }]} />
-          <Text style={[s.condition, { color }]} numberOfLines={1}>
-            {plant.diagnosis.conditionLabel}
+        {/* Empty when it would only repeat the name - see plantSecondaryName. */}
+        {secondary !== '' && (
+          <Text style={s.secondary} numberOfLines={1}>
+            {secondary}
           </Text>
-          <Text style={s.when}> · {when}</Text>
+        )}
+        <View style={s.metaRow}>
+          {conditionLabel !== undefined && (
+            <>
+              <View style={[s.dot, { backgroundColor: color }]} />
+              <Text style={[s.condition, { color }]} numberOfLines={1}>
+                {conditionLabel}
+              </Text>
+              <Text style={s.when}> · </Text>
+            </>
+          )}
+          <Text style={s.when}>{when}</Text>
         </View>
 
         {thirsty && (
@@ -111,6 +146,21 @@ export default function PlantCard({
           </View>
         )}
       </View>
+
+      {/*
+        The badge is quiet on purpose: it is a fact about the record, not a
+        health warning, so it borrows the muted surface rather than any of the
+        condition colours the row already spends its colour budget on.
+        `importantForAccessibility="no"` because the row's own label already
+        says whether the plant is diagnosed - a screen reader must not hear it
+        twice.
+      */}
+      {plant.diagnosis !== undefined && (
+        <View style={s.badge} importantForAccessibility="no">
+          <Ionicons name="medkit-outline" size={11} color={t.color.textSecondary} />
+          <Text style={s.badgeText}>Diagnosed</Text>
+        </View>
+      )}
 
       <Ionicons name="chevron-forward" size={18} color={t.color.textMuted} style={directionalIconStyle} />
     </Pressable>
@@ -146,10 +196,22 @@ const makeStyles = (t: Theme) =>
     thumb: { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0 },
     body: { flex: 1, marginEnd: t.space.sm },
     name: { ...t.type.bodyStrong, color: t.color.foreground, writingDirection: 'auto' },
+    secondary: { ...t.type.caption, color: t.color.textSecondary, writingDirection: 'auto', marginTop: 1 },
     metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
     dot: { width: 8, height: 8, borderRadius: 4, marginEnd: 6 },
     condition: { ...t.type.caption, flexShrink: 1, writingDirection: 'auto' },
     when: { ...t.type.caption, color: t.color.textMuted },
     waterRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
     waterText: { ...t.type.caption, flexShrink: 1 },
+    badge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      backgroundColor: t.color.surfaceMuted,
+      borderRadius: t.radius.pill,
+      paddingHorizontal: t.space.sm,
+      paddingVertical: 3,
+      marginEnd: t.space.xs,
+    },
+    badgeText: { ...t.type.caption, fontSize: 10, color: t.color.textSecondary },
   });

@@ -12,6 +12,8 @@ import { fetchNearbyNurseries } from '../services/nurseryService';
 import { stockAgeLabel } from '../lib/freshness';
 import { waMeLink } from '../lib/whatsapp';
 import StatusView from '../components/StatusView';
+import { availabilityBadge, isWorthShowing } from '../lib/availability';
+import { nurseryLogo } from '../lib/nurseryLogos';
 
 type Styles = ReturnType<typeof makeStyles>;
 
@@ -52,7 +54,9 @@ function describeFailure(err: unknown): NurseryFailure {
 
 // A nursery is "deliverable" if it ships to home or has a confirmed in-stock
 // listing; "pickupable" if it has a real local location (finite distance).
-const isDeliverable = (n: Nursery) => n.shipsToHome || n.inStockKnown;
+/* Only the national shippers actually deliver. A local shop having stock says
+ * nothing about whether it will post it to you. */
+const isDeliverable = (n: Nursery) => n.shipsToHome;
 const isPickupable = (n: Nursery) => Number.isFinite(n.distanceKm);
 const hasCoords = (n: Nursery) => n.latitude !== 0 && n.longitude !== 0;
 
@@ -68,6 +72,54 @@ function StarRating({ rating, t, s }: { rating: number; t: Theme; s: Styles }) {
       })}
       <Text style={s.ratingNum}>{rating.toFixed(1)}</Text>
     </View>
+  );
+}
+
+/*
+ * One line, whatever the scraper found. The reasoning behind an estimate is a
+ * full sentence and used to be rendered straight into this pill, where it
+ * clipped mid-word; it now lives behind the tap. `availabilityBadge` decides
+ * the wording, including refusing to state a percentage for a site we could
+ * never actually read.
+ */
+function AvailabilityPill({ nursery }: { nursery: Nursery }) {
+  const t = useTheme();
+  const s = useMemo(() => makeStyles(t), [t]);
+  const badge = availabilityBadge(nursery);
+
+  const tone = {
+    good: { bg: undefined, fg: t.color.primary, icon: 'checkmark-circle-outline' as const },
+    maybe: { bg: s.infoPillWarn, fg: t.color.warning, icon: 'help-circle-outline' as const },
+    // "We couldn't check" is not a warning ABOUT the nursery, so it does not
+    // get the amber treatment that reads as one.
+    unknown: { bg: s.infoPillMuted, fg: t.color.textSecondary, icon: 'help-circle-outline' as const },
+  }[badge.tone];
+
+  const body = (
+    <>
+      <Ionicons name={tone.icon} size={14} color={tone.fg} />
+      <Text style={[s.infoPillText, { color: tone.fg }]} numberOfLines={1}>
+        {badge.text}
+      </Text>
+      {badge.hasDetail && (
+        <Ionicons name="information-circle-outline" size={14} color={tone.fg} />
+      )}
+    </>
+  );
+
+  if (!badge.hasDetail) return <View style={[s.infoPill, tone.bg]}>{body}</View>;
+
+  return (
+    <Pressable
+      style={[s.infoPill, tone.bg]}
+      onPress={() => Alert.alert(badge.text, badge.detail)}
+      accessibilityRole="button"
+      // The truncated line is meaningless to a screen reader; speak all of it.
+      accessibilityLabel={`${badge.text}. ${badge.detail}`}
+      accessibilityHint="Shows why"
+    >
+      {body}
+    </Pressable>
   );
 }
 
@@ -105,7 +157,11 @@ function NurseryCard({
   return (
     <Animated.View style={[s.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
       <View style={s.cardImageWrap}>
-        {nursery.image ? (
+        {nurseryLogo(nursery.id) ? (
+          /* A logo is artwork, not a photo of the place - contain it rather
+             than cropping the wordmark to fill the frame. */
+          <Image source={nurseryLogo(nursery.id)} style={[s.cardImage, s.cardLogo]} resizeMode="contain" />
+        ) : nursery.image ? (
           <Image source={{ uri: nursery.image }} style={s.cardImage} />
         ) : (
           <View style={[s.cardImage, s.imagePlaceholder]}>
@@ -139,8 +195,15 @@ function NurseryCard({
             )}
           </View>
           {nursery.inStockKnown ? (
-            <View style={s.priceTag}>
-              <Text style={s.priceText}>{nursery.plantPrice}</Text>
+            /*
+             * A price we did not trust is shown as "See price" rather than as a
+             * number - the shop does stock the plant, we just would not stand
+             * behind the figure we read, and a wrong price is worse than none.
+             */
+            <View style={[s.priceTag, nursery.priceSuspect && s.priceTagMuted]}>
+              <Text style={[s.priceText, nursery.priceSuspect && s.priceTextMuted]}>
+                {nursery.priceSuspect ? 'See price' : nursery.plantPrice}
+              </Text>
             </View>
           ) : null}
         </View>
@@ -158,20 +221,9 @@ function NurseryCard({
           </View>
         )}
 
-        {/* Availability: exact stock vs LLM estimate */}
-        {nursery.inStockKnown ? (
-          <View style={s.infoPill}>
-            <Ionicons name="checkmark-circle-outline" size={14} color={t.color.primary} />
-            <Text style={s.infoPillText}>In stock now{nursery.shipsToHome ? ' · ships to home' : ' · local pickup'}</Text>
-          </View>
-        ) : (
-          <View style={[s.infoPill, s.infoPillWarn]}>
-            <Ionicons name="help-circle-outline" size={14} color={t.color.warning} />
-            <Text style={[s.infoPillText, { color: t.color.warning }]} numberOfLines={2}>
-              {nursery.availabilityNote ?? 'Availability unknown - call to confirm'}
-            </Text>
-          </View>
-        )}
+        {/* Availability. One line, always - the long LLM reasoning goes behind
+            the tap rather than clipping mid-word inside the pill. */}
+        <AvailabilityPill nursery={nursery} />
 
         <View style={s.actionRow}>
           {!!nursery.phone && (
@@ -252,13 +304,40 @@ export default function NurseriesScreen({ navigation, route }: Props) {
   // ageing wrongly the longer the screen stays open.
   const ageLabel = stockAgeLabel(scrapedAt, Date.now());
 
-  const deliveryCount = nurseries.filter(isDeliverable).length;
-  const pickupCount = nurseries.filter(isPickupable).length;
-  const mapNurseries = nurseries.filter(hasCoords);
+  /*
+   * Shops that demonstrably do not stock the plant are dropped outright - see
+   * isWorthShowing. What is left is either a real listing or a shop we could
+   * not read, and both are worth a row.
+   */
+  const worthShowing = useMemo(() => nurseries.filter(isWorthShowing), [nurseries]);
+
+  /*
+   * The tabs now actually split the list. Previously both rendered EVERY
+   * nursery and the toggle only changed a button label, so "Deliver Today"
+   * showed local shops that cannot deliver. Delivery is the ship-to-home
+   * nurseries; Pick Up is the ones with a real location you can drive to.
+   */
+  const deliveryList = useMemo(() => worthShowing.filter(isDeliverable), [worthShowing]);
+  const pickupList = useMemo(() => worthShowing.filter(isPickupable), [worthShowing]);
+  const visible = mode === 'delivery' ? deliveryList : pickupList;
+
+  const deliveryCount = deliveryList.length;
+  const pickupCount = pickupList.length;
+  const mapNurseries = visible.filter(hasCoords);
+
+  /* How many were checked and ruled out. Not rows, just a quiet reassurance
+   * that the search was wider than the list suggests. */
+  const ruledOut = nurseries.length - worthShowing.length;
 
   const handleOrder = (nursery: Nursery) => {
-    if (nursery.website) {
-      Linking.openURL(nursery.website);
+    /*
+     * The product page when we have one. Opening the nursery's homepage instead
+     * left the user to find the plant again by hand - which at a shop stocking
+     * two dozen Alocasias is most of the work we just did for them.
+     */
+    const target = nursery.productUrl || nursery.website;
+    if (target) {
+      Linking.openURL(target);
       return;
     }
     // No site to send them to - a nursery scraped without one is exactly the
@@ -412,7 +491,7 @@ export default function NurseriesScreen({ navigation, route }: Props) {
           </MapView>
         ) : (
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.list}>
-            {nurseries.map((nursery, i) => (
+            {visible.map((nursery, i) => (
               <NurseryCard
                 key={nursery.id}
                 nursery={nursery}
@@ -542,6 +621,8 @@ function makeStyles(t: Theme) {
     ratingNum: { ...t.type.caption, color: t.color.textSecondary, marginStart: t.space.xs, fontWeight: '600' },
     reviewCount: { ...t.type.caption, fontSize: 11, color: t.color.textMuted },
     priceTag: { backgroundColor: t.color.primaryWash, borderRadius: t.radius.md, paddingHorizontal: t.space.md, paddingVertical: t.space.xs },
+    priceTagMuted: { backgroundColor: t.color.surfaceMuted },
+    priceTextMuted: { color: t.color.textSecondary },
     priceText: { ...t.type.bodyStrong, fontSize: 16, fontWeight: '800', color: t.color.primary },
     metaRow: { flexDirection: 'row', alignItems: 'center', gap: t.space.xs, marginBottom: t.space.xs },
     metaText: { ...t.type.label, fontWeight: '400', fontSize: 13, color: t.color.textSecondary, flex: 1, writingDirection: 'auto' },
@@ -556,6 +637,9 @@ function makeStyles(t: Theme) {
       marginVertical: t.space.md,
     },
     infoPillWarn: { backgroundColor: t.color.warningWash },
+    infoPillMuted: { backgroundColor: t.color.surfaceMuted },
+    cardLogo: { backgroundColor: t.color.surface },
+    ruledOutNote: { ...t.type.caption, color: t.color.textMuted, textAlign: 'center', marginTop: t.space.lg },
     infoPillText: { ...t.type.label, fontWeight: '500', fontSize: 13, color: t.color.primary, flex: 1 },
     actionRow: { flexDirection: 'row', gap: t.space.sm },
     actionSecondary: {

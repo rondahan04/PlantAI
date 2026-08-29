@@ -26,6 +26,31 @@ export interface PlantDiagnosis {
    * failure; never render an empty label for it.
    */
   variety?: string;
+  /*
+   * The genus, and PlantNet's score summed across every candidate species in
+   * it. `confidence` above scores ONE species, and PlantNet splits its
+   * probability across a genus's siblings - so a photo the app correctly calls
+   * an Anthurium can score 23% on the species while the genus is near certain.
+   *
+   * Optional in both directions on purpose: an older server never sends these,
+   * and every plant saved before this field existed has none. Read them through
+   * `identityConfidence()` in src/lib/confidence.ts, which falls back to the
+   * species-only behaviour when they are absent.
+   */
+  genus?: string;
+  genusConfidence?: number;
+  /*
+   * Which service named this plant. `plantnet` is a botanical database matching
+   * against herbarium specimens; `openai` is a vision model, used only as a
+   * backup when PlantNet came back weak or did not answer at all.
+   *
+   * The distinction is shown to the user rather than hidden: a visual match is
+   * a different KIND of evidence, and someone deciding whether to trust a
+   * treatment plan deserves to know which one they got. Optional in both
+   * directions - an older server never sends it, and plants saved before the
+   * backup existed have none. Absent means PlantNet.
+   */
+  identificationSource?: 'plantnet' | 'openai';
 }
 
 export interface CarePlan {
@@ -59,7 +84,29 @@ export interface Nursery {
   hasPlant: boolean; // a real in-stock product was scraped
   inStockKnown: boolean; // exact listing (vs an LLM estimate)
   plantPrice: string; // '₪XX' or '-'
-  availabilityNote?: string; // estimate text when inStockKnown is false
+  /* Legacy pre-formatted string; read `availability` instead. Still sent so a
+   * job started by an older server keeps rendering. */
+  availabilityNote?: string;
+  /*
+   * found     - a real listing. Shown.
+   * not_sold  - we read their catalogue, the plant is not in it. HIDDEN.
+   * not_found - we could not read the shop. Shown as "didn't find the product".
+   */
+  outcome?: 'found' | 'not_sold' | 'not_found';
+  /* The specific product page behind plantPrice - the Order button's target. */
+  productUrl?: string;
+  /* Which listing plantPrice belongs to, and how many matched. */
+  productName?: string;
+  matchCount?: number;
+  /* A final LLM pass did not trust this price, so plantPrice is '-'. */
+  priceSuspect?: boolean;
+  priceNote?: string;
+  /* Structured availability - see src/lib/availability.ts for presentation. */
+  availability?: {
+    kind: 'estimate' | 'unreadable' | 'error';
+    confidence?: number;
+    detail: string;
+  };
   shipsToHome: boolean; // national ship-to-home option (vs local store)
   rating?: number;
   reviewCount?: number;
@@ -72,16 +119,34 @@ export interface Nursery {
 
 export type DeliveryMode = 'delivery' | 'pickup';
 
+/* The three destinations in the bottom tab bar. `Scan` hosts nothing - its tab
+ * press pushes the root-stack Camera screen instead. */
+export type MainTabParamList = {
+  Portfolio: undefined;
+  Scan: undefined;
+  Find: undefined;
+};
+
 export type RootStackParamList = {
   Onboarding: undefined;
-  Home: undefined;
+  /* The bottom-tab navigator. Keeps the name `Home` so the eleven existing
+   * navigate('Home') / replace('Home') call sites are untouched - navigating to
+   * a navigator lands on its initial route, which is now Portfolio.
+   *
+   * Hand-written rather than NavigatorScreenParams: tsconfig.node.json pulls
+   * this file in through the colocated test files, and importing
+   * @react-navigation here drags React Native's globals into the server
+   * program, where they redefine Blob and break server/diagnose.ts. */
+  Home: { screen?: keyof MainTabParamList } | undefined;
   Camera: undefined;
   Diagnosis: {
     imageUri: string;
     diagnosis: PlantDiagnosis;
   };
   PlantDetail: { plantId: string };
-  WateringHistory: { plantId: string };
+  /* `kind` is optional so the existing navigate({ plantId }) call sites keep
+   * working and default to watering. */
+  WateringHistory: { plantId: string; kind?: 'water' | 'repot' | 'fertilizer' };
   Nurseries: {
     plantName: string;
     lat: number;
@@ -93,8 +158,18 @@ export type RootStackParamList = {
   ForgotPassword: undefined;
   ResetPasswordConfirm: undefined;
   Settings: undefined;
-  EditProfileField: { field: 'full_name' | 'username'; current: string };
+  EditProfileField: { field: 'full_name' | 'username' | 'bio'; current: string };
   ManageAccount: undefined;
   ChangePassword: undefined;
   Notifications: undefined;
+  /*
+   * The species catalog, pushed from the add-plant form. It cannot take an
+   * onPick callback - params are persisted and restored, so they have to stay
+   * serializable - so the picker returns its answer as data: it pops back to
+   * the AddPlant already below it in the stack, carrying the chosen id.
+   */
+  SpeciesPicker: undefined;
+  /* `picked` is absent on the way in and present on the way back from the
+   * picker, which is why the whole params object is optional. */
+  AddPlant: { picked?: { catalogId: string } } | undefined;
 };

@@ -19,6 +19,7 @@ import {
   loadEnv,
   env,
   createSearcher,
+  hostOf,
   extractAndVerifyPlants,
   inferAvailabilityLLM,
   scrapeUrl,
@@ -93,32 +94,30 @@ const NATIONAL_NURSERIES = [
   'https://decogarden.co.il/',
 ];
 
-const hostOf = (u: string): string => {
-  try {
-    return new URL(u).hostname.replace(/^www\./, '').toLowerCase();
-  } catch {
-    return u.toLowerCase();
-  }
-};
-
 async function handleScrape(query: string, urls: string[] = readUrls()): Promise<Row[]> {
   const t0 = Date.now();
   console.log(`\n🔍 SEARCH "${query}" - ${urls.length} sites @ ${new Date().toISOString()}`);
   const results = await Promise.all(
     urls.map(async (url): Promise<Row[]> => {
-      const site = new URL(url).hostname.replace(/^www\./, '');
+      const site = hostOf(url); // same key the searcher's per-host caches use
       const ts = Date.now();
       try {
         const { md, platform, picked } = await searcher.fetchSearchMarkdown(url, query, site);
         console.log(`   [${site}] platform=${platform} picked=${picked}`);
-        const { plants, report, engines } = await extractAndVerifyPlants({
+        const { plants, report, engines, funnel } = await extractAndVerifyPlants({
           markdown: md,
           query,
           site,
           openaiKey: OPENAI_KEY,
         });
+        // The funnel stage is the point of this line. "0 item(s)" alone cannot
+        // tell a site that genuinely lacks the plant (no_match) from one whose
+        // markup our filters failed to parse (no_excerpt) or that never scraped
+        // at all (no_markdown) - and only the second is a bug we can fix.
         console.log(
-          `   [${site}] ✅ ${plants.length} item(s) [${engines.extractor}→${engines.verifier}] ` +
+          `   [${site}] ${funnel.stage === 'ok' ? '✅' : '⬜'} ${plants.length} item(s) ` +
+            `stage=${funnel.stage} md=${funnel.mdChars} excerpt=${funnel.excerptChars} ` +
+            `extracted=${funnel.extracted} [${engines.extractor}→${engines.verifier}] ` +
             `valid=${report.is_valid} conf=${report.confidence_score} in ${Date.now() - ts}ms`
         );
         if (plants.length > 0) {
@@ -136,7 +135,11 @@ async function handleScrape(query: string, urls: string[] = readUrls()): Promise
         const origin = new URL(url).origin;
         let homeMd = '';
         try {
-          homeMd = await scrapeUrl(origin, FIRECRAWL_KEY!, { tavilyKey: TAVILY_KEY });
+          // Platform identification already read this homepage - reuse it
+          // instead of paying Firecrawl twice for the same bytes.
+          homeMd =
+            searcher.cachedHomeMarkdown(site) ||
+            (await scrapeUrl(origin, FIRECRAWL_KEY!, { tavilyKey: TAVILY_KEY }));
         } catch {
           /* both providers failed → no signal; inferAvailabilityLLM('') → ~0% unreachable */
         }
