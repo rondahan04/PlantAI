@@ -172,6 +172,9 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
       // normal: the in-app countdown above is unaffected, so there is nothing
       // to tell the user about.
       const reminderId = await scheduleWateringReminder({
+        // The DISPLAY name on purpose, nickname and all: this is a notification
+        // the user reads, and "Steve needs water" is better than the species.
+        // Contrast the nursery search below, which is a query and must not.
         plantName,
         dueAt: next.nextDueAt,
         now: at,
@@ -453,7 +456,16 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
         */}
         <Pressable
           style={({ pressed }) => [s.findBtn, pressed && { opacity: 0.7 }]}
-          onPress={() => findNurseries(plantName, 'delivery')}
+          /*
+           * The SPECIES, never the nickname. Everything else on this screen
+           * shows the display name, but this one is a query into a paid scrape:
+           * a user who called their monstera "Steve" would otherwise send
+           * nurseries looking for "Steve". Falls back to the display name only
+           * when there is nothing else to search for.
+           */
+          onPress={() =>
+            findNurseries(plant.species?.name ?? plant.diagnosis?.plantName ?? plantName, 'delivery')
+          }
           disabled={searching}
           accessibilityRole="button"
           accessibilityState={{ disabled: searching }}

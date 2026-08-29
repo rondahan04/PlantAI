@@ -551,7 +551,9 @@ test('a plant saved before watering existed still loads', () => {
   const s = fakeStorage({
     [LIBRARY_KEY]: JSON.stringify({
       version: LIBRARY_VERSION,
-      plants: [{ id: 'old-1', savedAt: '2026-08-01T00:00:00.000Z', photoUri: 'file:///a.jpg', diagnosis }],
+      plants: [
+        { id: 'old-1', savedAt: '2026-08-01T00:00:00.000Z', photoUri: 'file:///a.jpg', addedVia: 'scan', diagnosis },
+      ],
     }),
   });
   const store = createPlantStore(s.deps, fixedOpts());
@@ -1003,8 +1005,125 @@ test('one unreadable record does not stop the rest of a v1 library migrating', (
   assert.deepEqual(loaded.plants.map((p) => p.id), ['p1', 'p3']);
   assert.deepEqual(loaded.plants.map((p) => p.addedVia), ['scan', 'scan']);
   assert.equal(s.data.get(QUARANTINE_KEY), undefined, 'nothing was quarantined');
+  assert.equal(JSON.parse(s.data.get(LIBRARY_KEY)!).version, 2);
+});
+
+test('the migration write-back HIDES a damaged record, it does not delete it', () => {
+  /*
+   * The most destructive thing this module could do, and it would look like
+   * housekeeping.
+   *
+   * Before v2 the migration table was empty, so the write-back never ran and a
+   * record that failed validation was merely hidden - its bytes sat on disk,
+   * recoverable. The moment a real migration exists, that same line rewrites
+   * every library on first launch after the upgrade. Filtering there would
+   * turn "hidden until we can read it again" into "deleted", silently, with
+   * load() still reporting ok and no quarantine copy kept.
+   *
+   * So: the migrated blob is written back WHOLE. Only the value handed to the
+   * caller is filtered.
+   */
+  const s = fakeStorage();
+  const good = {
+    id: 'good',
+    savedAt: '2026-01-01T00:00:00.000Z',
+    photoUri: 'file://good.jpg',
+    diagnosis,
+  };
+  const damaged = {
+    id: 'damaged',
+    savedAt: '2026-01-01T00:00:00.000Z',
+    photoUri: 'file://damaged.jpg',
+    // Enough of a plant to be worth keeping, too broken to render: the screens
+    // map over `issues` unguarded.
+    diagnosis: { ...diagnosis, issues: 'not an array' },
+  };
+  s.deps.setItem(LIBRARY_KEY, JSON.stringify({ version: 1, plants: [good, damaged] }));
+
+  const loaded = createPlantStore(s.deps, fixedOpts()).load();
+  assert.deepEqual(loaded.plants.map((p) => p.id), ['good'], 'the damaged record is not handed out');
 
   const written = JSON.parse(s.data.get(LIBRARY_KEY)!);
-  assert.equal(written.version, 2);
-  assert.deepEqual(written.plants.map((p: any) => p.id), ['p1', 'p3'], 'the write-back drops it too');
+  assert.equal(written.version, 2, 'the migration did run');
+  assert.deepEqual(
+    written.plants.map((p: any) => p.id),
+    ['good', 'damaged'],
+    'the damaged bytes are STILL on disk - hiding a record must never erase it'
+  );
+  assert.deepEqual(
+    written.plants[1].diagnosis.issues,
+    'not an array',
+    'and untouched, so a later build or a support conversation can still recover it'
+  );
+});
+
+test('a malformed species does not take a perfectly good diagnosis down with it', () => {
+  /*
+   * The two identity fields fail differently. A half-formed diagnosis is fatal
+   * because the detail screen maps over `issues` and `treatments` unguarded; a
+   * half-formed species is not, because every reader says `plant.species?.name`
+   * and gets a fallback. Dropping this plant would be data loss with no
+   * rendering risk behind it.
+   */
+  const s = fakeStorage();
+  s.deps.setItem(
+    LIBRARY_KEY,
+    JSON.stringify({
+      version: 2,
+      plants: [
+        {
+          id: 'scanned',
+          savedAt: '2026-01-01T00:00:00.000Z',
+          photoUri: 'file://a.jpg',
+          addedVia: 'scan',
+          diagnosis,
+          species: { name: 'Polly' },
+        },
+      ],
+    })
+  );
+
+  const plants = createPlantStore(s.deps, fixedOpts()).load().plants;
+  assert.deepEqual(plants.map((p) => p.id), ['scanned'], 'the plant survives its junk species');
+  assert.equal(plants[0].diagnosis?.plantName, diagnosis.plantName);
+});
+
+test('a record with an unreadable addedVia is dropped rather than mistyped', () => {
+  // Callers are handed 'scan' | 'manual' and branch on it. Letting 12345
+  // through makes the type a lie in every screen downstream.
+  const s = fakeStorage();
+  s.deps.setItem(
+    LIBRARY_KEY,
+    JSON.stringify({
+      version: 2,
+      plants: [
+        { id: 'bogus', savedAt: '2026-01-01T00:00:00.000Z', photoUri: 'f', addedVia: 12345, diagnosis },
+        { id: 'fine', savedAt: '2026-01-01T00:00:00.000Z', photoUri: 'f', addedVia: 'scan', diagnosis },
+      ],
+    })
+  );
+
+  const store = createPlantStore(s.deps, fixedOpts());
+  assert.deepEqual(store.load().plants.map((p) => p.id), ['fine']);
+  // ...and, per the rule above, not erased: nothing rewrote the blob here, but
+  // the record must still be there if something does.
+  assert.equal(JSON.parse(s.data.get(LIBRARY_KEY)!).plants.length, 2);
+});
+
+test('update refuses a half-formed species rather than writing one', () => {
+  const store = createPlantStore(fakeStorage().deps, { now: () => 0, newId: () => 'id-1' });
+  const species = {
+    name: 'Polly',
+    scientificName: 'Alocasia x amazonica',
+    genus: 'Alocasia',
+    family: 'Aroids',
+  };
+  store.saveManual({ photoUri: 'file://plant.jpg', species });
+
+  // A caller that got past TypeScript - a cast, or JSON from somewhere else.
+  const result = store.update('id-1', { species: { name: 'Polly' } as any });
+
+  assert.ok(result.ok);
+  assert.deepEqual(result.plant.species, species, 'the last good species is kept');
+  assert.deepEqual(store.load().plants.map((p) => p.id), ['id-1'], 'and the plant still loads');
 });

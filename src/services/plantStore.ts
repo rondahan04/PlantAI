@@ -311,6 +311,9 @@ function isSpeciesish(v: unknown): boolean {
  *
  * Requiring BOTH is what v1 did, and would now delete every hand-added plant
  * on load; requiring neither would let the nameless card through.
+ *
+ * Nothing here DELETES: load() filters on the way out and the bytes stay on
+ * disk. See the write-back in load() for why that distinction is load-bearing.
  */
 function isStoredPlant(v: unknown): v is StoredPlant {
   if (typeof v !== 'object' || v === null) return false;
@@ -318,11 +321,27 @@ function isStoredPlant(v: unknown): v is StoredPlant {
   if (typeof p.id !== 'string' || typeof p.savedAt !== 'string' || typeof p.photoUri !== 'string') {
     return false;
   }
-  /* A malformed diagnosis is rejected even when a species could have carried
-   * the record, because the screens that read it assume the shape above. */
+  if (p.addedVia !== 'scan' && p.addedVia !== 'manual') return false;
+  /*
+   * The two identity fields are treated ASYMMETRICALLY, and the difference is
+   * about what each one crashes rather than about how much we trust it.
+   *
+   * A half-formed diagnosis is fatal to the record, because readers walk into
+   * it unguarded: PlantDetailScreen does `diagnosis.issues.map(...)` and
+   * `diagnosis.treatments.map(...)` behind nothing more than a truthiness
+   * check, so a diagnosis with `issues: 'not an array'` is a red screen on
+   * open. Dropping the record trades a crash for a loss we can account for.
+   *
+   * A half-formed species is not, because every reader reaches it as
+   * `plant.species?.name` - undefined on any shape, rendered as a fallback
+   * name, never thrown. So it is treated as ABSENT: the record still loads on
+   * whatever identity it has left, and only a plant with no usable identity at
+   * ALL is dropped. Rejecting it outright would delete a scanned plant with a
+   * perfectly good diagnosis over a field its screens never dereference.
+   */
   if (p.diagnosis !== undefined && !isDiagnosisish(p.diagnosis)) return false;
-  if (p.species !== undefined && !isSpeciesish(p.species)) return false;
-  return p.diagnosis !== undefined || p.species !== undefined;
+  const speciesOk = p.species !== undefined && isSpeciesish(p.species);
+  return p.diagnosis !== undefined || speciesOk;
 }
 
 
@@ -471,8 +490,24 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
       return { ok: false, reason: 'corrupt', plants: [] };
     }
 
+    /*
+     * UNFILTERED, and it has to stay that way - do not "tidy" a
+     * `.filter(isStoredPlant)` back in here.
+     *
+     * This write is the only place the app REWRITES a library it did not just
+     * change, so it is the only place a bad record can be erased instead of
+     * merely hidden. Filtering here would delete every record this build
+     * cannot read, on launch, silently, with load() still returning ok: true
+     * and no quarantine copy kept - failure mode 2 in the header, caused by
+     * the code meant to prevent it. A record we cannot read today may be one a
+     * later build, or a support conversation, can recover.
+     *
+     * The read path below filters on the way OUT, which hides the record
+     * without touching the bytes. That is the non-destructive half, and it is
+     * what the migration's own "broken records are the filter's job" means.
+     */
     if (migrated !== lib && Array.isArray(migrated.plants)) {
-      persist(migrated.plants.filter(isStoredPlant));
+      persist(migrated.plants);
     }
     if (!Array.isArray(migrated.plants)) {
       quarantine(raw);
@@ -623,6 +658,15 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
      * name without it, so there the clear goes through.
      */
     if (updated.species === undefined && updated.diagnosis === undefined) {
+      updated.species = target.species;
+    }
+    /*
+     * Same trap one step earlier: a patch carrying a half-formed species object
+     * writes a record that may fail validation and vanish on the next load.
+     * TypeScript stops an honest caller, but the guard above is worthless if a
+     * malformed value walks past it, so the last good species wins.
+     */
+    if (patch.species !== undefined && !isSpeciesish(patch.species)) {
       updated.species = target.species;
     }
     /*
