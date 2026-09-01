@@ -430,7 +430,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
           <View style={s.section}>
             <Text style={s.sectionTitle}>{copy.plantDetail.treatments}</Text>
             {diagnosis.treatments.map((tr, i) => {
-              const product = treatmentProduct(tr.title);
+              const product = treatmentProduct(tr);
               return (
                 <View key={i} style={s.treatmentCard}>
                   {tr.urgent && (

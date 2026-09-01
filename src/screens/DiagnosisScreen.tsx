@@ -85,7 +85,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
      */
     for (const treatment of diagnosis.treatments) {
       if (!treatment.urgent) continue;
-      const product = treatmentProduct(treatment.title);
+      const product = treatmentProduct(treatment);
       if (product) prefetch(product);
     }
   }, [prefetch, diagnosis.plantName, diagnosis.treatments]);
@@ -347,7 +347,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
               <Text style={s.sectionTitle}>{copy.diagnosis.treatments}</Text>
             </View>
             {diagnosis.treatments.map((tr, i) => {
-              const product = treatmentProduct(tr.title);
+              const product = treatmentProduct(tr);
               return (
                 <View key={i} style={[s.treatmentCard, tr.urgent && s.treatmentUrgent]}>
                   {tr.urgent && (
