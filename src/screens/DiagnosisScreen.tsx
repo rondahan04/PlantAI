@@ -25,6 +25,7 @@ import { identityConfidence } from '../lib/confidence';
 import { treatmentProduct } from '../lib/treatments';
 import { useSession } from '../hooks/useSession';
 import { getSessionHint } from '../services/sessionHint';
+import { copy } from '../services/language';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Diagnosis'>;
@@ -101,10 +102,12 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
     color: conditionColor[diagnosis.condition] || conditionColor.moderate,
   };
 
-  const identity = identityConfidence(diagnosis.confidence, diagnosis.plantName, {
-    genus: diagnosis.genus,
-    genusPercent: diagnosis.genusConfidence,
-  });
+  const identity = identityConfidence(
+    diagnosis.confidence,
+    diagnosis.plantName,
+    { genus: diagnosis.genus, genusPercent: diagnosis.genusConfidence },
+    copy.identity
+  );
 
   const handleFindReplacement = () => findNurseries(diagnosis.plantName, deliveryMode);
 
@@ -144,10 +147,10 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
       // The store already distinguishes this from every other failure: the
       // write did not land, and retrying after freeing space will work.
       Alert.alert(
-        "Couldn't save",
+        copy.diagnosis.saveFailedTitle,
         result.reason === 'network'
-          ? "Couldn't reach your account. Check your connection and try again."
-          : 'Your device is out of storage space. Free some space and try again.',
+          ? copy.diagnosis.saveFailedNetwork
+          : copy.diagnosis.saveFailedStorage,
         [{ text: 'OK' }]
       );
       return;
@@ -200,16 +203,16 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
         {/* Header */}
         <View style={s.header}>
-          <Pressable style={s.backBtn} onPress={() => navigation.navigate('Home')} accessibilityRole="button" accessibilityLabel="Back to home">
+          <Pressable style={s.backBtn} onPress={() => navigation.navigate('Home')} accessibilityRole="button" accessibilityLabel={copy.diagnosis.backToHomeA11y}>
             <Ionicons name="chevron-back" size={22} color={t.color.primary} style={directionalIconStyle} />
-            <Text style={s.backText}>Back</Text>
+            <Text style={s.backText}>{copy.diagnosis.back}</Text>
           </Pressable>
-          <Text style={s.headerTitle}>Diagnosis</Text>
+          <Text style={s.headerTitle}>{copy.diagnosis.headerTitle}</Text>
           <Pressable
             style={s.saveBtn}
             onPress={saved ? handleUnsave : handleSave}
             accessibilityRole="button"
-            accessibilityLabel={saved ? 'Saved to my plants. Tap to remove.' : 'Save to my plants'}
+            accessibilityLabel={saved ? copy.diagnosis.savedA11y : copy.diagnosis.saveA11y}
             accessibilityState={{ selected: saved }}
             hitSlop={8}
           >
@@ -244,15 +247,14 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
             accessibilityLabel={
               /* The bar below can carry two numbers. A screen reader gets none
                  of that from geometry, so the label states both explicitly. */
-              [
-                identity.namePrefix,
-                identity.headline + '.',
-                identity.genusLed ? `${identity.genusLabel}.` : '',
-                identity.genusLed ? `Closest species ${diagnosis.plantName}, ${identity.label}.` : `${identity.label}.`,
-                identity.needsCaveat ? `${identity.noteTitle}.` : '',
-              ]
-                .filter(Boolean)
-                .join(' ')
+              copy.diagnosis.identityA11y({
+                prefix: identity.namePrefix ?? '',
+                headline: identity.headline,
+                genusLabel: identity.genusLed ? identity.genusLabel : '',
+                species: identity.genusLed ? diagnosis.plantName : '',
+                label: identity.label,
+                caveat: identity.needsCaveat ? identity.noteTitle : '',
+              })
             }
           >
             {identity.headline}
@@ -263,7 +265,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
               being told we could not be specific - "Alocasia" alone on screen
               while the model had already named the cultivar. */}
           {identity.genusLed && (
-            <Text style={s.variety}>Closest species: {diagnosis.plantName}</Text>
+            <Text style={s.variety}>{copy.diagnosis.closestSpecies(diagnosis.plantName)}</Text>
           )}
           {!!diagnosis.variety && <Text style={s.variety}>{diagnosis.variety}</Text>}
           <View style={s.confidenceRow}>
@@ -308,10 +310,10 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
               style={({ pressed }) => [s.caveatBtn, pressed && s.caveatBtnPressed]}
               onPress={() => navigation.replace('Camera')}
               accessibilityRole="button"
-              accessibilityLabel="Not your plant? Retake the photo"
+              accessibilityLabel={copy.diagnosis.retakeA11y}
             >
               <Ionicons name="camera-outline" size={18} color={t.color.foreground} />
-              <Text style={s.caveatBtnText}>Not your plant? Retake photo</Text>
+              <Text style={s.caveatBtnText}>{copy.diagnosis.retake}</Text>
             </Pressable>
           </Animated.View>
         )}
@@ -326,7 +328,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
           <Animated.View style={[s.section, { opacity: fadeAnim }]}>
             <View style={s.sectionTitleRow}>
               <Ionicons name="search-outline" size={18} color={t.color.foreground} />
-              <Text style={s.sectionTitle}>Issues detected</Text>
+              <Text style={s.sectionTitle}>{copy.diagnosis.issues}</Text>
             </View>
             {diagnosis.issues.map((issue, i) => (
               <View key={i} style={s.issueRow}>
@@ -342,7 +344,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
           <Animated.View style={[s.section, { opacity: fadeAnim }]}>
             <View style={s.sectionTitleRow}>
               <Ionicons name="medkit-outline" size={18} color={t.color.foreground} />
-              <Text style={s.sectionTitle}>Treatment plan</Text>
+              <Text style={s.sectionTitle}>{copy.diagnosis.treatments}</Text>
             </View>
             {diagnosis.treatments.map((tr, i) => {
               const product = treatmentProduct(tr.title);
@@ -350,7 +352,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
                 <View key={i} style={[s.treatmentCard, tr.urgent && s.treatmentUrgent]}>
                   {tr.urgent && (
                     <View style={s.urgentBadge}>
-                      <Text style={s.urgentText}>URGENT</Text>
+                      <Text style={s.urgentText}>{copy.diagnosis.urgent}</Text>
                     </View>
                   )}
                   <Text style={s.treatmentTitle}>{tr.title}</Text>
@@ -360,10 +362,10 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
                       style={({ pressed }) => [s.shopBtn, pressed && s.shopBtnPressed]}
                       onPress={() => handleFindTreatment(product)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Find ${product} at nurseries near you`}
+                      accessibilityLabel={copy.diagnosis.findProductA11y(product)}
                     >
                       <Ionicons name="storefront-outline" size={16} color={t.color.primary} />
-                      <Text style={s.shopBtnText}>Find {product} nearby</Text>
+                      <Text style={s.shopBtnText}>{copy.diagnosis.findProduct(product)}</Text>
                     </Pressable>
                   )}
                 </View>
@@ -375,11 +377,11 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
         {/* Replace Section */}
         <Animated.View style={[s.replaceCard, { opacity: fadeAnim }]}>
           <Text style={s.replaceSectionTitle}>
-            {diagnosis.canBeSaved ? 'Or replace with a healthy one' : 'Find a healthy replacement'}
+            {diagnosis.canBeSaved ? copy.diagnosis.replaceOr : copy.diagnosis.replaceTitle}
           </Text>
           {!diagnosis.canBeSaved && (
             <Text style={s.replaceDesc}>
-              This plant is too damaged to save. Find an identical, healthy {diagnosis.plantName} at nurseries near you.
+              {copy.diagnosis.replaceDesc(diagnosis.plantName)}
             </Text>
           )}
 
@@ -401,7 +403,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
                     color={active ? t.color.primary : t.color.textMuted}
                   />
                   <Text style={[s.toggleBtnText, active && s.toggleBtnTextActive]}>
-                    {mode === 'delivery' ? 'Get it delivered today' : 'Pick it up'}
+                    {mode === 'delivery' ? copy.diagnosis.delivered : copy.diagnosis.pickup}
                   </Text>
                 </Pressable>
               );
@@ -413,13 +415,13 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
             onPress={handleFindReplacement}
             disabled={findingNurseries}
             accessibilityRole="button"
-            accessibilityLabel="Find nurseries"
+            accessibilityLabel={copy.diagnosis.findNurseriesA11y}
           >
             {findingNurseries ? (
               <ActivityIndicator color={t.color.onPrimary} />
             ) : (
               <Text style={s.findBtnText}>
-                {deliveryMode === 'delivery' ? 'Find Delivery Options' : 'Find Nearby Nurseries'}
+                {deliveryMode === 'delivery' ? copy.diagnosis.findDelivery : copy.diagnosis.findNearby}
               </Text>
             )}
           </Pressable>
@@ -428,7 +430,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
         {/* Scan again */}
         <Pressable style={s.scanAgainBtn} onPress={() => navigation.navigate('Camera')} accessibilityRole="button">
           <Ionicons name="camera-outline" size={18} color={t.color.primary} />
-          <Text style={s.scanAgainText}>Scan Another Plant</Text>
+          <Text style={s.scanAgainText}>{copy.diagnosis.scanAnother}</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>

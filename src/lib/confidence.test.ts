@@ -158,3 +158,29 @@ test('the identifying service is never named to the user', () => {
   assert.equal(identity.label, '88% species match');
   assert.equal(Object.values(identity).some((v) => typeof v === 'string' && /AI|OpenAI|PlantNet/.test(v)), false);
 });
+
+test('the wording is injectable, so this module never has to know the language', () => {
+  // Same seam as StorageDeps and LocationDeps: the logic decides WHICH message
+  // applies, the caller supplies the words. Without this, four sentences of
+  // user-facing English would be locked inside a pure module the copy tree
+  // cannot reach.
+  const hebrew = identityConfidence(30, 'Monstera deliciosa', {}, {
+    speciesMatch: (n: number) => `${n}% התאמת מין`,
+    genusMatch: (n: number) => `${n}% התאמת סוג`,
+    probably: 'ככל הנראה',
+    possibly: 'ייתכן',
+    genusLedTitle: 'אנחנו יודעים את הקבוצה, לא את המין',
+    genusLedBody: () => 'גוף',
+    moderateTitle: 'איננו בטוחים במין',
+    moderateBody: () => 'גוף',
+    lowTitle: 'לא הצלחנו לזהות את הצמח',
+    lowBody: () => 'גוף',
+  });
+
+  assert.equal(hebrew.namePrefix, 'ייתכן');
+  assert.equal(hebrew.label, '30% התאמת מין');
+  assert.equal(hebrew.noteTitle, 'לא הצלחנו לזהות את הצמח');
+  // The decision itself is unchanged - only the words are.
+  assert.equal(hebrew.tier, 'low');
+  assert.equal(hebrew.needsCaveat, true);
+});

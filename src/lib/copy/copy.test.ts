@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TREES } from './index.ts';
 import { SOIL_MEDIUM_IDS } from '../soilMedia.ts';
+import { EN_IDENTITY_COPY } from '../confidence.ts';
 
 test('every language names itself in its own script', () => {
   // A picker that offers "Hebrew" to someone who only reads Hebrew is a picker
@@ -55,4 +56,23 @@ test('every growing medium has copy in both languages', () => {
       assert.ok(TREES[lang].soilMedia[id]?.description, `${lang}.${id} description`);
     }
   }
+});
+
+test('the English identity copy matches the default inside lib/confidence', () => {
+  // Two copies of these sentences exist on purpose: confidence.ts needs a
+  // default so its own tests and every pre-Hebrew caller keep working, and the
+  // copy tree needs them so Hebrew has something to sit beside. This asserts
+  // they have not drifted apart.
+  const en = TREES.en.identity;
+  assert.equal(en.speciesMatch(42), EN_IDENTITY_COPY.speciesMatch(42));
+  assert.equal(en.genusMatch(42), EN_IDENTITY_COPY.genusMatch(42));
+  assert.equal(en.probably, EN_IDENTITY_COPY.probably);
+  assert.equal(en.possibly, EN_IDENTITY_COPY.possibly);
+  assert.equal(en.genusLedTitle, EN_IDENTITY_COPY.genusLedTitle);
+  const genusArgs = { genus: 'Alocasia', genusPercent: 90, plantName: 'X', percent: 30 };
+  assert.equal(en.genusLedBody(genusArgs), EN_IDENTITY_COPY.genusLedBody(genusArgs));
+  assert.equal(en.moderateTitle, EN_IDENTITY_COPY.moderateTitle);
+  assert.equal(en.moderateBody('X'), EN_IDENTITY_COPY.moderateBody('X'));
+  assert.equal(en.lowTitle, EN_IDENTITY_COPY.lowTitle);
+  assert.equal(en.lowBody('X'), EN_IDENTITY_COPY.lowBody('X'));
 });

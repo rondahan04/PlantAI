@@ -22,6 +22,99 @@ export const he: Copy = {
     ok: 'אישור',
     back: 'חזרה',
   },
+  identity: {
+    speciesMatch: (percent: number) => `${percent}% התאמה למין`,
+    genusMatch: (percent: number) => `${percent}% התאמה לסוג`,
+    probably: 'ככל הנראה',
+    possibly: 'ייתכן שזה',
+    genusLedTitle: 'אנחנו יודעים מהי הקבוצה, אבל לא את המין המדויק',
+    genusLedBody: (p: { genus: string; genusPercent: number; plantName: string; percent: number }) =>
+      `זהו ${p.genus} (${p.genusPercent}% התאמה). איננו יכולים לקבוע איזה מין בדיוק - ${p.plantName} הוא הקרוב ביותר עם ${p.percent}%. הטיפול המתאים לקבוצה אמין; מה שספציפי למין עשוי שלא להתאים.`,
+    moderateTitle: 'איננו בטוחים במין',
+    moderateBody: (plantName: string) =>
+      `זה נראה כמו ${plantName}, אבל ההתאמה אינה ודאית. ההמלצות שלמטה מניחות שהזיהוי נכון.`,
+    lowTitle: 'לא הצלחנו לזהות את הצמח',
+    lowBody: (plantName: string) =>
+      `${plantName} הוא הניחוש הטוב ביותר שלנו, והוא חלש. התייחסו להמלצות שלמטה כנקודת פתיחה, לא כאבחון. תמונה שבה העלים ממלאים את הפריים, באור יום, בדרך כלל מזהה הרבה יותר טוב.`,
+  },
+  diagnosis: {
+    headerTitle: 'אבחון',
+    back: 'חזרה',
+    backToHomeA11y: 'חזרה למסך הבית',
+    saveA11y: 'שמירה לצמחים שלי',
+    savedA11y: 'נשמר לצמחים שלי. הקישו כדי להסיר.',
+    saveFailedTitle: 'לא הצלחנו לשמור',
+    saveFailedNetwork: 'לא הצלחנו להגיע לחשבון שלכם. בדקו את החיבור ונסו שוב.',
+    saveFailedStorage: 'אין מספיק מקום פנוי במכשיר. פנו מקום ונסו שוב.',
+    closestSpecies: (name: string) => `המין הקרוב ביותר: ${name}`,
+    identityA11y: (parts: {
+      prefix: string;
+      headline: string;
+      genusLabel: string;
+      species: string;
+      label: string;
+      caveat: string;
+    }) =>
+      [
+        parts.prefix,
+        `${parts.headline}.`,
+        parts.genusLabel ? `${parts.genusLabel}.` : '',
+        parts.species ? `המין הקרוב ביותר ${parts.species}, ${parts.label}.` : `${parts.label}.`,
+        parts.caveat ? `${parts.caveat}.` : '',
+      ]
+        .filter(Boolean)
+        .join(' '),
+    retakeA11y: 'לא הצמח שלכם? צילום מחדש',
+    retake: 'לא הצמח שלכם? לצלם מחדש',
+    issues: 'בעיות שזוהו',
+    treatments: 'תוכנית טיפול',
+    urgent: 'דחוף',
+    findProduct: (product: string) => `למצוא ${product} בסביבה`,
+    findProductA11y: (product: string) => `למצוא ${product} במשתלות בסביבתכם`,
+    replaceOr: 'או להחליף בצמח בריא',
+    replaceTitle: 'למצוא תחליף בריא',
+    replaceDesc: (name: string) =>
+      `הצמח הזה פגוע מכדי להציל. אפשר למצוא ${name} זהה ובריא במשתלות בסביבתכם.`,
+    delivered: 'משלוח היום',
+    pickup: 'איסוף עצמי',
+    findNurseriesA11y: 'חיפוש משתלות',
+    findDelivery: 'אפשרויות משלוח',
+    findNearby: 'משתלות בסביבה',
+    scanAnother: 'סריקת צמח נוסף',
+  },
+  camera: {
+    notAPlantTitle: 'לא מצאנו צמח בתמונה הזו',
+    notAPlantBody: 'כוונו את המצלמה לעלים, לגבעולים או לפרחים, מקרוב מספיק כדי למלא את רוב הפריים.',
+    unsupportedTitle: 'לא הצלחנו לקרוא את התמונה',
+    unsupportedBody:
+      'הקובץ הזה בפורמט שאנחנו לא יודעים לפתוח. תמונה שצולמה במצלמה, או JPEG או PNG מהגלריה, תעבוד.',
+    unavailableTitle: 'האבחון אינו זמין',
+    unavailableBody: 'הגרסה הזו לא מחוברת לשירות זיהוי צמחים. אין שום בעיה בתמונה או בצמח שלכם.',
+    failedTitle: 'לא הצלחנו לסיים את האבחון',
+    failedBody: 'שירות הצמחים לא ענה. התמונה שלכם בסדר גמור - זו תקלה אצלנו.',
+    captureFailedTitle: 'המצלמה לא צילמה את זה',
+    captureFailedBody: 'משהו הפריע לצילום. נסו שוב, או בחרו תמונה קיימת מהגלריה.',
+    photoPermissionTitle: 'PlantAI צריך גישה לתמונות שלכם',
+    photoPermissionBody: 'אשרו גישה לתמונות בהגדרות כדי לבחור תמונה שכבר צילמתם.',
+    tryAgain: 'לנסות שוב',
+    takeAnother: 'לצלם תמונה אחרת',
+    backToHome: 'חזרה למסך הבית',
+    permissionTitle: 'נדרשת גישה למצלמה',
+    permissionDesc: 'PlantAI צריך את המצלמה שלכם כדי לאבחן בעיות בריאות בצמחים.',
+    allowCamera: 'לאשר מצלמה',
+    allowCameraA11y: 'אישור גישה למצלמה',
+    orGallery: 'או לבחור מהגלריה',
+    close: 'סגירה',
+    closeCamera: 'סגירת המצלמה',
+    scanTitle: 'סריקת צמח',
+    flipCamera: 'החלפת מצלמה',
+    hint: 'מרכזו את הצמח בפריים',
+    gallery: 'גלריה',
+    pickFromGallery: 'בחירה מהגלריה',
+    takePhoto: 'צילום',
+    analyzingTitle: 'מנתחים את הצמח שלכם',
+    analyzingDesc: 'אנחנו בוחנים את הסימפטומים,\nמזהים את המין ואת המצב...',
+  },
   careHistory: {
     water: {
       short: 'השקיה',

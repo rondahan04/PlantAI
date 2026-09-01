@@ -39,6 +39,118 @@ export const en = {
    * asserts the overlay covers every SOIL_MEDIUM_ID, so adding a ninth medium
    * fails until its Hebrew exists rather than silently rendering English.
    */
+  /*
+   * Injected into `identityConfidence` (lib/confidence.ts), which decides WHICH
+   * message applies but must not know the language. English here duplicates
+   * EN_IDENTITY_COPY in that module, which is its default for pre-Hebrew
+   * callers and its tests; the copy test asserts the two agree.
+   */
+  identity: {
+    speciesMatch: (percent: number) => `${percent}% species match`,
+    genusMatch: (percent: number) => `${percent}% genus match`,
+    probably: 'Probably',
+    possibly: 'Possibly',
+    genusLedTitle: 'We know the plant group, not the exact species',
+    genusLedBody: (p: { genus: string; genusPercent: number; plantName: string; percent: number }) =>
+      `This is a ${p.genus} (${p.genusPercent}% match). We cannot tell which species - ${p.plantName} is the closest at ${p.percent}%. Care for the group is reliable; anything species-specific may not be.`,
+    moderateTitle: 'We are not certain of the species',
+    moderateBody: (plantName: string) =>
+      `This looks like ${plantName}, but it is not a confident match. The advice below assumes that identification is right.`,
+    lowTitle: 'We could not identify this plant',
+    lowBody: (plantName: string) =>
+      `${plantName} is our best guess and it is a weak one. Treat the advice below as a starting point, not a diagnosis. A photo with the leaves filling the frame, in daylight, usually identifies much better.`,
+  },
+  diagnosis: {
+    headerTitle: 'Diagnosis',
+    back: 'Back',
+    backToHomeA11y: 'Back to home',
+    saveA11y: 'Save to my plants',
+    savedA11y: 'Saved to my plants. Tap to remove.',
+    saveFailedTitle: "Couldn't save",
+    saveFailedNetwork: "Couldn't reach your account. Check your connection and try again.",
+    saveFailedStorage: 'Your device is out of storage space. Free some space and try again.',
+    closestSpecies: (name: string) => `Closest species: ${name}`,
+    /* The confidence bar can carry two numbers, and a screen reader gets none
+     * of that from geometry - so the label states both explicitly. */
+    identityA11y: (parts: {
+      prefix: string;
+      headline: string;
+      genusLabel: string;
+      species: string;
+      label: string;
+      caveat: string;
+    }) =>
+      [
+        parts.prefix,
+        `${parts.headline}.`,
+        parts.genusLabel ? `${parts.genusLabel}.` : '',
+        parts.species
+          ? `Closest species ${parts.species}, ${parts.label}.`
+          : `${parts.label}.`,
+        parts.caveat ? `${parts.caveat}.` : '',
+      ]
+        .filter(Boolean)
+        .join(' '),
+    retakeA11y: 'Not your plant? Retake the photo',
+    retake: 'Not your plant? Retake photo',
+    issues: 'Issues detected',
+    treatments: 'Treatment plan',
+    urgent: 'URGENT',
+    findProduct: (product: string) => `Find ${product} nearby`,
+    findProductA11y: (product: string) => `Find ${product} at nurseries near you`,
+    replaceOr: 'Or replace with a healthy one',
+    replaceTitle: 'Find a healthy replacement',
+    replaceDesc: (name: string) =>
+      `This plant is too damaged to save. Find an identical, healthy ${name} at nurseries near you.`,
+    delivered: 'Get it delivered today',
+    pickup: 'Pick it up',
+    findNurseriesA11y: 'Find nurseries',
+    findDelivery: 'Find Delivery Options',
+    findNearby: 'Find Nearby Nurseries',
+    scanAnother: 'Scan Another Plant',
+  },
+  camera: {
+    /*
+     * `describeFailure` is the single source of failure copy on this screen
+     * (E9) - the reason there is one voice here instead of three. Each entry is
+     * a title the user can act on plus a body that says what to do next, never
+     * a status code.
+     */
+    notAPlantTitle: "We couldn't find a plant in that photo",
+    notAPlantBody:
+      'Point the camera at leaves, stems, or flowers, close enough to fill most of the frame.',
+    unsupportedTitle: "We can't read that image",
+    unsupportedBody:
+      'That file is in a format we cannot open. A photo taken with the camera, or a JPEG or PNG from your library, will work.',
+    unavailableTitle: 'Diagnosis is unavailable',
+    unavailableBody:
+      'This build is not pointed at a plant identification service. Nothing is wrong with your photo or your plant.',
+    failedTitle: "We couldn't finish the diagnosis",
+    failedBody: 'The plant service did not answer. Your photo is fine - this one is on us.',
+    captureFailedTitle: "The camera didn't capture that",
+    captureFailedBody: 'Something interrupted the shot. Try again, or pick an existing photo instead.',
+    photoPermissionTitle: 'PlantAI needs access to your photos',
+    photoPermissionBody: 'Allow photo access in Settings to pick a picture you already took.',
+    tryAgain: 'Try again',
+    takeAnother: 'Take another photo',
+    backToHome: 'Back to home',
+    permissionTitle: 'Camera access needed',
+    permissionDesc: 'PlantAI needs your camera to diagnose plant health issues.',
+    allowCamera: 'Allow Camera',
+    allowCameraA11y: 'Allow camera access',
+    orGallery: 'Or pick from gallery instead',
+    close: 'Close',
+    closeCamera: 'Close camera',
+    scanTitle: 'Scan Plant',
+    flipCamera: 'Flip camera',
+    hint: 'Center your plant in the frame',
+    gallery: 'Gallery',
+    pickFromGallery: 'Pick from gallery',
+    takePhoto: 'Take photo',
+    analyzingTitle: 'Analyzing your plant',
+    /* Break kept inside the string so each language chooses where it falls. */
+    analyzingDesc: "We're examining the symptoms,\nidentifying the species and condition...",
+  },
   careHistory: {
     /*
      * `logged` and `noneThisMonth` are functions, not templates with a plural
