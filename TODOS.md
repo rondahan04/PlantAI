@@ -4,6 +4,10 @@
 > CEO plan: `~/.gstack/projects/rondahan04-PlantAI/ceo-plans/2026-08-11-retention-spine.md`
 > **M1 shipped 2026-08-18** - https://plantai-api-eev0.onrender.com. Diagnosis and nursery
 > scrape both verified live against it. 92 tests green.
+> **Portfolio tab + Epic 3a shipped 2026-08-29** (PR #5, PR #6). The library is now a portfolio
+> of plants you own rather than a list of scans, and it follows the account rather than the
+> handset. 519 tests green. ⚠️ Epic 3a's on-device script has not been run against merged main
+> (Trello #80).
 
 ---
 
@@ -219,6 +223,24 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
 19. ✅ **[ops] Tavily student plan - done 2026-08-22.** Key swapped in local `.env`
     (`EXPO_PUBLIC_TAVILY_API_KEY`) and in Render's `TAVILY_API_KEY` env var (`sync: false`,
     dashboard-only). No code change.
+20. ✅ **[M3] Portfolio tab - done 2026-08-29 (PR #5, Trello #75).** My Plants becomes a
+    Portfolio: one list of every plant with All / Diagnosed filters, a "Due this week" strip,
+    and a second door in - add a plant you already own, by hand, from a 359-entry species
+    catalog. Per-genus care plans cover all eight growing media in one model call, so switching
+    a plant from soil to LECA reschedules it instantly and offline. Library v2 makes `diagnosis`
+    optional and stamps every existing plant `addedVia: 'scan'`. Verified on device before merge.
+    Follow-ups filed: Trello #76 (catalog accuracy), #77 (reminder confirmation), #78 (repot card).
+21. ✅ **[M3] Epic 3a - the library follows the account - done 2026-08-29 (PR #6, Trello #79).**
+    Logged out, nothing changed and there is still no login wall. Logged in, every mutation
+    writes to Supabase first and only then to the local store, which is demoted to a mirror -
+    a failed write cannot leave the phone showing a plant the account does not have. Photos go
+    to a private bucket read through signed URLs; the mirror is wiped on sign-out and on account
+    deletion. `plantRepo` is the facade, `plantCloud` the tested network layer,
+    `supabasePlantCloud` the only file that talks to Supabase. New route `POST /api/care-plan`.
+    All four migrations applied to the live project and verified.
+    ⚠️ **Two things still open** - the 12-step device script (Trello #80), and whether Render
+    actually has `SUPABASE_SERVICE_ROLE_KEY`, without which the shared scrape cache is silently
+    off and every search is a live paid scrape (Trello #81).
 
 ---
 
@@ -243,7 +265,7 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
 | - | Per-device quota / App Attest | M/L | Real protection vs a bundled secret. |
 | - | Home screen redesign | M | Scope undefined - what's changing and why. Conflicts with existing "do not touch Home" design-review rule; needs a design pass before code. |
 | - | Settings tab | M | Superseded by #1 (User Accounts + Settings/Profile) - scoped and filed 2026-08-22, eng-reviewed. Accounts are opt-in, no login wall on Home/diagnosis. |
-| - | Epic 3 - sync plant library to Supabase account | L | Deferred from #1 during eng review to keep the auth PR reviewable. Design: on first login on a device with local plants, one-shot opt-in prompt ("Import your N saved plants?") writes them into a `plants` table tagged with `user_id`, then clears local storage; declining leaves local storage untouched. Needs a `plants` table + cascade-delete-on-account-delete. Blocked on #1 shipping first. |
+| - | ~~Epic 3 - sync plant library to Supabase account~~ | L | ✅ **Shipped 2026-08-29 as Epic 3a** - see step 21. Original note kept for the record: deferred from #1 during eng review to keep the auth PR reviewable. Design: on first login on a device with local plants, one-shot opt-in prompt ("Import your N saved plants?") writes them into a `plants` table tagged with `user_id`, then clears local storage; declining leaves local storage untouched. Needs a `plants` table + cascade-delete-on-account-delete. Blocked on #1 shipping first. |
 
 ---
 
@@ -301,6 +323,8 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
 | H3 | One `fail()` helper - stable code to client, provider detail to log with request id. |
 | H7 | Nursery cache `Map` capped at 20, oldest-first. |
 | O1 | `GET /health` → `{gate: {day, allowed, rejected, wouldReject, cap, remaining}, jobs}`. |
+| Portfolio tab | 2026-08-29, PR #5. Portfolio replaces My Plants; hand-added plants; 359-entry species catalog; per-genus care plans across eight growing media in one call; soil picker; water/feed/repot schedules. Library v2 made `diagnosis` optional - and made a previously dead `persist(plants.filter(...))` line live, which would have silently erased damaged records on the first launch after upgrade. Caught in review, fixed, regression-tested. |
+| Epic 3a | 2026-08-29, PR #6. Plant library syncs to the Supabase account. Cloud-first writes with the local store as a mirror, one-shot import banner, private photo bucket, wipe on sign-out and on account delete. Also here: nursery scrapes cached server-side for a week and shared across users, and urgent treatments prewarmed from the diagnosis screen. |
 
 ## REVIEWS
 

@@ -113,7 +113,7 @@ footer{color:var(--ink-soft);font-size:0.82rem;border-top:1px solid var(--line);
   <section>
     <h2>Diagram</h2>
     <figure>
-      <svg viewBox="0 0 760 220" role="img" aria-label="Phone app talks to one Node server, which calls PlantNet and OpenAI for diagnosis, and Google Places, Firecrawl/Tavily, and OpenAI again for nursery search.">
+      <svg viewBox="0 0 760 310" role="img" aria-label="Phone app talks to one Node server, which calls PlantNet and OpenAI for diagnosis, and Google Places, Firecrawl/Tavily, and OpenAI again for nursery search. Both the app and the server also talk to Supabase: the app for the account and the plant library, the server for the shared scrape cache.">
         <defs>
           <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
             <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
@@ -146,9 +146,23 @@ footer{color:var(--ink-soft);font-size:0.82rem;border-top:1px solid var(--line);
           <rect x="600" y="84" width="150" height="52" rx="8" fill="none" stroke="currentColor"/>
           <text x="675" y="107" text-anchor="middle" class="sub">Firecrawl</text>
           <text x="675" y="124" text-anchor="middle" class="sub">(Tavily fallback)</text>
+
+          <!-- Supabase is the one box BOTH sides reach, and the two arrows into
+               it mean different things: the app holds the user's session and
+               writes its own rows under RLS, while the server holds the
+               service-role key and writes the shared scrape cache. -->
+          <polyline points="75,140 75,271 134,271" fill="none" stroke="currentColor" marker-end="url(#a)"/>
+          <text x="84" y="200" class="sub">account, library, photos</text>
+
+          <line x1="279" y1="150" x2="279" y2="239" stroke="currentColor" marker-end="url(#a)"/>
+          <text x="288" y="200" class="sub">scrape cache</text>
+
+          <rect x="140" y="245" width="200" height="52" rx="8" fill="none" stroke="currentColor"/>
+          <text x="240" y="268" text-anchor="middle">Supabase</text>
+          <text x="240" y="285" text-anchor="middle" class="sub">Postgres + Auth + Storage</text>
         </g>
       </svg>
-      <figcaption>One server, five providers. The app never talks to a provider directly.</figcaption>
+      <figcaption>One server, five providers, one database. The app never talks to a provider directly - but it does talk to Supabase directly, because the session is the user's, not the server's.</figcaption>
     </figure>
   </section>
 
@@ -158,11 +172,14 @@ footer{color:var(--ink-soft);font-size:0.82rem;border-top:1px solid var(--line);
       <li><b>Expo / React Native</b><span>the phone app itself</span></li>
       <li><b>Node <code>http</code></b><span>the backend - no framework, one process</span></li>
       <li><b>PlantNet API</b><span>identifies the plant species from a photo</span></li>
-      <li><b>OpenAI (GPT-5.5, vision)</b><span>diagnoses health from the photo; also extracts product info from scraped text</span></li>
+      <li><b>OpenAI (gpt-5.6-luna, vision)</b><span>diagnoses health from the photo; writes the per-genus care plans; also extracts product info from scraped text</span></li>
       <li><b>Google Places API</b><span>finds nearby nurseries + their websites</span></li>
       <li><b>Firecrawl</b><span>scrapes a nursery's site to markdown</span></li>
       <li><b>Tavily</b><span>backup scraper if Firecrawl fails</span></li>
-      <li><b>expo-sqlite / kv-store</b><span>saves the plant library on-device</span></li>
+      <li><b>Supabase Auth</b><span>optional account - email sign-in. Nothing is behind a login wall</span></li>
+      <li><b>Supabase Postgres</b><span><code>plants</code> (the library, once you have an account), <code>profiles</code>, and <code>nursery_searches</code> (scrape cache shared across users)</span></li>
+      <li><b>Supabase Storage</b><span>plant photos for logged-in users - a private bucket, read through short-lived signed URLs</span></li>
+      <li><b>expo-sqlite / kv-store</b><span>the plant library on-device: the only store when logged out, a mirror of the account when logged in</span></li>
       <li><b>expo-file-system</b><span>saves plant photos on-device</span></li>
       <li><b>expo-notifications</b><span>schedules watering reminders</span></li>
     </ul>
@@ -186,6 +203,30 @@ footer{color:var(--ink-soft);font-size:0.82rem;border-top:1px solid var(--line);
       <li>For each one, server calls <b>Firecrawl</b> (or <b>Tavily</b> if that fails) to read the site, then <b>OpenAI</b> to pull out product + price.</li>
       <li>App polls <code>GET /api/nurseries/job/:id</code> until it's done, then shows the results on a map.</li>
     </ol>
+    <p>Step 2 onwards is skipped entirely when <b>Supabase</b> already holds a recent scrape for that plant and location - the cache is shared across every user, so the second person to look for a monstera this week pays nothing and waits seconds instead of minutes.</p>
+  </section>
+
+  <section>
+    <h2>Flow 3 - care advice for a plant you own</h2>
+    <ol class="flow">
+      <li>App sends the genus (and family, if it knows it) to <code>POST /api/care-plan</code>.</li>
+      <li>Server calls <b>OpenAI</b> once and gets back watering, feeding and repotting guidance <em>for every growing medium at once</em> - potting mix, LECA, semi-hydro, and the rest.</li>
+      <li>App caches that answer forever, keyed on the genus. Switching a plant from soil to LECA reschedules it instantly and offline, with no second call.</li>
+    </ol>
+    <p>Keyed on the genus rather than the plant, because two monsteras in the same pot mix want the same thing. In practice that makes this roughly one call per genus per install, not one per plant.</p>
+  </section>
+
+  <section>
+    <h2>Flow 4 - the library follows the account</h2>
+    <p>Accounts are optional and there is no login wall. Logged out, every plant lives in on-device storage and nothing leaves the phone. Signing in changes where the same library is kept.</p>
+    <ol class="flow">
+      <li>App signs in through <b>Supabase Auth</b> directly - the Node server is not in this path and never holds the user's session.</li>
+      <li>If the device already has saved plants, the app offers to import them once. Declining leaves them exactly where they are.</li>
+      <li>From then on every save, watering, repot and edit writes to <b>Supabase</b> first and only then to the on-device copy, which becomes a mirror rather than the source of truth. A write that fails never lands locally either, so the phone can't show a plant the account doesn't have.</li>
+      <li>Photos go to a private <b>Storage</b> bucket under the user's own folder. The app asks for a fresh signed URL to display one - there is no permanent public link.</li>
+      <li>Signing out wipes the mirror. Deleting the account cascades the rows and clears the bucket.</li>
+    </ol>
+    <p>Row-level security is what makes the direct app-to-database path safe: every policy on <code>plants</code> and on the photo bucket checks the row against the caller's own user id, so the app can only ever read and write its own.</p>
   </section>
 
   <section>
