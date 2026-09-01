@@ -1,7 +1,10 @@
-# Hebrew Support, Phase 1 - i18n Foundation and UI Copy - Design
+# Hebrew Support - Design
 
 Date: 2026-09-01
 Status: approved, ready for implementation planning
+Revised: 2026-09-01, phases 2 and 3 pulled into scope. Ron: "when the language
+is Hebrew I want the analysis also to happen in Hebrew." A Hebrew shell around
+an English diagnosis is not the product; all three phases ship together.
 
 ## Goal
 
@@ -167,23 +170,93 @@ Five call sites (`PlantDetailScreen:560`, `WateringHistoryScreen:313,382,390`,
 
 ## Scope boundary
 
-Not in this phase, and each gets its own spec:
-
-- **Phase 2 - AI content.** `/api/diagnose` and `/api/care-plan` answer in
-  Hebrew. Requires a `lang` parameter and, critically, **`lang` in the
-  care-plan cache key**, which is genus-only today (`server/carePlan.ts`,
-  `src/services/genusCarePlans.ts`) - without it Hebrew and English users
-  overwrite each other's cached plans.
-- **Phase 3 - catalog.** Hebrew names and Hebrew search synonyms for 359
-  species. These are the trade names Israeli growers actually use, so they are
-  authored, not translated. Overlaps Trello #74 (catalog server-side).
-
-Untouched: scraped nursery data, which is already Hebrew.
+Phases 2 and 3 are specified below. Untouched: scraped nursery data, which is
+already Hebrew.
 
 **Plants keep the language they were diagnosed in.** A stored `diagnosis` is a
 paid artifact. Re-fetching one because a setting changed would spend money to
 overwrite a record the user already trusts, and would silently rewrite history
 on a screen they were reading. Phase 2 applies to new diagnoses only.
+
+## Phase 2 - the analysis answers in Hebrew
+
+`/api/diagnose` and `/api/care-plan` gain a `lang` field on the request body,
+defaulting to `'en'` when absent so an older installed build keeps working.
+
+### What the model may translate, and what it must not
+
+This is the whole risk of phase 2. `PlantDiagnosis` mixes prose the user reads
+with values the code branches on, and translating the second kind breaks the
+app quietly.
+
+| Field | Language | Why |
+|---|---|---|
+| `conditionLabel`, `issues[]`, `description` | Hebrew | Pure display prose |
+| `treatments[].title`, `treatments[].description` | Hebrew | Display prose - but see the product note below |
+| `carePlan` prose, all `bySoil` guidance | Hebrew | Display prose |
+| `plantName` | Hebrew | Display, *and* it is the nursery search term - a Hebrew query is better against Israeli shops, and `scraper/core.ts` already handles Hebrew (`hasHebrew`) |
+| `condition` | **English enum** | The client switches on it for colour and icon |
+| `canBeSaved`, `confidence`, `genusConfidence` | **Unchanged types** | Boolean and numbers |
+| `identificationSource` | **English enum** | Branched on |
+| `scientificName` | **Latin** | Botanical names are universal; "translating" one destroys it |
+| `genus` | **Latin** | The care-plan cache key AND the catalog match key. Hebrew here fragments the cache and silently breaks every catalog lookup |
+
+### `treatmentProduct` must stop parsing prose
+
+`src/lib/treatments.ts` finds the buyable product in a treatment by parsing the
+English title against English substance names and English action words
+(`'neem oil'`, `'wipe'`, `'apply'`). Hand it Hebrew and it returns null for
+everything, so the "Find Confidor nearby" button - the app's entire commerce
+path out of a diagnosis - silently stops rendering.
+
+The fix is a contract change, not a Hebrew word list: `Treatment` gains an
+optional `product?: string`, in English or a brand name, supplied by the model
+which already knows whether it just recommended a purchasable thing. The client
+reads that field instead of guessing from prose.
+
+`treatmentProduct` stays as the fallback for diagnoses saved before the field
+existed, and for a model response that omits it. It keeps its tests. It just
+stops being the primary path, which it never should have been.
+
+### Cache keys
+
+`cacheKeyFor(genus)` becomes `cacheKeyFor(genus, lang)` and the prefix version
+bumps. Without this a user who switches to Hebrew reads their own cached
+English plans forever, and the first Hebrew fetch overwrites the English one
+for every genus they own. There is no server-side care-plan cache, so the cost
+of the split is one extra model call per genus per language per install.
+
+### Saved plants keep the language they were diagnosed in
+
+A stored `diagnosis` is a paid artifact. Re-fetching one because a setting
+changed would spend money to overwrite a record the user already trusts, and
+would rewrite history under someone reading it. Switching to Hebrew makes *new*
+analyses Hebrew; existing plants keep their text. Their care plan, which is
+cached by genus rather than stored on the plant, does re-fetch in Hebrew.
+
+## Phase 3 - the species catalog
+
+`CatalogEntry` gains optional Hebrew fields; the English ones stay required and
+authoritative.
+
+```ts
+nameHe?: string;        // 'מונסטרה דליציוזה'
+synonymsHe?: string[];  // what Israelis actually type
+```
+
+`scientificName`, `genus`, `group` and `family` stay as they are: Latin is
+Latin, and `genus` is a key.
+
+**Display** goes through `plantDisplayName`-style helpers that fall back to the
+English name when `nameHe` is absent. **Search** matches Hebrew and English at
+once, so typing "מונסטרה" or "monstera" finds the same entry - Israeli growers
+mix both constantly.
+
+**Authoring, not translating.** Most of these names are established
+transliterations (מונסטרה, פילודנדרון, אלוקזיה) and those are unambiguous. Where
+no Hebrew name is in real use, the field is left absent and the English name
+shows - inventing a Hebrew name nobody searches for is worse than showing the
+one they know. All 359 entries are drafted by Claude and reviewed by Ron.
 
 ## Error handling
 
@@ -205,6 +278,15 @@ on a screen they were reading. Phase 2 applies to new diagnoses only.
   That is precisely why the language decision lives in `lib/` and the screens
   only read a value.
 
+Phase 2 adds `server/carePlan.test.ts` and `server/diagnose.test.ts` cases for
+the `lang` parameter and for the enum fields surviving a Hebrew response, a
+`genusCarePlan.test.ts` case proving two languages cannot share a cache entry,
+and a `treatments.test.ts` case proving the new `product` field wins over the
+prose parser while the parser still covers older saved diagnoses.
+
+Phase 3 adds `catalogSearch.test.ts` cases for Hebrew query matching and for
+falling back to the English name when `nameHe` is absent.
+
 Existing gate stays: `npm run typecheck` and `node --test` green, and the
 no-physical-edges grep still returns nothing.
 
@@ -218,3 +300,9 @@ label.
 
 `expo-localization` is a native module, so this needs `expo run:ios` and a
 reinstall. The Metro reload currently in use will not pick it up.
+
+Order is phase 1, then 2, then 3, each committed separately. Phase 1 is the
+largest edit but the least risky; phase 2 carries the contract risk described
+above; phase 3 is bulk data authoring. Verification is a Hebrew iOS simulator
+(`xcrun simctl` sets the locale) driven by Ron - the app has no component test
+runner, so the screens can only be checked by looking at them.
