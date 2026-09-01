@@ -17,9 +17,9 @@ import { useFonts } from 'expo-font';
  */
 import { PlayfairDisplay_600SemiBold } from '@expo-google-fonts/playfair-display/600SemiBold';
 import { PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display/700Bold';
-import { Poppins_400Regular } from '@expo-google-fonts/poppins/400Regular';
-import { Poppins_500Medium } from '@expo-google-fonts/poppins/500Medium';
-import { Poppins_600SemiBold } from '@expo-google-fonts/poppins/600SemiBold';
+import { Nunito_400Regular } from '@expo-google-fonts/nunito/400Regular';
+import { Nunito_500Medium } from '@expo-google-fonts/nunito/500Medium';
+import { Nunito_600SemiBold } from '@expo-google-fonts/nunito/600SemiBold';
 import * as SplashScreen from 'expo-splash-screen';
 
 import { RootStackParamList } from './src/types';
@@ -55,7 +55,7 @@ const linking = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-// Keep the splash up until brand fonts (Playfair Display / Poppins) are ready, so text
+// Keep the splash up until brand fonts (Playfair Display / Nunito) are ready, so text
 // doesn't flash in the system font then reflow.
 SplashScreen.preventAutoHideAsync();
 
@@ -68,9 +68,9 @@ export default function App() {
   const [fontsLoaded, fontError] = useFonts({
     PlayfairDisplay_600SemiBold,
     PlayfairDisplay_700Bold,
-    Poppins_400Regular,
-    Poppins_500Medium,
-    Poppins_600SemiBold,
+    Nunito_400Regular,
+    Nunito_500Medium,
+    Nunito_600SemiBold,
   });
 
   useEffect(() => {

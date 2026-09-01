@@ -3,7 +3,7 @@
  *
  * Single source of design tokens for the whole app. Style: cream paper canvas,
  * deep forest green as the brand voice, terracotta as the one hot accent, an
- * editorial serif for display type over a rounded geometric sans. Light + dark
+ * editorial serif for display type over a warm humanist sans. Light + dark
  * are designed together (dark is a warm near-black paper, not an inversion).
  *
  * Usage:
@@ -149,7 +149,7 @@ export const radius = {
   pill: 999,
 } as const;
 
-/* Type scale - Playfair Display (display/headings) + Poppins (text).
+/* Type scale - Playfair Display (display/headings) + Nunito (text).
  * fontFamily names must match the keys registered in useFonts() in App.tsx.
  * Note: with static custom fonts iOS binds weight to the family, so an inline
  * fontWeight override does not change weight - switch fontFamily for a
@@ -176,13 +176,15 @@ export const type = {
     fontWeight: '600' as const,
     letterSpacing: -0.2,
   },
-  body: { fontFamily: 'Poppins_400Regular', fontSize: 15, lineHeight: 23, fontWeight: '400' as const },
-  bodyStrong: { fontFamily: 'Poppins_600SemiBold', fontSize: 15, lineHeight: 23, fontWeight: '600' as const },
-  label: { fontFamily: 'Poppins_500Medium', fontSize: 13.5, lineHeight: 20, fontWeight: '500' as const },
-  caption: { fontFamily: 'Poppins_500Medium', fontSize: 11.5, lineHeight: 16, fontWeight: '500' as const },
+  /* A point larger than the Poppins scale these replaced: Nunito has a smaller
+   * x-height, so the same nominal size reads noticeably smaller on glass. */
+  body: { fontFamily: 'Nunito_400Regular', fontSize: 16, lineHeight: 24, fontWeight: '400' as const },
+  bodyStrong: { fontFamily: 'Nunito_600SemiBold', fontSize: 16, lineHeight: 24, fontWeight: '600' as const },
+  label: { fontFamily: 'Nunito_500Medium', fontSize: 14, lineHeight: 20, fontWeight: '500' as const },
+  caption: { fontFamily: 'Nunito_500Medium', fontSize: 12, lineHeight: 16, fontWeight: '500' as const },
   /* Small all-caps eyebrow above a display heading ("MONDAY, JUNE 24"). */
   eyebrow: {
-    fontFamily: 'Poppins_600SemiBold',
+    fontFamily: 'Nunito_600SemiBold',
     fontSize: 11,
     lineHeight: 15,
     fontWeight: '600' as const,

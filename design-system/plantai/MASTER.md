@@ -41,13 +41,13 @@ this table mirrors them.
 ### Typography
 
 - **Heading Font:** Playfair Display (600, 700)
-- **Body Font:** Poppins (400, 500, 600)
+- **Body Font:** Nunito (400, 500, 600)
 - **Mood:** editorial, warm, calm, natural, considered
-- **Google Fonts:** [Playfair Display + Poppins](https://fonts.google.com/share?selection.family=Playfair+Display:wght@600;700|Poppins:wght@400;500;600)
+- **Google Fonts:** [Playfair Display + Nunito](https://fonts.google.com/share?selection.family=Playfair+Display:wght@600;700|Nunito:wght@400;500;600)
 
 **CSS Import:**
 ```css
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Poppins:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Nunito:wght@400;500;600&display=swap');
 ```
 
 ### Spacing Variables
