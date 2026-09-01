@@ -51,9 +51,7 @@ export default function PlantSearchScreen() {
     <SafeAreaView style={s.container} edges={['top']}>
       <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
         <Text style={s.title}>{copy.plantSearch.title}</Text>
-        <Text style={s.subtitle}>
-          Search nurseries near you for a plant you want to buy, and compare prices.
-        </Text>
+        <Text style={s.subtitle}>{copy.plantSearch.subtitle}</Text>
 
         <View style={s.searchRow}>
           <Ionicons name="search" size={18} color={t.color.textMuted} />
@@ -99,14 +97,18 @@ export default function PlantSearchScreen() {
           disabled={!ready || busy}
           accessibilityRole="button"
           accessibilityState={{ disabled: !ready || busy }}
-          accessibilityLabel={`Search nurseries for ${query.trim() || 'a plant'}`}
+          accessibilityLabel={copy.plantSearch.submit}
         >
           {busy ? (
             <ActivityIndicator color={t.color.onPrimary} />
           ) : (
             <>
-              <Ionicons name="leaf-outline" size={18} color={t.color.onPrimary} />
+              {/* The leaf TRAILS the label - it decorates the action rather
+                  than introducing it, so it reads last. In a mirrored layout
+                  that puts it on the left, which is where a Hebrew reader
+                  finishes the phrase. */}
               <Text style={s.submitText}>{copy.plantSearch.submit}</Text>
+              <Ionicons name="leaf-outline" size={18} color={t.color.onPrimary} />
             </>
           )}
         </Pressable>

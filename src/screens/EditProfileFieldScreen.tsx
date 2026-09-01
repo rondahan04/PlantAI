@@ -6,6 +6,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { directionalIconStyle } from '../lib/rtl';
 import { copy } from '../services/language';
 import AuthTextField from '../components/AuthTextField';
 import { updateProfile, DuplicateUsernameError } from '../services/auth';
@@ -69,7 +70,7 @@ export default function EditProfileFieldScreen({ navigation, route }: Props) {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={s.header}>
           <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel={copy.settings.back} style={s.backBtn}>
-            <Ionicons name="chevron-back" size={24} color={t.color.primary} />
+            <Ionicons name="chevron-back" size={24} color={t.color.primary} style={directionalIconStyle} />
           </Pressable>
           <Text style={s.headerTitle}>{meta.title}</Text>
           <View style={s.backBtn} />

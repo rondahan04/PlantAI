@@ -205,6 +205,9 @@ export const en = {
     back: 'Back',
     loginPrompt: 'Log In / Sign Up',
     loginPromptA11y: 'Log in or sign up',
+    loggedOutBlurb:
+      'Create an account to save your profile and manage your details. Diagnosis works fine without one.',
+    deviceSection: 'This device',
     profileSettings: 'Profile settings',
     fullName: 'Full name',
     username: 'Username',
@@ -294,6 +297,7 @@ export const en = {
   },
   plantSearch: {
     title: 'Find a plant',
+    subtitle: 'Search nurseries near you for a plant you want to buy, and compare prices.',
     placeholder: 'Alocasia Regal Shield',
     inputA11y: 'Plant to search for',
     clear: 'Clear search',

@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { directionalIconStyle } from '../lib/rtl';
 import { copy } from '../services/language';
 import AuthTextField from '../components/AuthTextField';
 import { changePassword } from '../services/auth';
@@ -40,7 +41,7 @@ export default function ChangePasswordScreen({ navigation }: Props) {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={s.header}>
           <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel={copy.auth.back} style={s.backBtn}>
-            <Ionicons name="chevron-back" size={24} color={t.color.primary} />
+            <Ionicons name="chevron-back" size={24} color={t.color.primary} style={directionalIconStyle} />
           </Pressable>
           <Text style={s.headerTitle}>{copy.auth.changePasswordTitle}</Text>
           <View style={s.backBtn} />

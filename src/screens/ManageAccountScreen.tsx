@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { directionalIconStyle } from '../lib/rtl';
 import { copy } from '../services/language';
 import SettingsCard from '../components/SettingsCard';
 import SettingsRow from '../components/SettingsRow';
@@ -56,7 +57,7 @@ export default function ManageAccountScreen({ navigation }: Props) {
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel={copy.settings.back} style={s.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={t.color.primary} />
+          <Ionicons name="chevron-back" size={24} color={t.color.primary} style={directionalIconStyle} />
         </Pressable>
         <Text style={s.headerTitle}>{copy.settings.manageAccount}</Text>
         <View style={s.backBtn} />

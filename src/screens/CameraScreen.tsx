@@ -316,11 +316,50 @@ function makeStyles(t: Theme) {
     topTitle: { ...t.type.heading, color: '#fff' },
     viewfinderWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     viewfinder: { width: 260, height: 260, position: 'relative' },
+    /*
+     * The viewfinder brackets, in LOGICAL edges.
+     *
+     * These were physical (`left`/`right`, `borderRightWidth`,
+     * `borderTopLeftRadius`) and the RTL note in lib/rtl.ts excused them as
+     * "symmetric". They are not: each bracket drops two of its four borders and
+     * rounds one corner, so which sides it keeps has to travel with its
+     * position. In a mirrored layout React Native swaps some of those physical
+     * props and not others, and the frame came apart - brackets with their
+     * stroke on the wrong side, which on a black camera screen reads as a
+     * rendering fault rather than a locale.
+     *
+     * Start/end mirror as one set, so the frame stays a frame in both
+     * directions.
+     */
     corner: { position: 'absolute', width: 28, height: 28, borderColor: '#fff', borderWidth: 3 },
-    cornerTL: { top: 0, left: 0, borderBottomWidth: 0, borderRightWidth: 0, borderTopLeftRadius: 6 },
-    cornerTR: { top: 0, right: 0, borderBottomWidth: 0, borderLeftWidth: 0, borderTopRightRadius: 6 },
-    cornerBL: { bottom: 0, left: 0, borderTopWidth: 0, borderRightWidth: 0, borderBottomLeftRadius: 6 },
-    cornerBR: { bottom: 0, right: 0, borderTopWidth: 0, borderLeftWidth: 0, borderBottomRightRadius: 6 },
+    cornerTL: {
+      top: 0,
+      start: 0,
+      borderBottomWidth: 0,
+      borderEndWidth: 0,
+      borderTopStartRadius: 6,
+    },
+    cornerTR: {
+      top: 0,
+      end: 0,
+      borderBottomWidth: 0,
+      borderStartWidth: 0,
+      borderTopEndRadius: 6,
+    },
+    cornerBL: {
+      bottom: 0,
+      start: 0,
+      borderTopWidth: 0,
+      borderEndWidth: 0,
+      borderBottomStartRadius: 6,
+    },
+    cornerBR: {
+      bottom: 0,
+      end: 0,
+      borderTopWidth: 0,
+      borderStartWidth: 0,
+      borderBottomEndRadius: 6,
+    },
     hint: { color: 'rgba(255,255,255,0.85)', ...t.type.label, marginTop: t.space.xl, textAlign: 'center' },
     controls: {
       flexDirection: 'row',

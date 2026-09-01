@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { directionalIconStyle } from '../lib/rtl';
 import { copy } from '../services/language';
 import AuthTextField from '../components/AuthTextField';
 import { signIn, AuthServiceError } from '../services/auth';
@@ -63,7 +64,7 @@ export default function LoginScreen({ navigation }: Props) {
             accessibilityLabel={copy.auth.back}
             style={s.backBtn}
           >
-            <Ionicons name="chevron-back" size={24} color={t.color.foreground} />
+            <Ionicons name="chevron-back" size={24} color={t.color.foreground} style={directionalIconStyle} />
           </Pressable>
 
           <Text style={s.title}>{copy.auth.loginTitle}</Text>

@@ -175,6 +175,9 @@ export const he: Copy = {
     back: 'חזרה',
     loginPrompt: 'התחברות / הרשמה',
     loginPromptA11y: 'התחברות או הרשמה',
+    loggedOutBlurb:
+      'צרו חשבון כדי לשמור את הפרופיל שלכם ולנהל את הפרטים. האבחון עובד מצוין גם בלי חשבון.',
+    deviceSection: 'במכשיר הזה',
     profileSettings: 'הגדרות פרופיל',
     fullName: 'שם מלא',
     username: 'שם משתמש',
@@ -261,6 +264,7 @@ export const he: Copy = {
   },
   plantSearch: {
     title: 'חיפוש צמח',
+    subtitle: 'חפשו משתלות בסביבתכם לצמח שאתם רוצים לקנות, והשוו מחירים.',
     placeholder: 'אלוקזיה ריגל שילד',
     inputA11y: 'הצמח שאתם מחפשים',
     clear: 'ניקוי החיפוש',

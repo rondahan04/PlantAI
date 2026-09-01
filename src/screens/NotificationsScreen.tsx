@@ -7,6 +7,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { directionalIconStyle } from '../lib/rtl';
 import { copy } from '../services/language';
 import SettingsCard from '../components/SettingsCard';
 import { ensureNotificationPermission } from '../services/wateringReminder';
@@ -67,7 +68,7 @@ export default function NotificationsScreen({ navigation }: Props) {
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel={copy.settings.back} style={s.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={t.color.primary} />
+          <Ionicons name="chevron-back" size={24} color={t.color.primary} style={directionalIconStyle} />
         </Pressable>
         <Text style={s.headerTitle}>{copy.settings.notifications}</Text>
         <View style={s.backBtn} />
