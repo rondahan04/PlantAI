@@ -24,9 +24,12 @@ import { triageSections } from '../lib/triage';
 import {
   dueSoon,
   filterPortfolio,
+  isBehindOnCare,
+  plantSchedule,
   offersGuestImport,
   plantDisplayName,
   showsLibraryLayout,
+  type CareSlot,
   type DueItem,
   type PortfolioFilter,
 } from '../lib/portfolio';
@@ -198,7 +201,52 @@ export default function PortfolioScreen({ navigation }: Props) {
     // focus effect above re-reads it constantly and this must not run each time.
   }, [session]);
 
-  const visible = useMemo(() => filterPortfolio(library.plants, filter), [library, filter]);
+  /*
+   * Every plant's three care slots, built once per library read and shared by
+   * the cards, the Needs care chip and its count. Building them per card would
+   * run the same genus lookup three times over for the same plant, and building
+   * them twice - once for the chip, once for the card - is how a chip that says
+   * "(2)" ends up next to three highlighted cards.
+   */
+  const schedules = useMemo(() => {
+    const map = new Map<string, CareSlot[]>();
+    for (const plant of library.plants) {
+      const genus = plant.species?.genus ?? plant.diagnosis?.genus;
+      map.set(
+        plant.id,
+        plantSchedule(
+          plant,
+          Date.now(),
+          genus ? genusCarePlans.peek(genus) : null,
+          copy.schedule,
+          copy.care,
+          copy.watering
+        )
+      );
+    }
+    return map;
+    // Same contract as `due` below: the clock is read once per library read, so
+    // the list cannot reshuffle under a scrolling thumb for a day boundary.
+  }, [library]);
+
+  const behind = useCallback(
+    (plant: StoredPlant) => isBehindOnCare(schedules.get(plant.id) ?? []),
+    [schedules]
+  );
+
+  const counts = useMemo(
+    () => ({
+      all: library.plants.length,
+      needsCare: library.plants.filter(behind).length,
+      diagnosed: library.plants.filter((p) => p.diagnosis !== undefined).length,
+    }),
+    [library, behind]
+  );
+
+  const visible = useMemo(
+    () => filterPortfolio(library.plants, filter, behind),
+    [library, filter, behind]
+  );
 
   /*
    * Triage grouping stays exactly where it was, and ONLY on the All view. The
@@ -215,7 +263,7 @@ export default function PortfolioScreen({ navigation }: Props) {
            * second code path for it. `TriageKey` is deliberately not widened to
            * hold a 'diagnosed' bucket - this is a rendering shape, not a triage
            * bucket, and triage.ts should not learn about the filter. */
-          [{ key: 'diagnosed', title: '', data: visible }],
+          [{ key: filter, title: '', data: visible }],
     [visible, filter]
   );
 
@@ -286,8 +334,15 @@ export default function PortfolioScreen({ navigation }: Props) {
     return () => loop?.stop();
   }, []);
 
+  const CHIP_A11Y: Record<PortfolioFilter, string> = {
+    all: copy.portfolio.filterAllA11y,
+    needsCare: copy.portfolio.filterNeedsCareA11y,
+    diagnosed: copy.portfolio.filterDiagnosedA11y,
+  };
+
   const renderChip = (value: PortfolioFilter, label: string) => {
     const active = filter === value;
+    const count = counts[value];
     return (
       <Pressable
         key={value}
@@ -296,11 +351,19 @@ export default function PortfolioScreen({ navigation }: Props) {
         accessibilityRole="button"
         // Selected state announced rather than left to colour alone (a11y).
         accessibilityState={{ selected: active }}
-        accessibilityLabel={
-          value === 'all' ? copy.portfolio.filterAllA11y : copy.portfolio.filterDiagnosedA11y
-        }
+        accessibilityLabel={CHIP_A11Y[value]}
       >
-        <Text style={[s.chipText, active && s.chipTextActive]}>{label}</Text>
+        {/*
+          The dot is only on Needs care, and only when something actually is:
+          it is the one chip that reports a problem, and a dot that is always
+          there is a dot nobody sees.
+        */}
+        {value === 'needsCare' && count > 0 && (
+          <View style={[s.chipDot, { backgroundColor: active ? t.color.onPrimary : t.color.accent }]} />
+        )}
+        <Text style={[s.chipText, active && s.chipTextActive]}>
+          {copy.portfolio.filterCount(label, count)}
+        </Text>
       </Pressable>
     );
   };
@@ -446,19 +509,24 @@ export default function PortfolioScreen({ navigation }: Props) {
                 </View>
               )}
 
-              <View style={s.chipRow}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={s.chipRow}
+              >
                 {renderChip('all', copy.portfolio.filterAll)}
+                {renderChip('needsCare', copy.portfolio.filterNeedsCare)}
                 {renderChip('diagnosed', copy.portfolio.filterDiagnosed)}
-              </View>
+              </ScrollView>
 
               {/*
                 A filter that matches nothing is not an empty library, and the
                 copy has to say so - otherwise the Diagnosed chip on a
                 hand-built portfolio reads as data loss.
               */}
-              {visible.length === 0 && filter === 'diagnosed' && (
+              {visible.length === 0 && filter !== 'all' && (
                 <Text style={s.emptyFilter}>
-                  {copy.portfolio.noneDiagnosed}
+                  {filter === 'needsCare' ? copy.portfolio.noneNeedCare : copy.portfolio.noneDiagnosed}
                 </Text>
               )}
             </>
@@ -471,6 +539,7 @@ export default function PortfolioScreen({ navigation }: Props) {
           renderItem={({ item }) => (
             <PlantCard
               plant={item}
+              slots={schedules.get(item.id) ?? []}
               onPress={() => navigation.navigate('PlantDetail', { plantId: item.id })}
             />
           )}
@@ -634,21 +703,28 @@ function makeStyles(t: Theme) {
     },
     libCta: { marginTop: t.space.xl },
 
-    chipRow: { flexDirection: 'row', gap: t.space.sm, marginBottom: t.space.md },
+    // The row scrolls rather than wraps: three chips fit on a phone, but the
+    // Hebrew labels are longer and a wrapped second line pushes the first card
+    // off the screen for a control the user has already read.
+    chipRow: { flexDirection: 'row', gap: t.space.sm, paddingBottom: t.space.md },
     chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
       paddingHorizontal: t.space.lg,
-      paddingVertical: t.space.sm,
       borderRadius: t.radius.pill,
-      borderWidth: 1,
-      borderColor: t.color.border,
       backgroundColor: t.color.surface,
-      minHeight: 36,
-      justifyContent: 'center',
+      minHeight: 40,
+      ...t.elevation.card,
     },
-    chipActive: { backgroundColor: t.color.primaryWash, borderColor: t.color.primary },
+    // Filled, not tinted: the selected chip is the one thing on this row that
+    // has to be readable at a glance, and a wash reads as another unselected
+    // chip in a slightly different colour.
+    chipActive: { backgroundColor: t.color.primary },
     chipPressed: { opacity: 0.7 },
-    chipText: { ...t.type.label, color: t.color.textSecondary },
-    chipTextActive: { color: t.color.primary },
+    chipDot: { width: 7, height: 7, borderRadius: 4 },
+    chipText: { ...t.type.label, color: t.color.foreground },
+    chipTextActive: { color: t.color.onPrimary },
     emptyFilter: {
       ...t.type.body,
       color: t.color.textSecondary,

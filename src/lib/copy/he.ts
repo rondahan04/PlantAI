@@ -483,11 +483,15 @@ export const he: Copy = {
     settingsA11y: 'הגדרות חשבון',
     title: 'הצמחים שלי',
     filterAll: 'הכל',
+    filterNeedsCare: 'זקוקים לטיפול',
     filterDiagnosed: 'אובחנו',
+    filterCount: (label: string, n: number): string => `${label} (${n})`,
     filterAllA11y: 'הצגת כל הצמחים',
+    filterNeedsCareA11y: 'הצגת הצמחים שהטיפול בהם באיחור או להיום בלבד',
     filterDiagnosedA11y: 'הצגת הצמחים שאובחנו בלבד',
     dueThisWeek: 'לטיפול השבוע',
     dueMore: (n: number) => `ועוד ${n} ברשימה למטה`,
+    noneNeedCare: 'אין משימות כרגע. כל הצמחים בזמן.',
     noneDiagnosed: 'אף אחד מהצמחים שלכם לא אובחן עדיין. סרקו אחד כדי לראות מה הוא צריך.',
     warnFutureTitle: 'נשמר בגרסה חדשה יותר',
     warnFutureText: 'עדכנו את PlantAI כדי לראות שוב את הרשימה. שום דבר לא נמחק.',
@@ -505,6 +509,14 @@ export const he: Copy = {
     heroSub: 'צלמו תמונה. קבלו אבחון תוך שניות.\nונמצא תחליף בריא אם צריך.',
     howItWorks: 'איך זה עובד',
     bottomNote: 'אנחנו מאבחנים מעל 1000 מיני צמחים · מהר ובדיוק',
+  },
+  schedule: {
+    today: 'היום',
+    tomorrow: 'מחר',
+    overdue: 'באיחור',
+    inDays: (days: number): string => `בעוד ${days} ימים`,
+    every: (interval: string): string => `כל ${interval}`,
+    none: 'לא נקבע',
   },
   tabs: {
     home: 'בית',
@@ -533,9 +545,6 @@ export const he: Copy = {
       fertilizer: 'דישון',
       repot: 'החלפת עציץ',
     },
-    dueToday: 'היום',
-    dueLate: 'באיחור',
-    dueInDays: (n: number) => (n === 1 ? 'מחר' : `בעוד ${n} ימים`),
     plantsTitle: 'הצמחים שלי',
     plantsSeeAll: 'לתיק הצמחים',
     needsCare: (n: number) => (n === 1 ? 'זקוק לטיפול קטן' : 'זקוקים לטיפול קטן'),
@@ -552,6 +561,7 @@ export const he: Copy = {
     yearsAgo: (n: number) => (n === 1 ? 'לפני שנה' : `לפני ${n} שנים`),
   },
   plantCard: {
+    needsWatering: 'זקוק להשקיה',
     diagnosedBadge: 'אובחן',
     a11y: (p: {
       name: string;

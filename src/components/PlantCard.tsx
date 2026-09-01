@@ -5,8 +5,7 @@ import { Theme, useTheme } from '../theme';
 import { copy } from '../services/language';
 import { directionalIconStyle } from '../lib/rtl';
 import { LOGO_GLYPH } from '../brand';
-import { needsWater, wateringState } from '../lib/watering';
-import { plantDisplayName, plantSecondaryName } from '../lib/portfolio';
+import { plantDisplayName, plantSecondaryName, type CareSlot } from '../lib/portfolio';
 import type { StoredPlant } from '../services/plantStore';
 
 /*
@@ -32,6 +31,14 @@ const CONDITION_COLOR: Record<string, keyof Theme['color']> = {
  * calm greens, then amber, then terracotta - which is the same three-step
  * escalation the user actually reads off the card.
  */
+/* The same glyph and tint per care kind as the dashboard, the schedule card and
+ * the portfolio strip - a kind is the same colour wherever the user meets it. */
+const KIND_ICON: Record<CareSlot['kind'], { icon: keyof typeof Ionicons.glyphMap; tint: keyof Theme['color'] }> = {
+  water: { icon: 'water-outline', tint: 'water' },
+  fertilizer: { icon: 'nutrition-outline', tint: 'feed' },
+  repot: { icon: 'flower-outline', tint: 'repot' },
+};
+
 const CONDITION_WASH: Record<string, keyof Theme['color']> = {
   healthy: 'primaryWash',
   mild: 'primaryWash',
@@ -53,9 +60,14 @@ function relativeDay(iso: string, now: number): string {
 
 export default function PlantCard({
   plant,
+  slots,
   onPress,
 }: {
   plant: StoredPlant;
+  /* All three care kinds, built by `plantSchedule`. Passed in rather than
+   * computed here because the schedule needs a clock and the genus plan the
+   * list has already looked up once for every card it is about to draw. */
+  slots: CareSlot[];
   onPress: () => void;
 }) {
   const t = useTheme();
@@ -85,28 +97,30 @@ export default function PlantCard({
   const when = relativeDay(plant.savedAt, Date.now());
 
   /*
-   * Thirst is the one thing on this card the user can act on TODAY, so it gets
-   * its own line rather than being folded into the meta row - condition is why
-   * the plant is in the library, watering is why they opened the app now.
+   * Thirst is the one thing on this card the user can act on TODAY, so it takes
+   * the pill when it applies - condition is why the plant is in the library,
+   * watering is why they opened the app now. It reads the same water slot the
+   * meta row below prints, so the pill and the column can never disagree.
    */
-  const water = wateringState(plant.diagnosis?.carePlan, plant.lastWateredAt, Date.now(), copy.watering);
-  const thirsty = needsWater(water);
+  const water = slots.find((slot) => slot.kind === 'water');
+  const thirsty = water?.status === 'due' || water?.status === 'overdue';
 
-  const pill: { label: string; icon: 'water' | 'leaf'; tint: string; wash: string } | undefined = thirsty
-    ? {
-        label: water.label,
-        icon: 'water',
-        tint: water.status === 'overdue' ? t.color.danger : t.color.water,
-        wash: t.color.waterWash,
-      }
-    : conditionLabel !== undefined && diagnosis !== undefined
+  const pill: { label: string; icon: 'water' | 'leaf'; tint: string; wash: string } | undefined =
+    thirsty && water !== undefined
       ? {
-          label: conditionLabel,
-          icon: 'leaf',
-          tint: color,
-          wash: t.color[CONDITION_WASH[diagnosis.condition] ?? 'warningWash'],
+          label: copy.plantCard.needsWatering,
+          icon: 'water',
+          tint: water.status === 'overdue' ? t.color.danger : t.color.water,
+          wash: t.color.waterWash,
         }
-      : undefined;
+      : conditionLabel !== undefined && diagnosis !== undefined
+        ? {
+            label: conditionLabel,
+            icon: 'leaf',
+            tint: color,
+            wash: t.color[CONDITION_WASH[diagnosis.condition] ?? 'warningWash'],
+          }
+        : undefined;
 
   return (
     <Pressable
@@ -120,7 +134,7 @@ export default function PlantCard({
         secondary: secondary ?? '',
         conditionLabel: conditionLabel ?? '',
         when,
-        watering: thirsty ? water.label : '',
+        watering: water?.label ?? '',
       })}
     >
       {/*
@@ -164,24 +178,31 @@ export default function PlantCard({
           </Text>
         )}
 
-        <View style={s.metaRow}>
-          {/*
-            The badge is quiet on purpose: it is a fact about the record, not a
-            health warning, so it borrows the muted text colour rather than any
-            of the condition colours the pill already spends the card's colour
-            budget on. `importantForAccessibility="no"` because the row's own
-            label already says whether the plant is diagnosed.
-          */}
-          {plant.diagnosis !== undefined && (
-            <View style={s.metaItem} importantForAccessibility="no">
-              <Ionicons name="medkit-outline" size={12} color={t.color.textMuted} />
-              <Text style={s.meta}>{copy.plantCard.diagnosedBadge}</Text>
-            </View>
-          )}
-          <View style={s.metaItem}>
-            <Ionicons name="time-outline" size={12} color={t.color.textMuted} />
-            <Text style={s.meta}>{when}</Text>
-          </View>
+        {/*
+          The three schedules, always all three, in a fixed order. This is the
+          row the card exists for: a user scanning the library is asking "what
+          needs doing", and a due date per kind answers that without opening
+          anything. A kind with nothing scheduled prints "Not set" in the muted
+          colour rather than vanishing - three columns on one card and one on
+          the next reads as two different card designs.
+        */}
+        <View style={s.metaRow} importantForAccessibility="no">
+          {slots.map((slot) => {
+            const { icon, tint } = KIND_ICON[slot.kind];
+            const active = slot.status === 'due' || slot.status === 'overdue';
+            const glyph = slot.status === 'unscheduled' ? t.color.textMuted : t.color[tint];
+            return (
+              <View key={slot.kind} style={s.metaItem}>
+                <Ionicons name={icon} size={13} color={active ? t.color[tint] : glyph} />
+                <Text
+                  style={[s.meta, active && { color: t.color[tint] }]}
+                  numberOfLines={2}
+                >
+                  {slot.label}
+                </Text>
+              </View>
+            );
+          })}
         </View>
       </View>
 
@@ -238,7 +259,9 @@ const makeStyles = (t: Theme) =>
       writingDirection: 'auto',
       marginTop: 1,
     },
-    metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: t.space.md, marginTop: t.space.sm },
-    metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-    meta: { ...t.type.caption, color: t.color.textMuted },
+    metaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: t.space.sm, marginTop: t.space.sm },
+    // Each column takes an equal third and wraps its own label, so a long
+    // "Every 18 months" cannot push the column beside it off the card.
+    metaItem: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
+    meta: { ...t.type.caption, color: t.color.textMuted, flexShrink: 1, writingDirection: 'auto' },
   });

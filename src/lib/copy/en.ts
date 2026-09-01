@@ -547,8 +547,13 @@ export const en = {
     settingsA11y: 'Account settings',
     title: 'Portfolio',
     filterAll: 'All',
+    filterNeedsCare: 'Needs care',
     filterDiagnosed: 'Diagnosed',
+    /* The count rides inside the chip - "All (12)" - so a user can see the size
+     * of each slice before spending a tap finding out. */
+    filterCount: (label: string, n: number): string => `${label} (${n})`,
     filterAllA11y: 'Show all plants',
+    filterNeedsCareA11y: 'Show only plants that are due or overdue for care',
     filterDiagnosedA11y: 'Show only plants you have diagnosed',
     dueThisWeek: 'Due this week',
     dueMore: (n: number) => `+${n} more in your plants below`,
@@ -557,6 +562,7 @@ export const en = {
      * say so - otherwise the Diagnosed chip on a hand-built portfolio reads as
      * data loss.
      */
+    noneNeedCare: 'Nothing is due right now. Every plant is on schedule.',
     noneDiagnosed: 'None of your plants have been diagnosed yet. Scan one to see what it needs.',
     /*
      * A damaged library must never be reported as an empty one: "you have no
@@ -585,6 +591,14 @@ export const en = {
     heroSub: 'Snap a photo. Get a diagnosis in seconds.\nFind a healthy replacement if needed.',
     howItWorks: 'How it works',
     bottomNote: 'We diagnose 1000+ plant species · fast and accurate',
+  },
+  schedule: {
+    today: 'Today',
+    tomorrow: 'Tomorrow',
+    overdue: 'Overdue',
+    inDays: (days: number): string => `In ${days} days`,
+    every: (interval: string): string => `Every ${interval}`,
+    none: 'Not set',
   },
   tabs: {
     home: 'Home',
@@ -618,9 +632,6 @@ export const en = {
       fertilizer: 'Fertilize',
       repot: 'Repot',
     },
-    dueToday: 'Today',
-    dueLate: 'Overdue',
-    dueInDays: (n: number): string => (n === 1 ? 'Tomorrow' : `In ${n} days`),
     plantsTitle: 'My plants',
     plantsSeeAll: 'View portfolio',
     needsCare: (n: number): string => (n === 1 ? 'needs a little care' : 'need a little care'),
@@ -643,6 +654,7 @@ export const en = {
     yearsAgo: (n: number) => `${n}y ago`,
   },
   plantCard: {
+    needsWatering: 'Needs watering',
     diagnosedBadge: 'Diagnosed',
     /*
      * ONE label rather than four nodes: a screen reader user wants the plant

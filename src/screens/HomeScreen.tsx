@@ -104,8 +104,16 @@ export default function HomeScreen({ navigation }: Props) {
    * placeholder box. */
   const heroPhoto = shown[0]?.photoUri;
 
+  /* The same compact vocabulary the plant cards print, so "Today" on a card and
+   * "Today" on a task tile are one string rather than two that can drift. */
   const whenLabel = (days: number): string =>
-    days < 0 ? copy.home.dueLate : days === 0 ? copy.home.dueToday : copy.home.dueInDays(days);
+    days < 0
+      ? copy.schedule.overdue
+      : days === 0
+        ? copy.schedule.today
+        : days === 1
+          ? copy.schedule.tomorrow
+          : copy.schedule.inDays(days);
 
   return (
     <SafeAreaView style={s.container} edges={['top']} /* bottom inset belongs to the tab bar */>
