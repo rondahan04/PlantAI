@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import {
   CATALOG_ENTRIES,
   browseSections,
+  catalogDisplayName,
   catalogEntryById,
+  fold,
   searchCatalog,
+  type CatalogEntry,
 } from './catalogSearch.ts';
 
 test('every entry id is unique', () => {
@@ -90,4 +93,47 @@ test('search results keep their family/genus/group section titles', () => {
 test('catalogEntryById finds an entry and tolerates a stale id', () => {
   assert.equal(catalogEntryById('monstera-albo')?.name, 'Albo Variegata');
   assert.equal(catalogEntryById('removed-in-a-later-release'), undefined);
+});
+
+/*
+ * Hebrew. `fold` used to strip everything outside [a-z0-9], so a Hebrew query
+ * folded to an empty string and matched the entire catalog - the search box
+ * would have looked broken rather than empty-handed.
+ */
+
+test('folding keeps Hebrew letters instead of erasing them', () => {
+  assert.equal(fold('מונסטרה'), 'מונסטרה');
+  assert.notEqual(fold('מונסטרה'), '');
+  // Mixed queries are normal here: Israeli growers type "מונסטרה Thai".
+  assert.equal(fold('מונסטרה  Thai'), 'מונסטרה thai');
+});
+
+test('a Hebrew genus name finds its entries', () => {
+  const hits = searchCatalog('מונסטרה');
+  assert.ok(hits.length > 0);
+  assert.ok(hits.every((e) => e.genus === 'Monstera'));
+});
+
+test('the English name still finds the same entry, because growers type both', () => {
+  assert.ok(searchCatalog('monstera').length > 0);
+});
+
+test('an entry with no Hebrew name shows its English one rather than nothing', () => {
+  const entry = CATALOG_ENTRIES.find((e) => !e.nameHe)!;
+  assert.equal(catalogDisplayName(entry, 'he'), entry.name);
+  assert.equal(catalogDisplayName(entry, 'en'), entry.name);
+});
+
+test('an entry with a Hebrew name shows it only in Hebrew', () => {
+  const entry: CatalogEntry = {
+    id: 'x',
+    name: 'Swiss Cheese Plant',
+    nameHe: 'מונסטרה דליציוזה',
+    scientificName: 'Monstera deliciosa',
+    genus: 'Monstera',
+    group: 'g',
+    family: 'f',
+  };
+  assert.equal(catalogDisplayName(entry, 'he'), 'מונסטרה דליציוזה');
+  assert.equal(catalogDisplayName(entry, 'en'), 'Swiss Cheese Plant');
 });

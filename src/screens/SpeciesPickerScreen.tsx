@@ -27,8 +27,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Theme, useTheme } from '../theme';
-import { copy } from '../services/language';
-import { searchCatalog, type CatalogEntry } from '../lib/catalogSearch';
+import { copy, getLanguage } from '../services/language';
+import { catalogDisplayName, searchCatalog, type CatalogEntry } from '../lib/catalogSearch';
 import type { RootStackParamList } from '../types';
 
 interface Props {
@@ -42,7 +42,7 @@ export default function SpeciesPickerScreen({ navigation }: Props) {
 
   /* Memoised on the query alone: re-running the filter on an unrelated re-render
    * would rebuild every section array and re-render the whole list for nothing. */
-  const sections = useMemo(() => searchCatalog(query), [query]);
+  const sections = useMemo(() => searchCatalog(query, getLanguage()), [query]);
 
   /*
    * `popTo`, not `navigate`. In React Navigation 7 a plain `navigate` only
@@ -124,10 +124,13 @@ export default function SpeciesPickerScreen({ navigation }: Props) {
             style={({ pressed }) => [s.row, pressed && s.rowPressed]}
             onPress={() => pick(item)}
             accessibilityRole="button"
-            accessibilityLabel={copy.speciesPicker.rowA11y(item.name, item.scientificName)}
+            accessibilityLabel={copy.speciesPicker.rowA11y(
+              catalogDisplayName(item, getLanguage()),
+              item.scientificName
+            )}
           >
             <View style={s.rowText}>
-              <Text style={s.rowName}>{item.name}</Text>
+              <Text style={s.rowName}>{catalogDisplayName(item, getLanguage())}</Text>
               <Text style={s.rowScientific}>{item.scientificName}</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={t.color.textMuted} />

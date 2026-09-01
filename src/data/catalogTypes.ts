@@ -21,6 +21,20 @@ export interface CatalogEntry {
   /* Extra strings the search should match. Nicknames, trade names, and the
    * spellings people actually type. */
   synonyms?: string[];
+  /*
+   * The name Israeli growers actually use.
+   *
+   * ABSENT is the normal case and not an omission. Most entries here are
+   * cultivar trade names - "Thai Constellation", "Black Velvet" - and Israeli
+   * growers say those in English. Inventing a Hebrew form produces a label
+   * nobody recognises and a search term nobody types, which is worse than
+   * showing the name they already know. Hebrew is carried where a real Hebrew
+   * name is in circulation, which is mostly at the genus level (see
+   * `HEBREW_TAXA` in lib/catalogSearch.ts).
+   */
+  nameHe?: string;
+  /* Hebrew spellings the search should match, same role as `synonyms`. */
+  synonymsHe?: string[];
 }
 
 export interface CatalogGroup {

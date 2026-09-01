@@ -40,10 +40,10 @@ import { Theme, useTheme } from '../theme';
 import type { RootStackParamList } from '../types';
 import SoilCard from '../components/SoilCard';
 import { DEFAULT_SOIL_MEDIUM, type SoilMediumId } from '../lib/soilMedia';
-import { catalogEntryById, type CatalogEntry } from '../lib/catalogSearch';
+import { catalogDisplayName, catalogEntryById, type CatalogEntry } from '../lib/catalogSearch';
 import { plantLibrary } from '../services/plantLibrary';
 import { plantRepo } from '../services/plantRepoInstance';
-import { copy } from '../services/language';
+import { copy, getLanguage } from '../services/language';
 import { getSessionHint } from '../services/sessionHint';
 import { plantPhotos } from '../services/photos';
 import { genusCarePlans } from '../services/genusCarePlans';
@@ -143,7 +143,13 @@ export default function AddPlantScreen({ navigation, route }: Props) {
        */
       photoUri: photoUri ?? '',
       species: {
-        name: entry.name,
+        /*
+         * The name AS DISPLAYED when it was picked. A plant keeps the language
+         * it was added in, exactly as a diagnosis keeps the language it was
+         * written in - re-translating a stored record under someone reading it
+         * is worse than a record that is honest about when it was made.
+         */
+        name: catalogDisplayName(entry, getLanguage()),
         scientificName: entry.scientificName,
         genus: entry.genus,
         family: entry.family,
@@ -285,14 +291,17 @@ export default function AddPlantScreen({ navigation, route }: Props) {
             accessibilityRole="button"
             accessibilityLabel={
               entry
-                ? copy.addPlant.speciesChosenA11y(entry.name, entry.scientificName)
+                ? copy.addPlant.speciesChosenA11y(
+                    catalogDisplayName(entry, getLanguage()),
+                    entry.scientificName
+                  )
                 : copy.addPlant.chooseSpecies
             }
           >
             <View style={s.speciesText}>
               {entry ? (
                 <>
-                  <Text style={s.speciesName}>{entry.name}</Text>
+                  <Text style={s.speciesName}>{catalogDisplayName(entry, getLanguage())}</Text>
                   <Text style={s.speciesScientific}>{entry.scientificName}</Text>
                 </>
               ) : (
