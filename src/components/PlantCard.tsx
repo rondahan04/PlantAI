@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Theme, useTheme } from '../theme';
+import { copy } from '../services/language';
 import { directionalIconStyle } from '../lib/rtl';
 import { LOGO_GLYPH } from '../brand';
 import { needsWater, wateringState } from '../lib/watering';
@@ -84,12 +85,13 @@ export default function PlantCard({
       accessibilityRole="button"
       // One label rather than four separate nodes: a screen reader user wants
       // the plant and its state in a single utterance, not a tour of the row.
-      accessibilityLabel={
-        `${name}${secondary ? `, ${secondary}` : ''}` +
-        (conditionLabel ? `, diagnosed ${conditionLabel}` : ', not diagnosed') +
-        `, saved ${when}` +
-        (thirsty ? `, watering ${water.label.toLowerCase()}` : '')
-      }
+      accessibilityLabel={copy.plantCard.a11y({
+        name,
+        secondary: secondary ?? '',
+        conditionLabel: conditionLabel ?? '',
+        when,
+        watering: thirsty ? water.label : '',
+      })}
     >
       {/*
         The photo may be gone. Item 9 copies it into the document directory on
@@ -158,7 +160,7 @@ export default function PlantCard({
       {plant.diagnosis !== undefined && (
         <View style={s.badge} importantForAccessibility="no">
           <Ionicons name="medkit-outline" size={11} color={t.color.textSecondary} />
-          <Text style={s.badgeText}>Diagnosed</Text>
+          <Text style={s.badgeText}>{copy.plantCard.diagnosedBadge}</Text>
         </View>
       )}
 

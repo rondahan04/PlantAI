@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Theme, useTheme } from '../theme';
+import { copy } from '../services/language';
 
 type Props = {
   count: number;
@@ -36,21 +37,21 @@ export default function ImportBanner({ count, onImport, onDismiss }: Props) {
     <View style={s.card}>
       <Ionicons name="cloud-upload-outline" size={20} color={t.color.primary} />
       <View style={s.body}>
-        <Text style={s.title}>Import your {count} saved plants?</Text>
+        <Text style={s.title}>{copy.importBanner.title(count)}</Text>
         <Text style={s.sub}>
           {failedCount === null
-            ? 'They will follow you to any device you log into.'
-            : `${count - failedCount} imported, ${failedCount} couldn't - tap to retry.`}
+            ? copy.importBanner.sub
+            : copy.importBanner.partial(count - failedCount, failedCount)}
         </Text>
       </View>
       {busy ? (
         <ActivityIndicator color={t.color.primary} />
       ) : (
         <View style={s.actions}>
-          <Pressable onPress={handleImport} accessibilityRole="button" accessibilityLabel="Import saved plants" hitSlop={8}>
-            <Text style={s.importText}>Import</Text>
+          <Pressable onPress={handleImport} accessibilityRole="button" accessibilityLabel={copy.importBanner.importA11y} hitSlop={8}>
+            <Text style={s.importText}>{copy.importBanner.importAction}</Text>
           </Pressable>
-          <Pressable onPress={onDismiss} accessibilityRole="button" accessibilityLabel="Not now" hitSlop={8}>
+          <Pressable onPress={onDismiss} accessibilityRole="button" accessibilityLabel={copy.importBanner.dismissA11y} hitSlop={8}>
             <Ionicons name="close" size={18} color={t.color.textMuted} />
           </Pressable>
         </View>
