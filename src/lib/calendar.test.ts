@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dayKey, dayKeySet, monthView, shiftMonth } from './calendar.ts';
+import { dayKey, dayKeySet, monthView, shiftMonth, weekdayLabels } from './calendar.ts';
 
 /*
  * The calendar's only job is putting a dot on the right square, so these tests
@@ -101,4 +101,38 @@ test('the grid dates round-trip through dayKey', () => {
   const hits = cells.filter((c) => watered.has(dayKey(c.date!)));
   assert.equal(hits.length, 1);
   assert.equal(hits[0].day, 19);
+});
+
+/*
+ * Language. The grid itself is language-neutral - both the Israeli and the
+ * American week start on Sunday, so only the glyphs change and no column moves.
+ */
+
+test('a month title is rendered in the language asked for, not the device default', () => {
+  assert.match(monthView(2026, 8, 'he-IL').title, /[א-ת]/);
+  assert.match(monthView(2026, 8, 'en-US').title, /September/);
+});
+
+test('the locale is optional, so an existing caller keeps the device default', () => {
+  assert.ok(monthView(2026, 8).title.length > 0);
+});
+
+test('weekday initials exist in both languages and still start on Sunday', () => {
+  assert.deepEqual(weekdayLabels('en'), ['S', 'M', 'T', 'W', 'T', 'F', 'S']);
+  assert.deepEqual(weekdayLabels('he'), ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש']);
+  assert.equal(weekdayLabels('he').length, 7);
+});
+
+test('paging to another month keeps the language', () => {
+  // shiftMonth rebuilds through monthView, so a locale it did not carry would
+  // silently revert the title to the DEVICE language on the first tap of the
+  // next-month arrow - and only there, which is the worst kind of bug to find.
+  //
+  // Asserted with en-US on purpose. This repo is developed on a machine whose
+  // own locale is Hebrew, so a Hebrew assertion passes whether or not the
+  // locale is threaded through, and would have signed off the bug it exists to
+  // catch. English is the value the device default cannot produce here.
+  const september = monthView(2026, 8, 'en-US');
+  assert.match(shiftMonth(september, 1, 'en-US').title, /October/);
+  assert.match(shiftMonth(september, -1, 'en-US').title, /August/);
 });

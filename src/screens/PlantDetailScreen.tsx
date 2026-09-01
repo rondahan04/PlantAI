@@ -9,6 +9,7 @@ import { Theme, useTheme } from '../theme';
 import { directionalIconStyle } from '../lib/rtl';
 import { LOGO_GLYPH } from '../brand';
 import { plantRepo } from '../services/plantRepoInstance';
+import { localeTag } from '../services/language';
 import { plantPhotos } from '../services/photos';
 import { intervalLabel, wateringState } from '../lib/watering';
 import { treatmentProduct } from '../lib/treatments';
@@ -557,7 +558,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
           </View>
         )}
 
-        <Text style={s.savedAt}>Saved {new Date(plant.savedAt).toLocaleDateString()}</Text>
+        <Text style={s.savedAt}>Saved {new Date(plant.savedAt).toLocaleDateString(localeTag())}</Text>
       </ScrollView>
     </SafeAreaView>
   );

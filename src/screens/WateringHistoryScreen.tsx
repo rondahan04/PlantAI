@@ -9,7 +9,8 @@ import { Theme, useTheme } from '../theme';
 import { directionalIconStyle } from '../lib/rtl';
 import { plantRepo } from '../services/plantRepoInstance';
 import { careHistory, type CareKind } from '../services/plantStore';
-import { WEEKDAY_LABELS, dayKey, dayKeySet, monthView, shiftMonth } from '../lib/calendar';
+import { dayKey, dayKeySet, monthView, shiftMonth, weekdayLabels } from '../lib/calendar';
+import { getLanguage, localeTag } from '../services/language';
 import { CARE_KINDS, careState } from '../lib/care';
 
 /*
@@ -99,7 +100,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
   const [plant] = useState(() => plantRepo.loadLocal().plants.find((p) => p.id === plantId) ?? null);
   const [view, setView] = useState(() => {
     const now = new Date();
-    return monthView(now.getFullYear(), now.getMonth());
+    return monthView(now.getFullYear(), now.getMonth(), localeTag());
   });
 
   /* Every kind's history, always - the filter decides what is drawn, not what
@@ -247,7 +248,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
           <View style={s.monthRow}>
             <Pressable
               style={s.monthBtn}
-              onPress={() => setView((v) => shiftMonth(v, -1))}
+              onPress={() => setView((v) => shiftMonth(v, -1, localeTag()))}
               accessibilityRole="button"
               accessibilityLabel="Previous month"
               hitSlop={8}
@@ -257,7 +258,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
             <Text style={s.monthTitle}>{view.title}</Text>
             <Pressable
               style={s.monthBtn}
-              onPress={() => setView((v) => shiftMonth(v, 1))}
+              onPress={() => setView((v) => shiftMonth(v, 1, localeTag()))}
               accessibilityRole="button"
               accessibilityLabel="Next month"
               hitSlop={8}
@@ -267,7 +268,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
           </View>
 
           <View style={s.weekRow}>
-            {WEEKDAY_LABELS.map((d, i) => (
+            {weekdayLabels(getLanguage()).map((d, i) => (
               // The labels repeat (S…S, T…T), so the index is the only stable key.
               <Text key={i} style={s.weekday}>
                 {d}
@@ -310,7 +311,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
                       ]}
                       accessible
                       accessibilityLabel={
-                        `${cell.date.toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}` +
+                        `${cell.date.toLocaleDateString(localeTag(), { day: 'numeric', month: 'long' })}` +
                         done.map((k) => `, ${COPY[k].short.toLowerCase()} logged`).join('') +
                         dueKinds.map((k) => `, ${COPY[k].short.toLowerCase()} due`).join('') +
                         (isToday ? ', today' : '')
@@ -379,7 +380,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
                   color={t.color[COPY[entry.kind].color]}
                 />
                 <Text style={s.recentText}>
-                  {new Date(entry.at).toLocaleDateString(undefined, {
+                  {new Date(entry.at).toLocaleDateString(localeTag(), {
                     weekday: 'short',
                     day: 'numeric',
                     month: 'short',
@@ -387,7 +388,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
                 </Text>
                 {filter === 'all' && <Text style={s.recentKind}>{COPY[entry.kind].short}</Text>}
                 <Text style={s.recentTime}>
-                  {new Date(entry.at).toLocaleTimeString(undefined, {
+                  {new Date(entry.at).toLocaleTimeString(localeTag(), {
                     hour: '2-digit',
                     minute: '2-digit',
                   })}
