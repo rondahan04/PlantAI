@@ -162,6 +162,7 @@ export type RootStackParamList = {
   ManageAccount: undefined;
   ChangePassword: undefined;
   Notifications: undefined;
+  Language: undefined;
   /*
    * The species catalog, pushed from the add-plant form. It cannot take an
    * onPick callback - params are persisted and restored, so they have to stay

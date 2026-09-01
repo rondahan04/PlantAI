@@ -8,6 +8,7 @@ import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
 import SettingsCard from '../components/SettingsCard';
 import SettingsRow from '../components/SettingsRow';
+import { copy, getLanguage } from '../services/language';
 import { getProfile, Profile } from '../services/auth';
 import { supabase } from '../services/supabase';
 
@@ -123,6 +124,14 @@ export default function SettingsScreen({ navigation }: Props) {
             icon="notifications-outline"
             label="Notifications"
             onPress={() => navigation.navigate('Notifications')}
+          />
+          <SettingsRow
+            icon="language-outline"
+            label={copy.language.title}
+            /* The current language named in itself, so the row is legible to
+             * whichever language the reader actually speaks. */
+            value={getLanguage() === 'he' ? copy.language.hebrew : copy.language.english}
+            onPress={() => navigation.navigate('Language')}
           />
         </SettingsCard>
 

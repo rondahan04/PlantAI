@@ -37,6 +37,7 @@ import EditProfileFieldScreen from './src/screens/EditProfileFieldScreen';
 import ManageAccountScreen from './src/screens/ManageAccountScreen';
 import ChangePasswordScreen from './src/screens/ChangePasswordScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
+import LanguageScreen from './src/screens/LanguageScreen';
 import AddPlantScreen from './src/screens/AddPlantScreen';
 import SpeciesPickerScreen from './src/screens/SpeciesPickerScreen';
 
@@ -158,6 +159,7 @@ export default function App() {
             <Stack.Screen name="ManageAccount" component={ManageAccountScreen} />
             <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} />
+            <Stack.Screen name="Language" component={LanguageScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </SafeAreaProvider>
