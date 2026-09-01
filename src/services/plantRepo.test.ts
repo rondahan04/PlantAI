@@ -429,3 +429,30 @@ test('logged in: a watered plant carries its full record back from the cloud', a
   assert.equal(plant?.lastWateredAt, '2026-08-20T09:00:00.000Z');
   assert.equal(rows.get(saved.plant.id)?.added_via, 'manual');
 });
+
+test('importGuestPlants() without a user id reports every plant as failed, never as an empty success', async () => {
+  // `{imported: [], failed: []}` is what importing zero plants returns, so a
+  // caller cannot tell it from "all of them landed". ImportBanner read it as
+  // success and dismissed itself, leaving the user staring at an empty
+  // Portfolio with their plants still on disk and no way back to them.
+  const guest = createPlantStore(memoryStorage());
+  const mirror = createPlantStore(memoryStorage());
+  const saved = guest.save({ photoUri: 'a.jpg', diagnosis });
+  assert.ok(saved.ok);
+
+  const { deps, rows } = fakeCloudDeps();
+  const repo = createPlantRepo({
+    guest,
+    mirror,
+    cloud: createCloudPlantLibrary(deps),
+    getSessionHint: () => true,
+    getUserId: () => null,
+  });
+
+  const result = await repo.importGuestPlants();
+  assert.equal(result.failed.length, 1);
+  assert.equal(result.imported.length, 0);
+  assert.equal(rows.size, 0);
+  // And above all: the plants are still there.
+  assert.equal(guest.load().plants.length, 1);
+});

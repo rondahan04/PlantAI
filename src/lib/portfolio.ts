@@ -175,3 +175,39 @@ function lastCareAt(plant: StoredPlant, kind: CareKind): string | undefined {
   const value = plant[LAST_AT[kind]];
   return typeof value === 'string' ? value : undefined;
 }
+
+/*
+ * Whether to offer a returning user the guest plants they saved before signing
+ * up. Both halves of this were wrong on a real device, in opposite directions.
+ *
+ * Logged OUT the banner must not appear: `plantRepo.importGuestPlants()` has no
+ * user id to write against, and the empty result it returns is byte-identical
+ * to "every plant imported fine" - so the banner congratulated itself and
+ * dismissed, having moved nothing.
+ *
+ * Logged IN it must appear even though the cloud mirror is empty, because a
+ * mirror that is empty is exactly what a first login looks like. That is the
+ * one moment this banner exists for.
+ */
+export function offersGuestImport(opts: { loggedIn: boolean; guestCount: number }): boolean {
+  return opts.loggedIn && opts.guestCount > 0;
+}
+
+/*
+ * Which of the two Home layouts to paint (D8: marketing on first run, library
+ * once there is something to show).
+ *
+ * `offeringImport` belongs in this decision and its absence was a data-loss
+ * bug: the library layout is the only one that renders the import banner, so a
+ * freshly signed-up user - zero plants in the mirror, several still in the
+ * guest key - was shown first-run marketing copy and given no way to reach the
+ * plants they had just "lost". They were never deleted; they were unreachable,
+ * which to the person holding the phone is the same thing.
+ */
+export function showsLibraryLayout(opts: {
+  plantCount: number;
+  libraryReadable: boolean;
+  offeringImport: boolean;
+}): boolean {
+  return opts.plantCount > 0 || !opts.libraryReadable || opts.offeringImport;
+}

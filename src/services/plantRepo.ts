@@ -290,10 +290,19 @@ export function createPlantRepo(deps: RepoDeps) {
    * remainder, never a silent partial clear.
    */
   async function importGuestPlants(): Promise<ImportBatchResult> {
-    const userId = getUserId();
-    if (!userId) return { imported: [], failed: [] };
-
     const guestPlants = guest.load().plants;
+
+    /*
+     * No user id means the import cannot even be attempted. Report every plant
+     * as FAILED rather than returning an empty result: `{imported: [], failed:
+     * []}` is exactly what importing zero plants returns, so a caller cannot
+     * tell "there was nobody to import for" from "all of them landed fine".
+     * ImportBanner read that as success and dismissed itself, which is how a
+     * library that was never touched came to look like a deleted one.
+     */
+    const userId = getUserId();
+    if (!userId) return { imported: [], failed: guestPlants.map((p) => p.id) };
+
     const result = await cloud.importBatch(userId, guestPlants);
 
     if (result.failed.length === 0) {

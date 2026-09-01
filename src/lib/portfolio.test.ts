@@ -2,7 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DAY_MS } from './watering.ts';
 import { SOIL_MEDIUM_IDS } from './soilMedia.ts';
-import { dueSoon, filterPortfolio, plantDisplayName, plantSecondaryName } from './portfolio.ts';
+import {
+  dueSoon,
+  filterPortfolio,
+  offersGuestImport,
+  plantDisplayName,
+  plantSecondaryName,
+  showsLibraryLayout,
+} from './portfolio.ts';
 import type { GenusCarePlan, SoilCarePlan } from './genusCarePlan.ts';
 import type { StoredPlant } from '../services/plantStore.ts';
 
@@ -153,4 +160,57 @@ test('plantSecondaryName does not repeat the primary name back at the user', () 
   const same = scanned('s2', 1);
   same.diagnosis!.plantName = 'Monstera deliciosa';
   assert.equal(plantSecondaryName(same), '');
+});
+
+/*
+ * The import-offer predicates. Both of these were bugs on a real device: guest
+ * plants survived a signup on disk but became invisible and un-importable, and
+ * an empty Portfolio is indistinguishable from a deletion the user never asked
+ * for.
+ */
+
+test('the import offer is not made while logged out - there is nowhere to import to', () => {
+  assert.equal(offersGuestImport({ loggedIn: false, guestCount: 3 }), false);
+});
+
+test('the import offer is made to a logged-in user holding guest plants', () => {
+  assert.equal(offersGuestImport({ loggedIn: true, guestCount: 3 }), true);
+});
+
+test('no guest plants, no offer', () => {
+  assert.equal(offersGuestImport({ loggedIn: true, guestCount: 0 }), false);
+});
+
+test('a fresh account with an empty mirror still gets the library layout when plants await import', () => {
+  // The bug: `hasPlants` reads the cloud mirror, which is empty for a brand new
+  // account, so the screen fell through to the first-run layout - the one
+  // layout that does NOT render the import banner. The plants were on disk the
+  // whole time with no way to reach them.
+  assert.equal(
+    showsLibraryLayout({ plantCount: 0, libraryReadable: true, offeringImport: true }),
+    true
+  );
+});
+
+test('a genuinely empty library with nothing to import gets the first-run layout', () => {
+  assert.equal(
+    showsLibraryLayout({ plantCount: 0, libraryReadable: true, offeringImport: false }),
+    false
+  );
+});
+
+test('a library that failed to load never shows first-run copy', () => {
+  // "You have no plants" over a library that merely failed to parse is the same
+  // false deletion story from the other direction.
+  assert.equal(
+    showsLibraryLayout({ plantCount: 0, libraryReadable: false, offeringImport: false }),
+    true
+  );
+});
+
+test('any saved plant gets the library layout', () => {
+  assert.equal(
+    showsLibraryLayout({ plantCount: 1, libraryReadable: true, offeringImport: false }),
+    true
+  );
 });

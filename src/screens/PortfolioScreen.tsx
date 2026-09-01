@@ -9,7 +9,6 @@ import {
   SectionList,
   AccessibilityInfo,
   Image,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,7 +24,9 @@ import { triageSections } from '../lib/triage';
 import {
   dueSoon,
   filterPortfolio,
+  offersGuestImport,
   plantDisplayName,
+  showsLibraryLayout,
   type DueItem,
   type PortfolioFilter,
 } from '../lib/portfolio';
@@ -38,7 +39,6 @@ import { useSession } from '../hooks/useSession';
 import { getSessionHint } from '../services/sessionHint';
 import PlantCard from '../components/PlantCard';
 import ImportBanner from '../components/ImportBanner';
-import { seedMockPlants, mockDiagnosisParams } from '../services/devSeed';
 
 /*
  * The Portfolio tab - every plant the user owns, not just the ones they
@@ -109,7 +109,12 @@ export default function PortfolioScreen({ navigation }: Props) {
    * is running, since onboarding only precedes this tab.
    */
   const [profileName] = useState(() => onboarding.load()?.name);
-  const [showImportBanner, setShowImportBanner] = useState(() => plantRepo.hasUnimportedGuestPlants());
+  const [importOffered, setImportOffered] = useState(() =>
+    offersGuestImport({ loggedIn: getSessionHint(), guestCount: plantRepo.guestPlantCount() })
+  );
+  /* Declining is per-visit and deliberately not persisted - see ImportBanner. */
+  const [importDismissed, setImportDismissed] = useState(false);
+  const showImportBanner = importOffered && !importDismissed;
 
   /* All or diagnosed. Local, not persisted: the chip is a lens the user holds
    * for a moment, and a filter that survived a relaunch would look like plants
@@ -140,7 +145,9 @@ export default function PortfolioScreen({ navigation }: Props) {
   // session's mirror didn't) - re-check whenever session identity changes,
   // rather than only once at mount.
   useEffect(() => {
-    setShowImportBanner(plantRepo.hasUnimportedGuestPlants());
+    setImportOffered(
+      offersGuestImport({ loggedIn: session !== null, guestCount: plantRepo.guestPlantCount() })
+    );
   }, [session]);
 
   /*
@@ -233,7 +240,18 @@ export default function PortfolioScreen({ navigation }: Props) {
     // user mid-scroll for a day boundary they cannot see.
   }, [library]);
 
-  const hasPlants = library.plants.length > 0;
+  /*
+   * NOT just "does the library have plants". When logged in, `library` is the cloud mirror, and a
+   * brand new account's mirror is empty - so a user who signed up holding guest
+   * plants fell through to the first-run layout, which is the only layout that
+   * does not render the import banner. Their plants were on disk the whole
+   * time with no way to reach them.
+   */
+  const libraryLayout = showsLibraryLayout({
+    plantCount: library.plants.length,
+    libraryReadable: library.ok !== false,
+    offeringImport: showImportBanner,
+  });
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(40)).current;
@@ -310,37 +328,6 @@ export default function PortfolioScreen({ navigation }: Props) {
     );
   };
 
-  /*
-   * Dev fixtures (`__DEV__` only, stripped from any release bundle): seed the
-   * two mock plants, or open either one's diagnosis directly - the Diagnosis
-   * screen is where the nursery scrape is triggered from.
-   */
-  const devTools = __DEV__ ? (
-    <View style={s.devRow}>
-      <Pressable
-        style={s.devBtn}
-        onPress={async () => {
-          const result = await seedMockPlants();
-          setLibrary(plantRepo.loadLocal());
-          if (result.failed.length > 0) Alert.alert('Seed partial', result.failed.join('\n'));
-        }}
-      >
-        <Text style={s.devText}>Seed mocks</Text>
-      </Pressable>
-      <Pressable
-        style={s.devBtn}
-        onPress={async () => navigation.navigate('Diagnosis', await mockDiagnosisParams('monstera'))}
-      >
-        <Text style={s.devText}>Dx Monstera</Text>
-      </Pressable>
-      <Pressable
-        style={s.devBtn}
-        onPress={async () => navigation.navigate('Diagnosis', await mockDiagnosisParams('alocasia'))}
-      >
-        <Text style={s.devText}>Dx Alocasia</Text>
-      </Pressable>
-    </View>
-  ) : null;
 
   /*
    * Returning-user layout. The design review's "do not touch Home" rule was
@@ -348,7 +335,7 @@ export default function PortfolioScreen({ navigation }: Props) {
    * is untouched - this is a second layout holding the same tokens on purpose
    * rather than by inheritance.
    */
-  if (hasPlants || library.ok === false) {
+  if (libraryLayout) {
     return (
       <SafeAreaView style={s.container} edges={['top']} /* bottom inset belongs to the tab bar */>
         <SectionList
@@ -387,7 +374,7 @@ export default function PortfolioScreen({ navigation }: Props) {
                     setLibrary(fresh);
                     return result;
                   }}
-                  onDismiss={() => setShowImportBanner(false)}
+                  onDismiss={() => setImportDismissed(true)}
                 />
               )}
 
@@ -415,9 +402,6 @@ export default function PortfolioScreen({ navigation }: Props) {
                 </View>
               )}
 
-              {devTools}
-
-              <Text style={s.libTitle}>My Plants</Text>
               {due.length > 0 && (
                 <View style={s.dueCard}>
                   <Text style={s.dueTitle}>Due this week</Text>
@@ -544,7 +528,6 @@ export default function PortfolioScreen({ navigation }: Props) {
           </Pressable>
         </Animated.View>
 
-        {devTools}
         <Animated.View style={[s.secondaryWrap, { opacity: fadeAnim }]}>
           <Pressable
             style={({ pressed }) => [s.secondaryBtn, pressed && s.secondaryBtnPressed]}
@@ -748,17 +731,6 @@ function makeStyles(t: Theme) {
     ctaBtnPressed: { backgroundColor: t.color.primaryPressed, transform: [{ scale: 0.98 }] },
     ctaText: { ...t.type.heading, color: t.color.onPrimary },
 
-    /* __DEV__ fixtures row - never shipped, so plain and unstyled on purpose. */
-    devRow: { flexDirection: 'row', gap: t.space.sm, marginTop: t.space.md },
-    devBtn: {
-      flex: 1,
-      alignItems: 'center',
-      paddingVertical: t.space.sm,
-      borderRadius: t.radius.md,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: t.color.textSecondary,
-    },
-    devText: { ...t.type.caption, color: t.color.textSecondary },
     secondaryWrap: { marginBottom: t.space['2xl'] },
     secondaryBtn: {
       flexDirection: 'row',
