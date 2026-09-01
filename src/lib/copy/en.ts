@@ -160,6 +160,50 @@ export const en = {
     findNearby: 'Find Nearby Nurseries',
     scanAnother: 'Scan Another Plant',
   },
+  nurseries: {
+    unreachableTitle: "We couldn't reach the nursery service",
+    unreachableBody:
+      'The search did not come back. Nothing is wrong with your plant or your location.',
+    timeoutTitle: 'The search took too long',
+    timeoutBody:
+      'Checking live stock across nearby nurseries can run past our limit. Trying again often works.',
+    back: 'Back',
+    countNearby: (n: number) => `${n} ${n === 1 ? 'nursery' : 'nurseries'} nearby`,
+    searching: 'Searching…',
+    searchFailed: 'Search failed',
+    showMap: 'Show map',
+    showList: 'Show list',
+    refresh: 'Refresh',
+    refreshA11y: 'Check stock again now',
+    deliverToday: 'Deliver Today',
+    pickUp: 'Pick Up',
+    searchingTitle: 'Searching nearby nurseries',
+    searchingBody: (plantName: string) =>
+      `Discovering shops within 10km and checking live stock for ${plantName}. This can take 30–60 seconds.`,
+    tryAgain: 'Try again',
+    backToHome: 'Back to home',
+    emptyTitle: 'No nurseries found nearby',
+    emptyBody: (plantName: string) =>
+      `No shop within 10km came back with ${plantName} in stock. Stock changes often, so it is worth another look later.`,
+    searchAgain: 'Search again',
+    diagnoseAnother: 'Diagnose another plant',
+    diagnoseAnotherCta: 'Diagnose Another Plant',
+    reviews: (n: number) => `(${n} reviews)`,
+    inStock: 'In stock',
+    /* A price we did not trust reads as "See price" rather than a number: the
+     * shop does stock the plant, we just would not stand behind the figure. */
+    seePrice: 'See price',
+    call: 'Call',
+    callA11y: 'Call nursery',
+    directions: 'Directions',
+    order: 'Order',
+    unavailable: 'Unavailable',
+    visitStore: 'Visit Store',
+    noContact: 'No website or phone number available for this nursery.',
+    pillA11y: (text: string, detail: string) => `${text}. ${detail}`,
+    pillHint: 'Shows why',
+    mapCallout: (distance: string, price: string) => `${distance}${price ? ` · ${price} · in stock` : ''}`,
+  },
   camera: {
     /*
      * `describeFailure` is the single source of failure copy on this screen
