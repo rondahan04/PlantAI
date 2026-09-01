@@ -582,6 +582,24 @@ export const en = {
     howItWorks: 'How it works',
     bottomNote: 'We diagnose 1000+ plant species · fast and accurate',
   },
+  tabs: {
+    portfolio: 'Portfolio',
+    scan: 'Scan',
+    find: 'Find',
+  },
+  relativeDay: {
+    /*
+     * Compact by necessity - this sits under a plant name on a card, so it has
+     * roughly six characters. Hebrew abbreviates differently: 'ד' for days,
+     * 'ש' for weeks, 'ש' for years would collide, so weeks and years are
+     * spelled out rather than initialised.
+     */
+    today: 'today',
+    yesterday: 'yesterday',
+    daysAgo: (n: number) => `${n}d ago`,
+    weeksAgo: (n: number) => `${n}w ago`,
+    yearsAgo: (n: number) => `${n}y ago`,
+  },
   plantCard: {
     diagnosedBadge: 'Diagnosed',
     /*

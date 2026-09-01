@@ -502,6 +502,18 @@ export const he: Copy = {
     howItWorks: 'איך זה עובד',
     bottomNote: 'אנחנו מאבחנים מעל 1000 מיני צמחים · מהר ובדיוק',
   },
+  tabs: {
+    portfolio: 'הצמחים שלי',
+    scan: 'סריקה',
+    find: 'חיפוש',
+  },
+  relativeDay: {
+    today: 'היום',
+    yesterday: 'אתמול',
+    daysAgo: (n: number) => `לפני ${n} ימים`,
+    weeksAgo: (n: number) => (n === 1 ? 'לפני שבוע' : `לפני ${n} שבועות`),
+    yearsAgo: (n: number) => (n === 1 ? 'לפני שנה' : `לפני ${n} שנים`),
+  },
   plantCard: {
     diagnosedBadge: 'אובחן',
     a11y: (p: {
