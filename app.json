@@ -14,7 +14,10 @@
       "bundleIdentifier": "com.rondahan.PlantAI",
       "supportsTablet": true,
       "infoPlist": {
-        "CFBundleLocalizations": ["en", "he"],
+        "CFBundleLocalizations": [
+          "en",
+          "he"
+        ],
         "CFBundleAllowMixedLocalizations": true,
         "NSCameraUsageDescription": "PlantAI needs camera access to diagnose your plants.",
         "NSPhotoLibraryUsageDescription": "PlantAI needs photo library access to analyze plant photos.",
@@ -69,6 +72,18 @@
         }
       ],
       "expo-localization"
-    ]
+    ],
+    "owner": "rondahan",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/57deeb39-7f1d-4f19-bc6c-76361f3dfc1d"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "57deeb39-7f1d-4f19-bc6c-76361f3dfc1d"
+      }
+    }
   }
 }

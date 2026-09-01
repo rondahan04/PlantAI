@@ -250,15 +250,24 @@ test('a kind with no schedule anywhere says so rather than disappearing', () => 
 });
 
 test('the genus plan fills the slots the plant itself has no schedule for', () => {
-  const genus: GenusCarePlan = {
-    genus: 'Monstera',
-    light: 'Bright indirect',
+  const perMedium: SoilCarePlan = {
     water: 'Weekly',
     waterEveryDays: 7,
+    fertilizer: 'Feed monthly in growth',
     fertilizeEveryDays: 21,
-    repotEveryDays: 540,
+    light: 'Bright indirect',
+    humidity: '60%',
   };
-  const slots = plantSchedule(scanned('s1', 1), NOW, genus);
+  const genus: GenusCarePlan = {
+    genus: 'Monstera',
+    family: 'Aroids',
+    fetchedAt: new Date(NOW).toISOString(),
+    bySoil: Object.fromEntries(SOIL_MEDIUM_IDS.map((id) => [id, perMedium])) as GenusCarePlan['bySoil'],
+  };
+  // The plant has to be in a medium for the genus plan to apply - `bySoil` is
+  // keyed by medium, and a plant with none has nothing to look up.
+  const plant = { ...scanned('s1', 1), soilMedium: 'leca' as const };
+  const slots = plantSchedule(plant, NOW, genus);
   const byKind = Object.fromEntries(slots.map((s) => [s.kind, s]));
   assert.notEqual(byKind.fertilizer.status, 'unscheduled');
   assert.notEqual(byKind.fertilizer.label, 'Not set');
