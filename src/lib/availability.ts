@@ -37,10 +37,39 @@ export interface AvailabilityBadge {
 export const LIKELY_AT_OR_ABOVE = 70;
 export const MAYBE_AT_OR_ABOVE = 40;
 
-function band(confidence: number): string {
-  if (confidence >= LIKELY_AT_OR_ABOVE) return 'Likely has it';
-  if (confidence >= MAYBE_AT_OR_ABOVE) return 'Might have it';
-  return 'Probably not';
+
+/*
+ * The wording, injected like `WateringCopy` and `IdentityCopy`. This module
+ * decides what we actually know about a shop's stock; the caller supplies the
+ * sentence.
+ */
+export interface AvailabilityCopy {
+  likely: string;
+  maybe: string;
+  unlikely: string;
+  inStock: (shipsToHome: boolean) => string;
+  notFound: string;
+  estimate: (band: string, confidence: number) => string;
+  unknown: string;
+  unknownCallToConfirm: string;
+}
+
+/* English, so every existing caller and test behaves exactly as before. */
+export const EN_AVAILABILITY_COPY: AvailabilityCopy = {
+  likely: 'Likely has it',
+  maybe: 'Might have it',
+  unlikely: 'Probably not',
+  inStock: (shipsToHome) => `In stock now · ${shipsToHome ? 'ships to home' : 'local pickup'}`,
+  notFound: "Didn't find the product",
+  estimate: (bandLabel, confidence) => `${bandLabel} · ${confidence}%`,
+  unknown: 'Availability unknown',
+  unknownCallToConfirm: 'Availability unknown - call to confirm',
+};
+
+function band(confidence: number, words: AvailabilityCopy): string {
+  if (confidence >= LIKELY_AT_OR_ABOVE) return words.likely;
+  if (confidence >= MAYBE_AT_OR_ABOVE) return words.maybe;
+  return words.unlikely;
 }
 
 type AvailabilityInput = Pick<
@@ -59,11 +88,14 @@ export function isWorthShowing(n: Pick<Nursery, 'outcome'>): boolean {
   return n.outcome !== 'not_sold';
 }
 
-export function availabilityBadge(n: AvailabilityInput): AvailabilityBadge {
+export function availabilityBadge(
+  n: AvailabilityInput,
+  words: AvailabilityCopy = EN_AVAILABILITY_COPY
+): AvailabilityBadge {
   // An exact listing outranks every estimate - we saw the product and its price.
   if (n.inStockKnown) {
     return {
-      text: `In stock now · ${n.shipsToHome ? 'ships to home' : 'local pickup'}`,
+      text: words.inStock(Boolean(n.shipsToHome)),
       tone: 'good',
       detail: '',
       hasDetail: false,
@@ -78,7 +110,7 @@ export function availabilityBadge(n: AvailabilityInput): AvailabilityBadge {
    */
   if (n.outcome === 'not_found') {
     return {
-      text: "Didn't find the product",
+      text: words.notFound,
       tone: 'unknown',
       detail: n.availability?.detail ?? '',
       hasDetail: Boolean(n.availability?.detail),
@@ -89,7 +121,7 @@ export function availabilityBadge(n: AvailabilityInput): AvailabilityBadge {
 
   if (a?.kind === 'estimate' && typeof a.confidence === 'number') {
     return {
-      text: `${band(a.confidence)} · ${a.confidence}%`,
+      text: words.estimate(band(a.confidence, words), a.confidence),
       tone: a.confidence >= MAYBE_AT_OR_ABOVE ? 'maybe' : 'unknown',
       detail: a.detail,
       hasDetail: Boolean(a.detail),
@@ -103,7 +135,7 @@ export function availabilityBadge(n: AvailabilityInput): AvailabilityBadge {
    */
   if (a?.kind === 'unreadable' || a?.kind === 'error') {
     return {
-      text: "Didn't find the product",
+      text: words.notFound,
       tone: 'unknown',
       detail: a.detail,
       hasDetail: Boolean(a.detail),
@@ -117,7 +149,7 @@ export function availabilityBadge(n: AvailabilityInput): AvailabilityBadge {
    */
   if (n.availabilityNote) {
     return {
-      text: 'Availability unknown',
+      text: words.unknown,
       tone: 'unknown',
       detail: n.availabilityNote,
       hasDetail: true,
@@ -125,7 +157,7 @@ export function availabilityBadge(n: AvailabilityInput): AvailabilityBadge {
   }
 
   return {
-    text: 'Availability unknown - call to confirm',
+    text: words.unknownCallToConfirm,
     tone: 'unknown',
     detail: '',
     hasDetail: false,

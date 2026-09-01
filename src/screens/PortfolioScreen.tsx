@@ -209,7 +209,7 @@ export default function PortfolioScreen({ navigation }: Props) {
   const sections = useMemo<{ key: string; title: string; data: StoredPlant[] }[]>(
     () =>
       filter === 'all'
-        ? triageSections(visible)
+        ? triageSections(visible, copy.triage)
         : /* One untitled section, so SectionList renders a flat list without a
            * second code path for it. `TriageKey` is deliberately not widened to
            * hold a 'diagnosed' bucket - this is a rendering shape, not a triage
@@ -232,10 +232,16 @@ export default function PortfolioScreen({ navigation }: Props) {
    * existed, so the miss costs nothing that was ever there.
    */
   const due = useMemo(() => {
-    return dueSoon(library.plants, Date.now(), (plant: StoredPlant) => {
-      const genus = plant.species?.genus ?? plant.diagnosis?.genus;
-      return genus ? genusCarePlans.peek(genus) : null;
-    });
+    return dueSoon(
+      library.plants,
+      Date.now(),
+      (plant: StoredPlant) => {
+        const genus = plant.species?.genus ?? plant.diagnosis?.genus;
+        return genus ? genusCarePlans.peek(genus) : null;
+      },
+      copy.care,
+      copy.watering
+    );
     // `library` is the input; the clock is read once per library read on
     // purpose - re-running this on a timer would reshuffle the strip under a
     // user mid-scroll for a day boundary they cannot see.

@@ -284,7 +284,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
       // The RESOLVED plan, not the diagnosis's: the reminder has to fire on the
       // same date the card counts down to, and for a plant in LECA those are
       // different numbers.
-      const next = wateringState(carePlan, logged.plant.lastWateredAt, at);
+      const next = wateringState(carePlan, logged.plant.lastWateredAt, at, copy.watering);
       if (next.nextDueAt === null) return;
 
       // Null means no permission, or a runtime that cannot schedule. Both are

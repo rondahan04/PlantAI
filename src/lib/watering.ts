@@ -47,22 +47,57 @@ export function hasSchedule(carePlan: CarePlan | undefined): boolean {
 }
 
 /* "Every 7-10 days" / "Every 14 days" - the interval as the user reads it. */
-export function intervalLabel(carePlan: CarePlan | undefined): string {
+
+/*
+ * The wording, injected rather than hardcoded - the same seam as
+ * `IdentityCopy` in confidence.ts and `StorageDeps` in plantStore. This module
+ * decides WHICH state a plant is in; the caller supplies the sentence.
+ *
+ * Hebrew is why these are functions and not templates: "3 days overdue"
+ * becomes a different construction, not an English skeleton with a Hebrew word
+ * dropped into it, and day counts do not pluralise by adding a letter.
+ */
+export interface WateringCopy {
+  everyNDays: (min: number) => string;
+  everyRange: (min: number, max: number) => string;
+  everyDay: string;
+  tapToStart: (interval: string) => string;
+  overdue: (days: number) => string;
+  dueNowRange: string;
+  dueToday: string;
+  nextTomorrow: string;
+  nextInDays: (days: number) => string;
+}
+
+/* English, so every existing caller and test behaves exactly as before. */
+export const EN_WATERING_COPY: WateringCopy = {
+  everyNDays: (min) => `Every ${min} days`,
+  everyRange: (min, max) => `Every ${min}-${max} days`,
+  everyDay: 'Every day',
+  tapToStart: (interval) => `${interval} · tap to start`,
+  overdue: (days) => `${days} ${days === 1 ? 'day' : 'days'} overdue`,
+  dueNowRange: 'Due now - check the soil',
+  dueToday: 'Due today',
+  nextTomorrow: 'Next water tomorrow',
+  nextInDays: (days) => `Next water in ${days} ${days === 1 ? 'day' : 'days'}`,
+};
+
+export function intervalLabel(
+  carePlan: CarePlan | undefined,
+  words: WateringCopy = EN_WATERING_COPY
+): string {
   const min = carePlan?.waterEveryDays;
   if (typeof min !== 'number') return '';
   const max = carePlan?.waterEveryDaysMax;
-  if (typeof max === 'number' && max > min) return `Every ${min}-${max} days`;
-  return min === 1 ? 'Every day' : `Every ${min} days`;
-}
-
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? '' : 's'}`;
+  if (typeof max === 'number' && max > min) return words.everyRange(min, max);
+  return min === 1 ? words.everyDay : words.everyNDays(min);
 }
 
 export function wateringState(
   carePlan: CarePlan | undefined,
   lastWateredAt: string | undefined,
-  now: number
+  now: number,
+  words: WateringCopy = EN_WATERING_COPY
 ): WateringState {
   const min = carePlan?.waterEveryDays;
 
@@ -96,7 +131,7 @@ export function wateringState(
       status: 'never_watered',
       nextDueAt: null,
       daysUntilDue: null,
-      label: `${intervalLabel(carePlan)} · tap to start`,
+      label: words.tapToStart(intervalLabel(carePlan, words)),
     };
   }
 
@@ -120,7 +155,7 @@ export function wateringState(
       status: 'overdue',
       nextDueAt,
       daysUntilDue,
-      label: `${plural(late, 'day')} overdue`,
+      label: words.overdue(late),
     };
   }
 
@@ -130,7 +165,7 @@ export function wateringState(
       status: 'due',
       nextDueAt,
       daysUntilDue,
-      label: max ? 'Due now - check the soil' : 'Due today',
+      label: max ? words.dueNowRange : words.dueToday,
     };
   }
 
@@ -139,7 +174,7 @@ export function wateringState(
     status: 'ok',
     nextDueAt,
     daysUntilDue,
-    label: daysUntilDue <= 1 ? 'Next water tomorrow' : `Next water in ${plural(daysUntilDue, 'day')}`,
+    label: daysUntilDue <= 1 ? words.nextTomorrow : words.nextInDays(daysUntilDue),
   };
 }
 

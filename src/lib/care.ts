@@ -1,5 +1,10 @@
 import type { CarePlan } from '../types';
-import { wateringState, type WateringState } from './watering.ts';
+import {
+  EN_WATERING_COPY,
+  wateringState,
+  type WateringCopy,
+  type WateringState,
+} from './watering.ts';
 import { soilMediumById, type SoilMediumId } from './soilMedia.ts';
 import type { GenusCarePlan, SoilCarePlan } from './genusCarePlan.ts';
 
@@ -213,30 +218,68 @@ export function careState(
   carePlan: CarePlan | undefined,
   lastAt: string | undefined,
   now: number,
-  soilPlan?: SoilCarePlan
+  soilPlan?: SoilCarePlan,
+  words: CareCopy = EN_CARE_COPY,
+  wateringWords: WateringCopy = EN_WATERING_COPY
 ): WateringState {
-  const state = wateringState(intervalPlanFor(kind, carePlan, soilPlan), lastAt, now);
+  const state = wateringState(
+    intervalPlanFor(kind, carePlan, soilPlan),
+    lastAt,
+    now,
+    wateringWords
+  );
   if (kind === 'water') return state;
   // Only the wording differs, and only in the two places watering names itself.
-  return { ...state, label: relabel(kind, state) };
+  return { ...state, label: relabel(kind, state, words) };
 }
 
-const VERB: Record<Exclude<CareKind, 'water'>, string> = {
-  repot: 'repot',
-  fertilizer: 'feed',
+
+/*
+ * The wording for repot and feed, injected like `WateringCopy` and
+ * `IdentityCopy`. Repotting and feeding run on the same engine as watering and
+ * differ only in the two places the sentence names the activity.
+ *
+ * `monthsish` is in here too because a 540-day interval read out in days is
+ * noise, and "18 months" is a phrase that has to be built per language rather
+ * than assembled from a number and a suffix.
+ */
+export interface CareCopy {
+  tapToStart: (interval: string) => string;
+  dueNowRepot: string;
+  dueNow: string;
+  nextTomorrow: (kind: Exclude<CareKind, 'water'>) => string;
+  nextInDays: (kind: Exclude<CareKind, 'water'>, days: number) => string;
+  months: (n: number) => string;
+  weeks: (n: number) => string;
+  days: (n: number) => string;
+}
+
+/* English, so every existing caller and test behaves exactly as before. */
+export const EN_CARE_COPY: CareCopy = {
+  tapToStart: (interval) => `Every ${interval} · tap to start`,
+  dueNowRepot: 'Due now - check the roots',
+  dueNow: 'Due now',
+  nextTomorrow: (kind) => `Next ${kind === 'repot' ? 'repot' : 'feed'} tomorrow`,
+  nextInDays: (kind, days) => `Next ${kind === 'repot' ? 'repot' : 'feed'} in ${days} days`,
+  months: (n) => (n === 1 ? 'month' : `${n} months`),
+  weeks: (n) => (n === 1 ? 'week' : `${n} weeks`),
+  days: (n) => (n === 1 ? 'day' : `${n} days`),
 };
 
-function relabel(kind: Exclude<CareKind, 'water'>, state: WateringState): string {
-  const verb = VERB[kind];
+function relabel(
+  kind: Exclude<CareKind, 'water'>,
+  state: WateringState,
+  words: CareCopy
+): string {
   switch (state.status) {
     case 'never_watered':
-      return `Every ${monthsish(state.intervalDays)} · tap to start`;
+      return words.tapToStart(monthsish(state.intervalDays, words));
     case 'due':
-      return kind === 'repot' ? 'Due now - check the roots' : 'Due now';
+      return kind === 'repot' ? words.dueNowRepot : words.dueNow;
     case 'ok':
       return state.daysUntilDue !== null && state.daysUntilDue <= 1
-        ? `Next ${verb} tomorrow`
-        : `Next ${verb} in ${state.daysUntilDue} days`;
+        ? words.nextTomorrow(kind)
+        : words.nextInDays(kind, state.daysUntilDue ?? 0);
     default:
       // 'overdue' and 'unscheduled' already read correctly for any kind
       // ("5 days overdue", "").
@@ -245,15 +288,9 @@ function relabel(kind: Exclude<CareKind, 'water'>, state: WateringState): string
 }
 
 /* "3 weeks" / "18 months" - a 540-day interval read out in days is noise. */
-export function monthsish(days: number | null): string {
+export function monthsish(days: number | null, words: CareCopy = EN_CARE_COPY): string {
   if (!days) return '';
-  if (days >= 60) {
-    const months = Math.round(days / 30);
-    return months === 1 ? 'month' : `${months} months`;
-  }
-  if (days >= 14 && days % 7 === 0) {
-    const weeks = days / 7;
-    return weeks === 1 ? 'week' : `${weeks} weeks`;
-  }
-  return days === 1 ? 'day' : `${days} days`;
+  if (days >= 60) return words.months(Math.round(days / 30));
+  if (days >= 14 && days % 7 === 0) return words.weeks(days / 7);
+  return words.days(days);
 }

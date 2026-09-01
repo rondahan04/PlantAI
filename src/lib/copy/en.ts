@@ -45,6 +45,57 @@ export const en = {
    * EN_IDENTITY_COPY in that module, which is its default for pre-Hebrew
    * callers and its tests; the copy test asserts the two agree.
    */
+  /*
+   * Injected into the pure schedule/stock modules, which decide WHAT is true
+   * and leave the words to the caller. English here mirrors each module's own
+   * default; the copy test asserts they have not drifted apart.
+   */
+  watering: {
+    everyNDays: (min: number) => `Every ${min} days`,
+    everyRange: (min: number, max: number) => `Every ${min}-${max} days`,
+    everyDay: 'Every day',
+    tapToStart: (interval: string) => `${interval} · tap to start`,
+    overdue: (days: number) => `${days} ${days === 1 ? 'day' : 'days'} overdue`,
+    dueNowRange: 'Due now - check the soil',
+    dueToday: 'Due today',
+    nextTomorrow: 'Next water tomorrow',
+    nextInDays: (days: number) => `Next water in ${days} ${days === 1 ? 'day' : 'days'}`,
+  },
+  care: {
+    tapToStart: (interval: string) => `Every ${interval} · tap to start`,
+    dueNowRepot: 'Due now - check the roots',
+    dueNow: 'Due now',
+    nextTomorrow: (kind: 'repot' | 'fertilizer') =>
+      `Next ${kind === 'repot' ? 'repot' : 'feed'} tomorrow`,
+    nextInDays: (kind: 'repot' | 'fertilizer', days: number) =>
+      `Next ${kind === 'repot' ? 'repot' : 'feed'} in ${days} days`,
+    months: (n: number) => (n === 1 ? 'month' : `${n} months`),
+    weeks: (n: number) => (n === 1 ? 'week' : `${n} weeks`),
+    days: (n: number) => (n === 1 ? 'day' : `${n} days`),
+  },
+  availability: {
+    likely: 'Likely has it',
+    maybe: 'Might have it',
+    unlikely: 'Probably not',
+    inStock: (shipsToHome: boolean) =>
+      `In stock now · ${shipsToHome ? 'ships to home' : 'local pickup'}`,
+    notFound: "Didn't find the product",
+    estimate: (bandLabel: string, confidence: number) => `${bandLabel} · ${confidence}%`,
+    unknown: 'Availability unknown',
+    unknownCallToConfirm: 'Availability unknown - call to confirm',
+  },
+  freshness: {
+    justNow: 'Stock checked just now',
+    minutesAgo: (minutes: number) => `Stock checked ${minutes} min ago`,
+    hoursAgo: (hours: number) => `Stock checked ${hours} ${hours === 1 ? 'hour' : 'hours'} ago`,
+    yesterday: 'Stock checked yesterday',
+    daysAgo: (days: number) => `Stock checked ${days} days ago`,
+  },
+  triage: {
+    attention: 'Needs attention',
+    watching: 'Watching',
+    healthy: 'Healthy',
+  },
   identity: {
     speciesMatch: (percent: number) => `${percent}% species match`,
     genusMatch: (percent: number) => `${percent}% genus match`,

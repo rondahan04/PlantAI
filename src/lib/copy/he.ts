@@ -22,6 +22,54 @@ export const he: Copy = {
     ok: 'אישור',
     back: 'חזרה',
   },
+  watering: {
+    everyNDays: (min: number) => `כל ${min} ימים`,
+    everyRange: (min: number, max: number) => `כל ${min}-${max} ימים`,
+    everyDay: 'כל יום',
+    tapToStart: (interval: string) => `${interval} · הקישו כדי להתחיל`,
+    overdue: (days: number) => (days === 1 ? 'באיחור של יום' : `באיחור של ${days} ימים`),
+    dueNowRange: 'הגיע הזמן - בדקו את האדמה',
+    dueToday: 'להשקות היום',
+    nextTomorrow: 'ההשקיה הבאה מחר',
+    nextInDays: (days: number) =>
+      days === 1 ? 'ההשקיה הבאה בעוד יום' : `ההשקיה הבאה בעוד ${days} ימים`,
+  },
+  care: {
+    tapToStart: (interval: string) => `כל ${interval} · הקישו כדי להתחיל`,
+    dueNowRepot: 'הגיע הזמן - בדקו את השורשים',
+    dueNow: 'הגיע הזמן',
+    nextTomorrow: (kind: 'repot' | 'fertilizer') =>
+      kind === 'repot' ? 'ההחלפה הבאה מחר' : 'הדישון הבא מחר',
+    nextInDays: (kind: 'repot' | 'fertilizer', days: number) =>
+      kind === 'repot' ? `ההחלפה הבאה בעוד ${days} ימים` : `הדישון הבא בעוד ${days} ימים`,
+    months: (n: number) => (n === 1 ? 'חודש' : `${n} חודשים`),
+    weeks: (n: number) => (n === 1 ? 'שבוע' : `${n} שבועות`),
+    days: (n: number) => (n === 1 ? 'יום' : `${n} ימים`),
+  },
+  availability: {
+    likely: 'כנראה יש',
+    maybe: 'ייתכן שיש',
+    unlikely: 'כנראה שאין',
+    inStock: (shipsToHome: boolean) =>
+      `במלאי עכשיו · ${shipsToHome ? 'משלוח עד הבית' : 'איסוף עצמי'}`,
+    notFound: 'לא מצאנו את המוצר',
+    estimate: (bandLabel: string, confidence: number) => `${bandLabel} · ${confidence}%`,
+    unknown: 'זמינות לא ידועה',
+    unknownCallToConfirm: 'זמינות לא ידועה - התקשרו לוודא',
+  },
+  freshness: {
+    justNow: 'המלאי נבדק ממש עכשיו',
+    minutesAgo: (minutes: number) => `המלאי נבדק לפני ${minutes} דקות`,
+    hoursAgo: (hours: number) =>
+      hours === 1 ? 'המלאי נבדק לפני שעה' : `המלאי נבדק לפני ${hours} שעות`,
+    yesterday: 'המלאי נבדק אתמול',
+    daysAgo: (days: number) => `המלאי נבדק לפני ${days} ימים`,
+  },
+  triage: {
+    attention: 'דורשים טיפול',
+    watching: 'במעקב',
+    healthy: 'בריאים',
+  },
   identity: {
     speciesMatch: (percent: number) => `${percent}% התאמה למין`,
     genusMatch: (percent: number) => `${percent}% התאמה לסוג`,

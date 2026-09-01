@@ -75,7 +75,7 @@ export default function PlantCard({
    * its own line rather than being folded into the meta row - condition is why
    * the plant is in the library, watering is why they opened the app now.
    */
-  const water = wateringState(plant.diagnosis?.carePlan, plant.lastWateredAt, Date.now());
+  const water = wateringState(plant.diagnosis?.carePlan, plant.lastWateredAt, Date.now(), copy.watering);
   const thirsty = needsWater(water);
 
   return (

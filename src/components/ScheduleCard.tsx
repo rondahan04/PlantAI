@@ -113,14 +113,14 @@ export default function ScheduleCard({
   const tint = t.color[k.tint];
   const onTint = t.color[k.onTint];
 
-  const state = careState(kind, carePlan, lastAt, Date.now(), soilPlan);
+  const state = careState(kind, carePlan, lastAt, Date.now(), soilPlan, copy.care, copy.watering);
   /*
    * The interval as the user reads it, taken from the SAME plan the state
    * machine was given. Deriving it separately from `carePlan` would print the
    * watering interval above a feeding schedule, which is exactly the bug the
    * old two-card layout shipped with.
    */
-  const interval = intervalLabel(intervalPlanFor(kind, carePlan, soilPlan));
+  const interval = intervalLabel(intervalPlanFor(kind, carePlan, soilPlan), copy.watering);
 
   /*
    * Done, and not due again yet - there is nothing to log. `ok` is the only

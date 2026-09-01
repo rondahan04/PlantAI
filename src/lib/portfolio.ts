@@ -1,6 +1,14 @@
 import type { StoredPlant, CareKind } from '../services/plantStore';
 import type { GenusCarePlan } from './genusCarePlan.ts';
-import { CARE_KINDS, careState, plantCarePlan, soilPlanFor } from './care.ts';
+import {
+  CARE_KINDS,
+  EN_CARE_COPY,
+  careState,
+  plantCarePlan,
+  soilPlanFor,
+  type CareCopy,
+} from './care.ts';
+import { EN_WATERING_COPY, type WateringCopy } from './watering.ts';
 
 /*
  * Everything the Portfolio tab decides, decided here.
@@ -138,7 +146,11 @@ export const DUE_WINDOW_DAYS = 7;
 export function dueSoon(
   plants: StoredPlant[],
   now: number,
-  genusPlanFor: ((plant: StoredPlant) => GenusCarePlan | null) | null
+  genusPlanFor: ((plant: StoredPlant) => GenusCarePlan | null) | null,
+  /* Passed straight through to careState - this module decides WHICH plants
+   * are due, never how that reads. */
+  careWords: CareCopy = EN_CARE_COPY,
+  wateringWords: WateringCopy = EN_WATERING_COPY
 ): DueItem[] {
   const items: DueItem[] = [];
 
@@ -148,7 +160,7 @@ export function dueSoon(
     const carePlan = plantCarePlan(plant.diagnosis?.carePlan, genusPlan, plant.soilMedium);
 
     for (const kind of CARE_KINDS) {
-      const state = careState(kind, carePlan, lastCareAt(plant, kind), now, soilPlan);
+      const state = careState(kind, carePlan, lastCareAt(plant, kind), now, soilPlan, careWords, wateringWords);
       if (state.status === 'unscheduled' || state.status === 'never_watered') continue;
       /* Belt and braces: a scheduled, anchored plant always carries a number,
        * but the type says null is possible and a NaN sort key would scramble

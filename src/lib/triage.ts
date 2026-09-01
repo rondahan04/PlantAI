@@ -30,7 +30,9 @@ const BUCKET: Record<string, TriageKey> = {
   healthy: 'healthy',
 };
 
-const TITLES: Record<TriageKey, string> = {
+/* English defaults; the caller passes translated titles - same seam as the
+ * other pure modules. */
+export const EN_TRIAGE_TITLES: Record<TriageKey, string> = {
   attention: 'Needs attention',
   watching: 'Watching',
   healthy: 'Healthy',
@@ -64,7 +66,10 @@ export function bucketFor(condition: string): TriageKey {
  * Group into sections in fixed order, dropping empties so a healthy library
  * does not render two empty headers above its only section.
  */
-export function triageSections(plants: StoredPlant[]): TriageSection[] {
+export function triageSections(
+  plants: StoredPlant[],
+  titles: Record<TriageKey, string> = EN_TRIAGE_TITLES
+): TriageSection[] {
   const order: TriageKey[] = ['attention', 'watching', 'healthy'];
   const byKey = new Map<TriageKey, StoredPlant[]>(order.map((k) => [k, []]));
 
@@ -73,7 +78,7 @@ export function triageSections(plants: StoredPlant[]): TriageSection[] {
   return order
     .map((key) => ({
       key,
-      title: TITLES[key],
+      title: titles[key],
       data: byKey.get(key)!.sort((a, b) => {
         const sev =
           (SEVERITY[a.diagnosis?.condition ?? NO_DIAGNOSIS] ?? 9) -

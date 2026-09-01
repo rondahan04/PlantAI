@@ -138,7 +138,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
       fertilizer: plant.lastFertilizedAt,
     };
     for (const k of CARE_KINDS) {
-      const state = careState(k, plant.diagnosis?.carePlan, lastOf[k], now);
+      const state = careState(k, plant.diagnosis?.carePlan, lastOf[k], now, undefined, copy.care, copy.watering);
       out[k] = state.nextDueAt ? dayKey(state.nextDueAt) : '';
     }
     return out;
