@@ -160,6 +160,65 @@ export const en = {
     findNearby: 'Find Nearby Nurseries',
     scanAnother: 'Scan Another Plant',
   },
+  addPlant: {
+    close: 'Close',
+    title: 'Add a plant',
+    photo: 'Photo',
+    photoHint: 'Optional. You can add one later.',
+    removePhoto: 'Remove photo',
+    camera: 'Camera',
+    library: 'Library',
+    takePhoto: 'Take a photo',
+    takeDifferent: 'Take a different photo',
+    choosePhoto: 'Choose a photo from your library',
+    chooseDifferent: 'Choose a different photo',
+    photoDenied:
+      'PlantAI cannot open your photos yet. Allow photo access in Settings, or add the plant without a picture and attach one later.',
+    cameraDenied:
+      'PlantAI cannot use the camera yet. Allow camera access in Settings, or pick a photo you already took.',
+    species: 'Species',
+    chooseSpecies: 'Choose a species',
+    speciesChosenA11y: (name: string, scientific: string) =>
+      `Species, ${name}, ${scientific}. Change species`,
+    nickname: 'Nickname',
+    nicknameHint: 'Optional. Useful when you own three of the same species.',
+    nicknamePlaceholder: 'Big Bertha',
+    nicknameA11y: 'Plant nickname',
+    save: 'Add plant',
+    /* Said out loud rather than left as a greyed button the user has to reason
+     * about. */
+    saveHint: 'Choose a species first',
+    saveFailedTitle: "Couldn't save",
+    saveFailedNetwork: "We couldn't reach your account. Check your connection and try again.",
+    saveFailedStorage: 'Your device is out of storage space. Free some space and try again.',
+  },
+  speciesPicker: {
+    title: 'Choose a species',
+    close: 'Close species picker',
+    placeholder: 'Monstera, Thai Constellation, hoya',
+    searchA11y: 'Search species',
+    clear: 'Clear search',
+    rowA11y: (name: string, scientific: string) => `${name}, ${scientific}`,
+    emptyTitle: (query: string) => `No species match "${query}"`,
+    emptyBody:
+      'Try just the genus - "alocasia", "hoya", "monstera" - or a shorter spelling, then browse the list.',
+  },
+  plantSearch: {
+    title: 'Find a plant',
+    placeholder: 'Alocasia Regal Shield',
+    inputA11y: 'Plant to search for',
+    clear: 'Clear search',
+    deliver: 'Deliver',
+    pickUp: 'Pick Up',
+    submit: 'Search nurseries',
+    fromYourPlants: 'From your plants',
+    suggestionA11y: (name: string) => `Search nurseries for ${name}`,
+    /* Sets expectations rather than letting a 90s wait look like a hang. */
+    note: "Searching reads each nursery's site live, so it can take a minute.",
+  },
+  statusView: {
+    a11y: (title: string, body: string) => `${title}. ${body}`,
+  },
   nurseries: {
     unreachableTitle: "We couldn't reach the nursery service",
     unreachableBody:

@@ -16,6 +16,7 @@ import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, ActivityIndic
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Theme, useTheme } from '../theme';
+import { copy } from '../services/language';
 import { plantLibrary } from '../services/plantLibrary';
 import { useNurserySearch } from '../hooks/useNurserySearch';
 import type { DeliveryMode } from '../types';
@@ -49,7 +50,7 @@ export default function PlantSearchScreen() {
   return (
     <SafeAreaView style={s.container} edges={['top']}>
       <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-        <Text style={s.title}>Find a plant</Text>
+        <Text style={s.title}>{copy.plantSearch.title}</Text>
         <Text style={s.subtitle}>
           Search nurseries near you for a plant you want to buy, and compare prices.
         </Text>
@@ -60,15 +61,15 @@ export default function PlantSearchScreen() {
             style={s.input}
             value={query}
             onChangeText={setQuery}
-            placeholder="Alocasia Regal Shield"
+            placeholder={copy.plantSearch.placeholder}
             placeholderTextColor={t.color.textMuted}
             returnKeyType="search"
             onSubmitEditing={submit}
             autoCorrect={false}
-            accessibilityLabel="Plant to search for"
+            accessibilityLabel={copy.plantSearch.inputA11y}
           />
           {!!query && (
-            <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityLabel="Clear search">
+            <Pressable onPress={() => setQuery('')} hitSlop={8} accessibilityLabel={copy.plantSearch.clear}>
               <Ionicons name="close-circle" size={18} color={t.color.textMuted} />
             </Pressable>
           )}
@@ -86,7 +87,7 @@ export default function PlantSearchScreen() {
               accessibilityState={{ selected: mode === m }}
             >
               <Text style={[s.modeText, mode === m && s.modeTextActive]}>
-                {m === 'delivery' ? 'Deliver' : 'Pick Up'}
+                {m === 'delivery' ? copy.plantSearch.deliver : copy.plantSearch.pickUp}
               </Text>
             </Pressable>
           ))}
@@ -105,14 +106,14 @@ export default function PlantSearchScreen() {
           ) : (
             <>
               <Ionicons name="leaf-outline" size={18} color={t.color.onPrimary} />
-              <Text style={s.submitText}>Search nurseries</Text>
+              <Text style={s.submitText}>{copy.plantSearch.submit}</Text>
             </>
           )}
         </Pressable>
 
         {suggestions.length > 0 && (
           <View style={s.section}>
-            <Text style={s.sectionTitle}>From your plants</Text>
+            <Text style={s.sectionTitle}>{copy.plantSearch.fromYourPlants}</Text>
             <View style={s.chips}>
               {suggestions.map((name) => (
                 <Pressable
@@ -123,7 +124,7 @@ export default function PlantSearchScreen() {
                     search(name, mode);
                   }}
                   accessibilityRole="button"
-                  accessibilityLabel={`Search nurseries for ${name}`}
+                  accessibilityLabel={copy.plantSearch.suggestionA11y(name)}
                 >
                   <Text style={s.chipText}>{name}</Text>
                 </Pressable>
@@ -134,7 +135,7 @@ export default function PlantSearchScreen() {
 
         {/* Set expectations rather than letting a 90s wait look like a hang. */}
         <Text style={s.note}>
-          Searching reads each nursery's site live, so it can take a minute.
+          {copy.plantSearch.note}
         </Text>
       </ScrollView>
     </SafeAreaView>
