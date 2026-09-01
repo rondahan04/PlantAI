@@ -23,6 +23,34 @@ const diagnosis: PlantDiagnosis = {
   description: '',
 };
 
+
+/*
+ * A CloudRow with the Portfolio columns filled in as absent.
+ *
+ * Written once rather than repeated at every fixture: `CloudRow` gained nine
+ * fields when the Portfolio tab's data was carried into the cloud, and spelling
+ * them out per literal is how a tenth field turns into eight separate edits.
+ */
+function row(over: Partial<CloudRow> & Pick<CloudRow, 'id' | 'user_id' | 'saved_at'>): CloudRow {
+  return {
+    photo_path: null,
+    diagnosis,
+    added_via: 'scan',
+    catalog_id: null,
+    species: null,
+    soil_medium: null,
+    nickname: null,
+    last_watered_at: null,
+    watering_log: [],
+    last_repotted_at: null,
+    repot_log: [],
+    last_fertilized_at: null,
+    fertilizer_log: [],
+    reminder_id: null,
+    ...over,
+  };
+}
+
 function fakeDeps(seed: { rows?: CloudRow[]; uploadFails?: Set<string>; insertFails?: Set<string> } = {}) {
   const rows = new Map((seed.rows ?? []).map((r) => [r.id, r]));
   const uploads: string[] = [];
@@ -60,7 +88,7 @@ function fakeDeps(seed: { rows?: CloudRow[]; uploadFails?: Set<string>; insertFa
 test('fetchAll() maps cloud rows back to StoredPlant shape', async () => {
   const { deps } = fakeDeps({
     rows: [
-      {
+      row({
         id: 'p1',
         user_id: 'u1',
         saved_at: '2026-08-01T00:00:00.000Z',
@@ -69,8 +97,8 @@ test('fetchAll() maps cloud rows back to StoredPlant shape', async () => {
         last_watered_at: null,
         watering_log: [],
         reminder_id: null,
-      },
-      {
+      }),
+      row({
         id: 'p2',
         user_id: 'u1',
         saved_at: '2026-08-02T00:00:00.000Z',
@@ -79,7 +107,7 @@ test('fetchAll() maps cloud rows back to StoredPlant shape', async () => {
         last_watered_at: '2026-08-10T00:00:00.000Z',
         watering_log: ['2026-08-05T00:00:00.000Z', '2026-08-10T00:00:00.000Z'],
         reminder_id: 'rem-1',
-      },
+      }),
     ],
   });
   const cloud = createCloudPlantLibrary(deps);
@@ -87,7 +115,7 @@ test('fetchAll() maps cloud rows back to StoredPlant shape', async () => {
   assert.equal(plants.length, 2);
   assert.equal(plants[0].id, 'p1');
   assert.equal(plants[0].photoUri, 'u1/p1.jpg');
-  assert.equal(plants[0].diagnosis.plantName, 'Mini monstera');
+  assert.equal(plants[0].diagnosis?.plantName, 'Mini monstera');
   assert.equal(plants[0].lastWateredAt, undefined);
 
   const p2 = plants[1];
@@ -221,7 +249,7 @@ test('an imported plant keeps its portfolio fields', async () => {
 test('updatePlant() patches an existing row', async () => {
   const { deps } = fakeDeps({
     rows: [
-      {
+      row({
         id: 'p1',
         user_id: 'u1',
         saved_at: '2026-08-01T00:00:00.000Z',
@@ -230,7 +258,7 @@ test('updatePlant() patches an existing row', async () => {
         last_watered_at: null,
         watering_log: [],
         reminder_id: null,
-      },
+      }),
     ],
   });
   const cloud = createCloudPlantLibrary(deps);
@@ -245,7 +273,7 @@ test('updatePlant() patches an existing row', async () => {
 test('updatePlant() reports network failure when the underlying dep call fails', async () => {
   const { deps } = fakeDeps({
     rows: [
-      {
+      row({
         id: 'p1',
         user_id: 'u1',
         saved_at: '2026-08-01T00:00:00.000Z',
@@ -254,7 +282,7 @@ test('updatePlant() reports network failure when the underlying dep call fails',
         last_watered_at: null,
         watering_log: [],
         reminder_id: null,
-      },
+      }),
     ],
   });
   (deps.updatePlant as any) = async () => false;
@@ -267,7 +295,7 @@ test('updatePlant() reports network failure when the underlying dep call fails',
 test('removePlant() deletes an existing row', async () => {
   const { deps } = fakeDeps({
     rows: [
-      {
+      row({
         id: 'p1',
         user_id: 'u1',
         saved_at: '2026-08-01T00:00:00.000Z',
@@ -276,7 +304,7 @@ test('removePlant() deletes an existing row', async () => {
         last_watered_at: null,
         watering_log: [],
         reminder_id: null,
-      },
+      }),
     ],
   });
   const cloud = createCloudPlantLibrary(deps);
@@ -291,7 +319,7 @@ test('removePlant() deletes an existing row', async () => {
 test('removePlant() reports network failure when the underlying dep call fails', async () => {
   const { deps } = fakeDeps({
     rows: [
-      {
+      row({
         id: 'p1',
         user_id: 'u1',
         saved_at: '2026-08-01T00:00:00.000Z',
@@ -300,7 +328,7 @@ test('removePlant() reports network failure when the underlying dep call fails',
         last_watered_at: null,
         watering_log: [],
         reminder_id: null,
-      },
+      }),
     ],
   });
   (deps.deletePlant as any) = async () => false;
@@ -312,8 +340,8 @@ test('removePlant() reports network failure when the underlying dep call fails',
 
 test('importBatch() reports per-plant success/failure and does not stop on one failure', async () => {
   const local: StoredPlant[] = [
-    { id: 'l1', savedAt: '2026-08-01T00:00:00.000Z', photoUri: 'file:///a.jpg', diagnosis },
-    { id: 'l2', savedAt: '2026-08-02T00:00:00.000Z', photoUri: 'file:///b.jpg', diagnosis },
+    { id: 'l1', savedAt: '2026-08-01T00:00:00.000Z', photoUri: 'file:///a.jpg', addedVia: 'scan', diagnosis },
+    { id: 'l2', savedAt: '2026-08-02T00:00:00.000Z', photoUri: 'file:///b.jpg', addedVia: 'scan', diagnosis },
   ];
   const { deps } = fakeDeps({ insertFails: new Set(['l2']) });
   const cloud = createCloudPlantLibrary(deps);

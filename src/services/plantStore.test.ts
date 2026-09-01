@@ -205,7 +205,9 @@ test('replace() returns false and does not persist when the write does not land'
   store.save({ photoUri: 'good', diagnosis });
 
   breakWrites('throw');
-  const result = store.replace([{ id: 'x', savedAt: '2026-08-01T00:00:00.000Z', photoUri: 'a.jpg', diagnosis }]);
+  const result = store.replace([
+    { id: 'x', savedAt: '2026-08-01T00:00:00.000Z', photoUri: 'a.jpg', addedVia: 'scan', diagnosis },
+  ]);
   assert.equal(result, false);
 
   fixWrites();
@@ -219,7 +221,9 @@ test('replace() returns false when the write silently does not land', () => {
   const store = createPlantStore(deps, fixedOpts());
   breakWrites('silent');
 
-  const result = store.replace([{ id: 'x', savedAt: '2026-08-01T00:00:00.000Z', photoUri: 'a.jpg', diagnosis }]);
+  const result = store.replace([
+    { id: 'x', savedAt: '2026-08-01T00:00:00.000Z', photoUri: 'a.jpg', addedVia: 'scan', diagnosis },
+  ]);
   assert.equal(result, false);
 });
 
