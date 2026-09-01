@@ -1,6 +1,7 @@
 import Storage from 'expo-sqlite/kv-store';
 import { apiFetch, apiHeaders, readApiError } from '../lib/api';
 import { cacheKeyFor, createGenusCarePlanCache, type CacheStorage } from '../lib/genusCarePlan';
+import { getLanguage } from './language';
 
 /*
  * The one place `expo-sqlite` and the network are bound to the genus care
@@ -37,7 +38,7 @@ async function fetchPlan(genus: string, family: string): Promise<unknown> {
     res = await apiFetch('/api/care-plan', {
       method: 'POST',
       headers: apiHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ genus, family }),
+      body: JSON.stringify({ genus, family, lang: getLanguage() }),
       timeoutMs: TIMEOUT_MS,
     });
   } catch (err: unknown) {
@@ -84,11 +85,19 @@ const inFlight = new Map<string, Promise<Awaited<ReturnType<typeof cache.get>>>>
 const cache = createGenusCarePlanCache({ storage: deviceStorage, fetchPlan });
 
 function get(genus: string, family: string): ReturnType<typeof cache.get> {
-  const key = cacheKeyFor(genus);
+  /*
+   * The language is read HERE rather than threaded through every screen: it is
+   * a device fact, like the storage binding above, and it cannot change while
+   * the process is running. It is also part of the dedupe key, so a Hebrew and
+   * an English fetch for the same genus are two different requests rather than
+   * one of them silently receiving the other's answer.
+   */
+  const lang = getLanguage();
+  const key = cacheKeyFor(genus, lang);
   const existing = inFlight.get(key);
   if (existing) return existing;
 
-  const promise = cache.get(genus, family).finally(() => {
+  const promise = cache.get(genus, family, lang).finally(() => {
     inFlight.delete(key);
   });
   inFlight.set(key, promise);
@@ -101,6 +110,7 @@ function get(genus: string, family: string): ReturnType<typeof cache.get> {
  * and `get` is the deduped wrapper above.
  */
 export const genusCarePlans = {
-  peek: cache.peek,
+  /* Same reason as `get`: callers ask about a genus, not about a language. */
+  peek: (genus: string) => cache.peek(genus, getLanguage()),
   get,
 };

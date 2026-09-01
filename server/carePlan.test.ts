@@ -115,3 +115,41 @@ test('parseCarePlanBody drops a maximum interval that sits below the minimum', (
   assert.equal(parsed.bySoil.sphagnum.waterEveryDays, 10);
   assert.equal(parsed.bySoil.sphagnum.waterEveryDaysMax, undefined);
 });
+
+/*
+ * Language. The risk here is not that the model refuses Hebrew - it is that it
+ * helpfully translates the JSON KEYS too, and the client indexes into
+ * `bySoil` by growing-medium id. A translated key is a plan the app cannot
+ * read, on a call that was billed and looked like it worked.
+ */
+
+test('a Hebrew request asks the model for Hebrew', () => {
+  const prompt = carePlanPrompt('Monstera', 'Araceae', 'he');
+  assert.match(prompt, /Hebrew/);
+});
+
+test('the Hebrew prompt forbids translating the medium keys', () => {
+  const prompt = carePlanPrompt('Monstera', 'Araceae', 'he');
+  // The keys the client indexes on have to survive verbatim.
+  for (const id of SOIL_MEDIUM_IDS) assert.match(prompt, new RegExp(id));
+  assert.match(prompt, /do not translate/i);
+});
+
+test('no language means English, so an older installed build keeps working', () => {
+  const prompt = carePlanPrompt('Monstera', 'Araceae');
+  assert.doesNotMatch(prompt, /Hebrew/);
+});
+
+test('buildCarePlan passes the language through to the prompt', async () => {
+  let seen = '';
+  const plan = await buildCarePlan('Monstera', 'Araceae', {
+    askModel: async (prompt) => {
+      seen = prompt;
+      return JSON.stringify({ bySoil: Object.fromEntries(SOIL_MEDIUM_IDS.map((id) => [id, soil(7)])) });
+    },
+  }, 'he');
+
+  assert.match(seen, /Hebrew/);
+  // And the shape the client depends on is unchanged by the language.
+  assert.deepEqual(Object.keys(plan.bySoil).sort(), SOIL_MEDIUM_IDS.slice().sort());
+});

@@ -1,4 +1,5 @@
 import { SOIL_MEDIUM_IDS, type SoilMediumId } from './soilMedia.ts';
+import type { Language } from './language.ts';
 
 /*
  * Care advice for a whole GENUS, in every growing medium at once.
@@ -72,7 +73,13 @@ export interface GenusCarePlan {
  * One key per genus, namespaced like every other key this app writes so a
  * future "clear cached advice" can find them without touching the library.
  */
-export const CACHE_KEY_PREFIX = 'plantai.careplan.';
+/*
+ * v2: the key gained a language. A v1 entry holds English prose under a key a
+ * Hebrew reader would now hit, so the prefix bump retires those entries rather
+ * than serving one language's advice to a reader of the other. They cost one
+ * refetch each and are never read again.
+ */
+export const CACHE_KEY_PREFIX = 'plantai.careplan.v2.';
 
 /*
  * Genus names reach us from three sources that do not agree on capitalization:
@@ -82,8 +89,8 @@ export const CACHE_KEY_PREFIX = 'plantai.careplan.';
  * user whose care advice changes depending on which screen identified the
  * plant. Trimmed and lowercased, they are one.
  */
-export function cacheKeyFor(genus: string): string {
-  return CACHE_KEY_PREFIX + genus.trim().toLowerCase();
+export function cacheKeyFor(genus: string, lang: Language): string {
+  return `${CACHE_KEY_PREFIX}${lang}.${genus.trim().toLowerCase()}`;
 }
 
 function isSoilCarePlan(value: unknown): value is SoilCarePlan {
@@ -223,8 +230,8 @@ export function createGenusCarePlanCache(deps: GenusCarePlanDeps) {
    * rewriting over bytes that a future bug might start accepting again.
    * Deleting turns a permanent bad state into one refetch.
    */
-  function peek(genus: string): GenusCarePlan | null {
-    const key = cacheKeyFor(genus);
+  function peek(genus: string, lang: Language): GenusCarePlan | null {
+    const key = cacheKeyFor(genus, lang);
     const raw = deps.storage.getItem(key);
     if (raw === null) return null;
 
@@ -263,8 +270,12 @@ export function createGenusCarePlanCache(deps: GenusCarePlanDeps) {
    * exception would push that decision onto every screen, and one screen would
    * forget.
    */
-  async function get(genus: string, family: string): Promise<GenusCarePlan | null> {
-    const cached = peek(genus);
+  async function get(
+    genus: string,
+    family: string,
+    lang: Language
+  ): Promise<GenusCarePlan | null> {
+    const cached = peek(genus, lang);
     if (cached) return cached;
 
     let plan: GenusCarePlan;
@@ -290,7 +301,7 @@ export function createGenusCarePlanCache(deps: GenusCarePlanDeps) {
      * that runs behind a network fetch.
      */
     try {
-      deps.storage.setItem(cacheKeyFor(genus), JSON.stringify(plan));
+      deps.storage.setItem(cacheKeyFor(genus, lang), JSON.stringify(plan));
     } catch {
       /* best effort */
     }

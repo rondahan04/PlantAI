@@ -50,7 +50,7 @@ import {
   type DiagnosisDeps,
   type IdentifyHint,
 } from './diagnose.ts';
-import { CarePlanError, buildCarePlan, openAiCarePlan } from './carePlan.ts';
+import { CarePlanError, buildCarePlan, openAiCarePlan, type Lang } from './carePlan.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -220,6 +220,18 @@ function makeDiagnosisDeps(rid: string): DiagnosisDeps {
  */
 const MAX_BODY_BYTES = 12 * 1024 * 1024;
 
+
+/*
+ * The caller's language, read defensively.
+ *
+ * Anything that is not exactly 'he' is treated as English rather than
+ * rejected: an older installed build sends no `lang` at all, and a request
+ * that would otherwise have worked must not 400 over a display preference.
+ */
+function readLang(value: unknown): Lang {
+  return value === 'he' ? 'he' : 'en';
+}
+
 function readBody(req: http.IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -359,9 +371,11 @@ const server = http.createServer(async (req, res) => {
     }
 
     let image: Buffer;
+    let lang: Lang = 'en';
     try {
       const raw = await readBody(req);
       const body = JSON.parse(raw.toString('utf8'));
+      lang = readLang(body?.lang);
       if (typeof body?.imageBase64 !== 'string' || body.imageBase64.length === 0) {
         json(res, 400, { error: 'bad_request', message: 'imageBase64 is required.' });
         return;
@@ -385,9 +399,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     const t0 = Date.now();
-    logEvent(rid, 'diagnose_start', { bytes: image.length });
+    logEvent(rid, 'diagnose_start', { bytes: image.length, lang });
     try {
-      const result = await diagnose(image, makeDiagnosisDeps(rid));
+      const result = await diagnose(image, makeDiagnosisDeps(rid), lang);
       logEvent(rid, 'diagnose_done', {
         plantName: result.plantName,
         confidence: result.confidence,
@@ -435,10 +449,12 @@ const server = http.createServer(async (req, res) => {
 
     let genus: string;
     let family: string;
+    let lang: Lang = 'en';
     try {
       const body = JSON.parse((await readBody(req)).toString('utf8'));
       genus = typeof body?.genus === 'string' ? body.genus.trim() : '';
       family = typeof body?.family === 'string' ? body.family.trim() : '';
+      lang = readLang(body?.lang);
       if (!genus) {
         json(res, 400, { error: 'bad_request', message: 'genus is required.' });
         return;
@@ -467,9 +483,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     const t0 = Date.now();
-    logEvent(rid, 'care_plan_start', { genus, family });
+    logEvent(rid, 'care_plan_start', { genus, family, lang });
     try {
-      const plan = await buildCarePlan(genus, family, carePlanDeps);
+      const plan = await buildCarePlan(genus, family, carePlanDeps, lang);
       logEvent(rid, 'care_plan_done', {
         genus,
         media: Object.keys(plan.bySoil).length,
