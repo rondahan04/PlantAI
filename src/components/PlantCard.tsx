@@ -60,14 +60,18 @@ function relativeDay(iso: string, now: number): string {
 
 export default function PlantCard({
   plant,
-  slots,
+  slots = [],
   onPress,
 }: {
   plant: StoredPlant;
   /* All three care kinds, built by `plantSchedule`. Passed in rather than
    * computed here because the schedule needs a clock and the genus plan the
-   * list has already looked up once for every card it is about to draw. */
-  slots: CareSlot[];
+   * list has already looked up once for every card it is about to draw.
+   *
+   * Optional, defaulting to none, so a card can never take the whole list down
+   * over a caller that has not passed them - which is exactly what a Fast
+   * Refresh does for a frame when this component reloads ahead of its parent. */
+  slots?: CareSlot[];
   onPress: () => void;
 }) {
   const t = useTheme();
