@@ -7,6 +7,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { copy } from '../services/language';
 import SettingsCard from '../components/SettingsCard';
 import { ensureNotificationPermission } from '../services/wateringReminder';
 import { notificationPrefs } from '../services/notificationPrefs';
@@ -65,17 +66,17 @@ export default function NotificationsScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Back" style={s.backBtn}>
+        <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel={copy.settings.back} style={s.backBtn}>
           <Ionicons name="chevron-back" size={24} color={t.color.primary} />
         </Pressable>
-        <Text style={s.headerTitle}>Notifications</Text>
+        <Text style={s.headerTitle}>{copy.settings.notifications}</Text>
         <View style={s.backBtn} />
       </View>
 
       <ScrollView contentContainerStyle={s.scroll}>
         <SettingsCard>
           <View style={s.row}>
-            <Text style={s.rowLabel}>Push notifications</Text>
+            <Text style={s.rowLabel}>{copy.settings.pushNotifications}</Text>
             <Switch
               value={pushGranted}
               onValueChange={handlePushToggle}
@@ -87,7 +88,7 @@ export default function NotificationsScreen({ navigation }: Props) {
 
         <SettingsCard>
           <View style={s.row}>
-            <Text style={s.rowLabel}>Watering reminder</Text>
+            <Text style={s.rowLabel}>{copy.settings.wateringReminder}</Text>
             <Switch
               value={wateringEnabled}
               onValueChange={handleWateringToggle}
@@ -99,8 +100,7 @@ export default function NotificationsScreen({ navigation }: Props) {
 
         {!pushGranted && (
           <Text style={s.note}>
-            Push notifications are off at the system level. Turn them on in iOS Settings to get
-            watering reminders.
+            {copy.settings.pushOffNote}
           </Text>
         )}
       </ScrollView>

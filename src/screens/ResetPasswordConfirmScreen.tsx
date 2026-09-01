@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { copy } from '../services/language';
 import AuthTextField from '../components/AuthTextField';
 import { confirmPasswordReset, AuthServiceError } from '../services/auth';
 
@@ -35,8 +36,8 @@ export default function ResetPasswordConfirmScreen({ navigation }: Props) {
     } catch (err) {
       setError(
         err instanceof AuthServiceError
-          ? 'That reset link has expired or was already used. Request a new one.'
-          : 'Something went wrong. Please try again.'
+          ? copy.auth.linkExpired
+          : copy.auth.generic
       );
     } finally {
       setLoading(false);
@@ -46,25 +47,25 @@ export default function ResetPasswordConfirmScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-        <Text style={s.title}>Set new password</Text>
+        <Text style={s.title}>{copy.auth.setPasswordTitle}</Text>
 
         {done ? (
           <>
-            <Text style={s.subtitle}>Your password has been updated.</Text>
+            <Text style={s.subtitle}>{copy.auth.passwordUpdated}</Text>
             <Pressable
               style={({ pressed }) => [s.ctaBtn, pressed && s.ctaBtnPressed]}
               onPress={() => navigation.replace('Login')}
               accessibilityRole="button"
-              accessibilityLabel="Go to login"
+              accessibilityLabel={copy.auth.goToLoginA11y}
             >
-              <Text style={s.ctaText}>Log In</Text>
+              <Text style={s.ctaText}>{copy.auth.goToLogin}</Text>
             </Pressable>
           </>
         ) : (
           <>
-            <Text style={s.subtitle}>Choose a new password for your account.</Text>
+            <Text style={s.subtitle}>{copy.auth.setPasswordSubtitle}</Text>
             <AuthTextField
-              label="New password"
+              label={copy.auth.newPassword}
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -80,12 +81,12 @@ export default function ResetPasswordConfirmScreen({ navigation }: Props) {
               onPress={handleConfirm}
               disabled={loading || password.length < 6}
               accessibilityRole="button"
-              accessibilityLabel="Set new password"
+              accessibilityLabel={copy.auth.setPasswordA11y}
             >
               {loading ? (
                 <ActivityIndicator color={t.color.onPrimary} />
               ) : (
-                <Text style={s.ctaText}>Set Password</Text>
+                <Text style={s.ctaText}>{copy.auth.setPasswordCta}</Text>
               )}
             </Pressable>
           </>

@@ -6,6 +6,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { copy } from '../services/language';
 import AuthTextField from '../components/AuthTextField';
 import { updateProfile, DuplicateUsernameError } from '../services/auth';
 
@@ -15,9 +16,24 @@ type Props = {
 };
 
 const FIELD_META = {
-  full_name: { title: 'Full name', label: 'Full name', autoCapitalize: 'words' as const, required: true },
-  username: { title: 'Username', label: 'Username', autoCapitalize: 'none' as const, required: true },
-  bio: { title: 'Bio', label: 'Bio', autoCapitalize: 'sentences' as const, required: false },
+  full_name: {
+    title: copy.settings.fullName,
+    label: copy.settings.fullName,
+    autoCapitalize: 'words' as const,
+    required: true,
+  },
+  username: {
+    title: copy.settings.username,
+    label: copy.settings.username,
+    autoCapitalize: 'none' as const,
+    required: true,
+  },
+  bio: {
+    title: copy.settings.bio,
+    label: copy.settings.bio,
+    autoCapitalize: 'sentences' as const,
+    required: false,
+  },
 };
 
 export default function EditProfileFieldScreen({ navigation, route }: Props) {
@@ -40,8 +56,8 @@ export default function EditProfileFieldScreen({ navigation, route }: Props) {
     } catch (err) {
       setError(
         field === 'username' && err instanceof DuplicateUsernameError
-          ? 'That username is taken.'
-          : 'Could not save. Please try again.'
+          ? copy.settings.usernameTaken
+          : copy.settings.saveFailed
       );
     } finally {
       setSaving(false);
@@ -52,7 +68,7 @@ export default function EditProfileFieldScreen({ navigation, route }: Props) {
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={s.header}>
-          <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Back" style={s.backBtn}>
+          <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel={copy.settings.back} style={s.backBtn}>
             <Ionicons name="chevron-back" size={24} color={t.color.primary} />
           </Pressable>
           <Text style={s.headerTitle}>{meta.title}</Text>
@@ -78,9 +94,9 @@ export default function EditProfileFieldScreen({ navigation, route }: Props) {
             onPress={handleSave}
             disabled={saving || (meta.required && !value.trim())}
             accessibilityRole="button"
-            accessibilityLabel="Save"
+            accessibilityLabel={copy.settings.save}
           >
-            {saving ? <ActivityIndicator color={t.color.onPrimary} /> : <Text style={s.saveBtnText}>Save</Text>}
+            {saving ? <ActivityIndicator color={t.color.onPrimary} /> : <Text style={s.saveBtnText}>{copy.settings.save}</Text>}
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>

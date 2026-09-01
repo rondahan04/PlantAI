@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { copy } from '../services/language';
 import AuthTextField from '../components/AuthTextField';
 import { changePassword } from '../services/auth';
 
@@ -28,7 +29,7 @@ export default function ChangePasswordScreen({ navigation }: Props) {
       await changePassword(currentPassword, newPassword);
       navigation.goBack();
     } catch {
-      setError('Current password is incorrect.');
+      setError(copy.auth.currentPasswordWrong);
     } finally {
       setSaving(false);
     }
@@ -38,22 +39,22 @@ export default function ChangePasswordScreen({ navigation }: Props) {
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={s.header}>
-          <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Back" style={s.backBtn}>
+          <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel={copy.auth.back} style={s.backBtn}>
             <Ionicons name="chevron-back" size={24} color={t.color.primary} />
           </Pressable>
-          <Text style={s.headerTitle}>Change password</Text>
+          <Text style={s.headerTitle}>{copy.auth.changePasswordTitle}</Text>
           <View style={s.backBtn} />
         </View>
 
         <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
           <AuthTextField
-            label="Current password"
+            label={copy.auth.currentPassword}
             value={currentPassword}
             onChangeText={setCurrentPassword}
             secureTextEntry
             error={error ?? undefined}
           />
-          <AuthTextField label="New password" value={newPassword} onChangeText={setNewPassword} secureTextEntry />
+          <AuthTextField label={copy.auth.newPassword} value={newPassword} onChangeText={setNewPassword} secureTextEntry />
           <Pressable
             style={({ pressed }) => [
               s.saveBtn,
@@ -63,9 +64,9 @@ export default function ChangePasswordScreen({ navigation }: Props) {
             onPress={handleSave}
             disabled={saving || !currentPassword || newPassword.length < 6}
             accessibilityRole="button"
-            accessibilityLabel="Update password"
+            accessibilityLabel={copy.auth.changePasswordA11y}
           >
-            {saving ? <ActivityIndicator color={t.color.onPrimary} /> : <Text style={s.saveBtnText}>Update Password</Text>}
+            {saving ? <ActivityIndicator color={t.color.onPrimary} /> : <Text style={s.saveBtnText}>{copy.auth.changePasswordCta}</Text>}
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>

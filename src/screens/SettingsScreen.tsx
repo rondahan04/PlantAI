@@ -55,10 +55,10 @@ export default function SettingsScreen({ navigation }: Props) {
     return (
       <SafeAreaView style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
-          <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Back" style={s.backBtn}>
+          <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel={copy.settings.back} style={s.backBtn}>
             <Ionicons name="chevron-back" size={24} color={t.color.primary} />
           </Pressable>
-          <Text style={s.headerTitle}>Profile settings</Text>
+          <Text style={s.headerTitle}>{copy.settings.profileSettings}</Text>
           <View style={s.backBtn} />
         </View>
         <View style={s.loggedOutBody}>
@@ -70,9 +70,9 @@ export default function SettingsScreen({ navigation }: Props) {
             style={({ pressed }) => [s.ctaBtn, pressed && s.ctaBtnPressed]}
             onPress={() => navigation.navigate('Login')}
             accessibilityRole="button"
-            accessibilityLabel="Log in or sign up"
+            accessibilityLabel={copy.settings.loginPromptA11y}
           >
-            <Text style={s.ctaText}>Log In / Sign Up</Text>
+            <Text style={s.ctaText}>{copy.settings.loginPrompt}</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -82,10 +82,10 @@ export default function SettingsScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Back" style={s.backBtn}>
+        <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel={copy.settings.back} style={s.backBtn}>
           <Ionicons name="chevron-back" size={24} color={t.color.primary} />
         </Pressable>
-        <Text style={s.headerTitle}>Profile settings</Text>
+        <Text style={s.headerTitle}>{copy.settings.profileSettings}</Text>
         <View style={s.backBtn} />
       </View>
 
@@ -99,21 +99,21 @@ export default function SettingsScreen({ navigation }: Props) {
         <SettingsCard>
           <SettingsRow
             icon="person-outline"
-            label="Full name"
+            label={copy.settings.fullName}
             onPress={() =>
               navigation.navigate('EditProfileField', { field: 'full_name', current: profile.full_name ?? '' })
             }
           />
           <SettingsRow
             icon="person-outline"
-            label="Username"
+            label={copy.settings.username}
             value={profile.username}
             onPress={() => navigation.navigate('EditProfileField', { field: 'username', current: profile.username })}
           />
-          <SettingsRow icon="mail-outline" label="Email address" value={email} showChevron={false} />
+          <SettingsRow icon="mail-outline" label={copy.settings.emailAddress} value={email} showChevron={false} />
           <SettingsRow
             icon="chatbubble-ellipses-outline"
-            label="Bio"
+            label={copy.settings.bio}
             value={profile.bio ?? undefined}
             onPress={() => navigation.navigate('EditProfileField', { field: 'bio', current: profile.bio ?? '' })}
           />
@@ -122,7 +122,7 @@ export default function SettingsScreen({ navigation }: Props) {
         <SettingsCard>
           <SettingsRow
             icon="notifications-outline"
-            label="Notifications"
+            label={copy.settings.notifications}
             onPress={() => navigation.navigate('Notifications')}
           />
           <SettingsRow
@@ -138,7 +138,7 @@ export default function SettingsScreen({ navigation }: Props) {
         <SettingsCard>
           <SettingsRow
             icon="settings-outline"
-            label="Manage account"
+            label={copy.settings.manageAccount}
             onPress={() => navigation.navigate('ManageAccount')}
           />
         </SettingsCard>
