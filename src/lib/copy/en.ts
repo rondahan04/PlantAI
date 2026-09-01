@@ -587,9 +587,47 @@ export const en = {
     bottomNote: 'We diagnose 1000+ plant species · fast and accurate',
   },
   tabs: {
+    home: 'Home',
     portfolio: 'Portfolio',
     scan: 'Scan',
     find: 'Find',
+  },
+  home: {
+    /*
+     * The greeting is split from the name so Hebrew can put them in its own
+     * order - and so a user who skipped onboarding gets a clean "Good morning"
+     * with no trailing comma left dangling where a name should be.
+     */
+    greeting: {
+      morning: 'Good morning',
+      afternoon: 'Good afternoon',
+      evening: 'Good evening',
+    },
+    greetingWithName: (greeting: string, name: string) => `${greeting}, ${name}`,
+    heroEyebrow: 'Your garden at a glance',
+    heroTitle: 'Keep your plants\nthriving today.',
+    heroEmptyTitle: 'Start your garden\nwith one photo.',
+    heroCta: 'Diagnose a plant',
+    plantCount: (n: number): string => (n === 1 ? '1 plant' : `${n} plants`),
+    tasksTitle: 'Upcoming tasks',
+    tasksSeeAll: 'See all',
+    tasksEmpty: 'Nothing due this week. Your plants are set.',
+    taskOthers: (n: number): string => (n === 1 ? '+ 1 other' : `+ ${n} others`),
+    taskKind: {
+      water: 'Water plants',
+      fertilizer: 'Fertilize',
+      repot: 'Repot',
+    },
+    dueToday: 'Today',
+    dueLate: 'Overdue',
+    dueInDays: (n: number): string => (n === 1 ? 'Tomorrow' : `In ${n} days`),
+    plantsTitle: 'My plants',
+    plantsSeeAll: 'View portfolio',
+    needsCare: (n: number): string => (n === 1 ? 'needs a little care' : 'need a little care'),
+    allHealthy: 'all doing well',
+    emptyStrip: 'No plants yet. Diagnose one to get started.',
+    a11yHero: 'Diagnose a plant with the camera',
+    a11yTask: (kind: string, plants: string, when: string) => `${kind}, ${plants}, ${when}`,
   },
   relativeDay: {
     /*

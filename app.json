@@ -8,7 +8,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "backgroundColor": "#F0FDF4"
+      "backgroundColor": "#F7F1E7"
     },
     "ios": {
       "bundleIdentifier": "com.rondahan.PlantAI",
@@ -62,9 +62,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#F0FDF4",
+          "backgroundColor": "#F7F1E7",
           "dark": {
-            "backgroundColor": "#0B1410"
+            "backgroundColor": "#14120E"
           }
         }
       ],

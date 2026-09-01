@@ -10,12 +10,16 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
-import { Lora_700Bold } from '@expo-google-fonts/lora';
-import {
-  Raleway_400Regular,
-  Raleway_500Medium,
-  Raleway_600SemiBold,
-} from '@expo-google-fonts/raleway';
+/*
+ * Per-weight subpath imports, not the package roots. A root import pulls the
+ * whole family into the bundle - every weight and every italic - which was
+ * thirty font files for the five cuts the type scale actually names.
+ */
+import { PlayfairDisplay_600SemiBold } from '@expo-google-fonts/playfair-display/600SemiBold';
+import { PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display/700Bold';
+import { Poppins_400Regular } from '@expo-google-fonts/poppins/400Regular';
+import { Poppins_500Medium } from '@expo-google-fonts/poppins/500Medium';
+import { Poppins_600SemiBold } from '@expo-google-fonts/poppins/600SemiBold';
 import * as SplashScreen from 'expo-splash-screen';
 
 import { RootStackParamList } from './src/types';
@@ -51,7 +55,7 @@ const linking = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-// Keep the splash up until brand fonts (Lora / Raleway) are ready, so text
+// Keep the splash up until brand fonts (Playfair Display / Poppins) are ready, so text
 // doesn't flash in the system font then reflow.
 SplashScreen.preventAutoHideAsync();
 
@@ -62,10 +66,11 @@ export default function App() {
 
   // fontFamily names in the type scale (src/theme) must match these keys.
   const [fontsLoaded, fontError] = useFonts({
-    Lora_700Bold,
-    Raleway_400Regular,
-    Raleway_500Medium,
-    Raleway_600SemiBold,
+    PlayfairDisplay_600SemiBold,
+    PlayfairDisplay_700Bold,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
   });
 
   useEffect(() => {

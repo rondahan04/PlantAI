@@ -602,7 +602,7 @@ const makeStyles = (t: Theme) =>
       paddingVertical: 6,
       marginTop: t.space.lg,
     },
-    badgeText: { ...t.type.caption, color: '#FFFFFF' },
+    badgeText: { ...t.type.caption, color: t.color.onPrimary },
 
     name: { ...t.type.display, color: t.color.foreground, marginTop: t.space.sm, writingDirection: 'auto' },
     sciName: { ...t.type.body, color: t.color.textMuted, fontStyle: 'italic', marginTop: 2, writingDirection: 'auto' },

@@ -18,29 +18,36 @@
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary | `#15803D` | `--color-primary` |
-| On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary | `#059669` | `--color-secondary` |
-| Accent/CTA | `#D97706` | `--color-accent` |
-| Background | `#F0FDF4` | `--color-background` |
-| Foreground | `#0F172A` | `--color-foreground` |
-| Muted | `#F0F7F3` | `--color-muted` |
-| Border | `#E2EFE7` | `--color-border` |
-| Destructive | `#DC2626` | `--color-destructive` |
-| Ring | `#15803D` | `--color-ring` |
+| Primary | `#1E4034` | `--color-primary` |
+| On Primary | `#FDFBF7` | `--color-on-primary` |
+| Secondary | `#3C6B54` | `--color-secondary` |
+| Accent/CTA | `#D2653A` | `--color-accent` |
+| Background | `#F7F1E7` | `--color-background` |
+| Surface | `#FFFDF9` | `--color-surface` |
+| Foreground | `#1B2B22` | `--color-foreground` |
+| Muted | `#F0E8DA` | `--color-muted` |
+| Border | `#E8DECE` | `--color-border` |
+| Destructive | `#B23A20` | `--color-destructive` |
+| Ring | `#1E4034` | `--color-ring` |
 
-**Color Notes:** Nature green + sun yellow
+**Color Notes:** Warm Editorial - cream paper canvas, deep forest green as the
+brand voice, terracotta as the single hot accent. One terracotta element per
+screen, no blue anywhere: the three care kinds are terracotta (water), clay
+brown (repot) and olive (feed).
+
+The React Native app's tokens in `src/theme/index.ts` are the source of truth;
+this table mirrors them.
 
 ### Typography
 
-- **Heading Font:** Lora
-- **Body Font:** Raleway
-- **Mood:** calm, wellness, health, relaxing, natural, organic
-- **Google Fonts:** [Lora + Raleway](https://fonts.google.com/share?selection.family=Lora:wght@400;500;600;700|Raleway:wght@300;400;500;600;700)
+- **Heading Font:** Playfair Display (600, 700)
+- **Body Font:** Poppins (400, 500, 600)
+- **Mood:** editorial, warm, calm, natural, considered
+- **Google Fonts:** [Playfair Display + Poppins](https://fonts.google.com/share?selection.family=Playfair+Display:wght@600;700|Poppins:wght@400;500;600)
 
 **CSS Import:**
 ```css
-@import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=Raleway:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Poppins:wght@400;500;600&display=swap');
 ```
 
 ### Spacing Variables
@@ -73,10 +80,10 @@
 ```css
 /* Primary Button */
 .btn-primary {
-  background: #D97706;
+  background: #D2653A;
   color: white;
   padding: 12px 24px;
-  border-radius: 8px;
+  border-radius: 999px;
   font-weight: 600;
   transition: all 200ms ease;
   cursor: pointer;
@@ -90,10 +97,10 @@
 /* Secondary Button */
 .btn-secondary {
   background: transparent;
-  color: #15803D;
-  border: 2px solid #15803D;
+  color: #1E4034;
+  border: 2px solid #1E4034;
   padding: 12px 24px;
-  border-radius: 8px;
+  border-radius: 999px;
   font-weight: 600;
   transition: all 200ms ease;
   cursor: pointer;
@@ -104,8 +111,8 @@
 
 ```css
 .card {
-  background: #F0FDF4;
-  border-radius: 12px;
+  background: #FFFDF9;
+  border-radius: 24px;
   padding: 24px;
   box-shadow: var(--shadow-md);
   transition: all 200ms ease;
@@ -123,16 +130,16 @@
 ```css
 .input {
   padding: 12px 16px;
-  border: 1px solid #E2E8F0;
+  border: 1px solid #E8DECE;
   border-radius: 8px;
   font-size: 16px;
   transition: border-color 200ms ease;
 }
 
 .input:focus {
-  border-color: #15803D;
+  border-color: #1E4034;
   outline: none;
-  box-shadow: 0 0 0 3px #15803D20;
+  box-shadow: 0 0 0 3px #1E403420;
 }
 ```
 

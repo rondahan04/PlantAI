@@ -20,6 +20,7 @@ import { copy } from '../services/language';
 import { plantLibrary } from '../services/plantLibrary';
 import { useNurserySearch } from '../hooks/useNurserySearch';
 import type { DeliveryMode } from '../types';
+import { TAB_BAR_CLEARANCE } from '../navigation/tabBarMetrics';
 
 /* Two characters is enough to be a real query and enough to stop a stray
  * keystroke costing a paid scrape across every nursery in range. */
@@ -147,7 +148,7 @@ export default function PlantSearchScreen() {
 function makeStyles(t: Theme) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: t.color.background },
-    scroll: { paddingHorizontal: t.space.xl, paddingBottom: t.space['2xl'] },
+    scroll: { paddingHorizontal: t.space.xl, paddingBottom: t.space['2xl'] + TAB_BAR_CLEARANCE },
     title: { ...t.type.display, color: t.color.foreground, marginTop: t.space.lg },
     subtitle: {
       ...t.type.body,

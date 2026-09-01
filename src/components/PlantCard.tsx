@@ -26,6 +26,20 @@ const CONDITION_COLOR: Record<string, keyof Theme['color']> = {
   critical: 'conditionCritical',
 };
 
+/*
+ * Each condition also needs a surface to sit on. There are only three tonal
+ * washes in the palette, so the five-step condition scale folds onto them -
+ * calm greens, then amber, then terracotta - which is the same three-step
+ * escalation the user actually reads off the card.
+ */
+const CONDITION_WASH: Record<string, keyof Theme['color']> = {
+  healthy: 'primaryWash',
+  mild: 'primaryWash',
+  moderate: 'warningWash',
+  severe: 'waterWash',
+  critical: 'waterWash',
+};
+
 function relativeDay(iso: string, now: number): string {
   const then = Date.parse(iso);
   if (Number.isNaN(then)) return '';
@@ -78,6 +92,22 @@ export default function PlantCard({
   const water = wateringState(plant.diagnosis?.carePlan, plant.lastWateredAt, Date.now(), copy.watering);
   const thirsty = needsWater(water);
 
+  const pill: { label: string; icon: 'water' | 'leaf'; tint: string; wash: string } | undefined = thirsty
+    ? {
+        label: water.label,
+        icon: 'water',
+        tint: water.status === 'overdue' ? t.color.danger : t.color.water,
+        wash: t.color.waterWash,
+      }
+    : conditionLabel !== undefined && diagnosis !== undefined
+      ? {
+          label: conditionLabel,
+          icon: 'leaf',
+          tint: color,
+          wash: t.color[CONDITION_WASH[diagnosis.condition] ?? 'warningWash'],
+        }
+      : undefined;
+
   return (
     <Pressable
       style={({ pressed }) => [s.card, pressed && s.cardPressed]}
@@ -108,6 +138,22 @@ export default function PlantCard({
       </View>
 
       <View style={s.body}>
+        {/*
+          One pill, not two. The card has room for a single status line and the
+          thing the user can act on TODAY outranks the standing condition, so
+          thirst takes the slot when the plant is thirsty and the diagnosis
+          takes it otherwise. Both are drawn as a tonal wash pill rather than a
+          dot + text: at a glance down the list the pill's colour is the signal.
+        */}
+        {pill !== undefined && (
+          <View style={[s.pill, { backgroundColor: pill.wash }]} importantForAccessibility="no">
+            <Ionicons name={pill.icon} size={11} color={pill.tint} />
+            <Text style={[s.pillText, { color: pill.tint }]} numberOfLines={1}>
+              {pill.label}
+            </Text>
+          </View>
+        )}
+
         <Text style={s.name} numberOfLines={1}>
           {name}
         </Text>
@@ -117,52 +163,27 @@ export default function PlantCard({
             {secondary}
           </Text>
         )}
+
         <View style={s.metaRow}>
-          {conditionLabel !== undefined && (
-            <>
-              <View style={[s.dot, { backgroundColor: color }]} />
-              <Text style={[s.condition, { color }]} numberOfLines={1}>
-                {conditionLabel}
-              </Text>
-              <Text style={s.when}> · </Text>
-            </>
+          {/*
+            The badge is quiet on purpose: it is a fact about the record, not a
+            health warning, so it borrows the muted text colour rather than any
+            of the condition colours the pill already spends the card's colour
+            budget on. `importantForAccessibility="no"` because the row's own
+            label already says whether the plant is diagnosed.
+          */}
+          {plant.diagnosis !== undefined && (
+            <View style={s.metaItem} importantForAccessibility="no">
+              <Ionicons name="medkit-outline" size={12} color={t.color.textMuted} />
+              <Text style={s.meta}>{copy.plantCard.diagnosedBadge}</Text>
+            </View>
           )}
-          <Text style={s.when}>{when}</Text>
-        </View>
-
-        {thirsty && (
-          <View style={s.waterRow}>
-            <Ionicons
-              name="water"
-              size={12}
-              color={water.status === 'overdue' ? t.color.danger : t.color.warning}
-            />
-            <Text
-              style={[
-                s.waterText,
-                { color: water.status === 'overdue' ? t.color.danger : t.color.warning },
-              ]}
-            >
-              {water.label}
-            </Text>
+          <View style={s.metaItem}>
+            <Ionicons name="time-outline" size={12} color={t.color.textMuted} />
+            <Text style={s.meta}>{when}</Text>
           </View>
-        )}
-      </View>
-
-      {/*
-        The badge is quiet on purpose: it is a fact about the record, not a
-        health warning, so it borrows the muted surface rather than any of the
-        condition colours the row already spends its colour budget on.
-        `importantForAccessibility="no"` because the row's own label already
-        says whether the plant is diagnosed - a screen reader must not hear it
-        twice.
-      */}
-      {plant.diagnosis !== undefined && (
-        <View style={s.badge} importantForAccessibility="no">
-          <Ionicons name="medkit-outline" size={11} color={t.color.textSecondary} />
-          <Text style={s.badgeText}>{copy.plantCard.diagnosedBadge}</Text>
         </View>
-      )}
+      </View>
 
       <Ionicons name="chevron-forward" size={18} color={t.color.textMuted} style={directionalIconStyle} />
     </Pressable>
@@ -175,17 +196,17 @@ const makeStyles = (t: Theme) =>
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: t.color.surface,
-      borderRadius: t.radius.lg,
+      borderRadius: t.radius.xl,
       padding: t.space.md,
-      marginBottom: t.space.sm,
-      minHeight: 72, // comfortably past the 44pt minimum target (H6)
+      marginBottom: t.space.md,
+      minHeight: 96, // comfortably past the 44pt minimum target (H6)
       ...t.elevation.card,
     },
     cardPressed: { opacity: 0.7 },
     thumbWrap: {
-      width: 52,
-      height: 52,
-      borderRadius: t.radius.md,
+      width: 76,
+      height: 76,
+      borderRadius: t.radius.lg,
       backgroundColor: t.color.surfaceMuted,
       alignItems: 'center',
       justifyContent: 'center',
@@ -194,26 +215,30 @@ const makeStyles = (t: Theme) =>
     },
     // Larger than the 22pt icon it replaced: the mark is drawn inside the
     // adaptive-icon safe zone, so the visible leaf is ~60% of the box.
-    thumbGlyph: { width: 40, height: 40, resizeMode: 'contain' as const },
+    thumbGlyph: { width: 52, height: 52, resizeMode: 'contain' as const },
     thumb: { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0 },
     body: { flex: 1, marginEnd: t.space.sm },
-    name: { ...t.type.bodyStrong, color: t.color.foreground, writingDirection: 'auto' },
-    secondary: { ...t.type.caption, color: t.color.textSecondary, writingDirection: 'auto', marginTop: 1 },
-    metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-    dot: { width: 8, height: 8, borderRadius: 4, marginEnd: 6 },
-    condition: { ...t.type.caption, flexShrink: 1, writingDirection: 'auto' },
-    when: { ...t.type.caption, color: t.color.textMuted },
-    waterRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
-    waterText: { ...t.type.caption, flexShrink: 1 },
-    badge: {
+    pill: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 3,
-      backgroundColor: t.color.surfaceMuted,
+      alignSelf: 'flex-start',
+      gap: 4,
       borderRadius: t.radius.pill,
       paddingHorizontal: t.space.sm,
       paddingVertical: 3,
-      marginEnd: t.space.xs,
+      marginBottom: t.space.xs,
+      maxWidth: '100%',
     },
-    badgeText: { ...t.type.caption, fontSize: 10, color: t.color.textSecondary },
+    pillText: { ...t.type.caption, flexShrink: 1, writingDirection: 'auto' },
+    name: { ...t.type.heading, color: t.color.foreground, writingDirection: 'auto' },
+    secondary: {
+      ...t.type.caption,
+      color: t.color.textSecondary,
+      fontStyle: 'italic',
+      writingDirection: 'auto',
+      marginTop: 1,
+    },
+    metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: t.space.md, marginTop: t.space.sm },
+    metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    meta: { ...t.type.caption, color: t.color.textMuted },
   });

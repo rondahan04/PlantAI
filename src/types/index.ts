@@ -137,6 +137,9 @@ export type DeliveryMode = 'delivery' | 'pickup';
 /* The three destinations in the bottom tab bar. `Scan` hosts nothing - its tab
  * press pushes the root-stack Camera screen instead. */
 export type MainTabParamList = {
+  /* Named Dashboard rather than Home so it can never be confused with the root
+   * stack's `Home` (the tab host) at a navigate() call site. */
+  Dashboard: undefined;
   Portfolio: undefined;
   Scan: undefined;
   Find: undefined;
