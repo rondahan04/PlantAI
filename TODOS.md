@@ -8,6 +8,9 @@
 > of plants you own rather than a list of scans, and it follows the account rather than the
 > handset. 519 tests green. ⚠️ Epic 3a's on-device script has not been run against merged main
 > (Trello #80).
+> **Hebrew shipped 2026-09-01** - UI copy, model output and catalog. The app runs in Hebrew
+> from the device locale, switchable in Settings without an account. 564 tests green.
+> ⚠️ The scan flow has not been verified on a device (Trello #82).
 
 ---
 
@@ -173,7 +176,8 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
     site in a "no website available" alert - it now falls through website → WhatsApp (prefilled
     "Hi, is {plantName} available?") → `tel:` → alert, so a nursery scraped without a site is no
     longer a transaction dead end. 242 tests pass, `tsc --noEmit` clean.
-15. **[M3] E4. Hebrew / RTL - layout half done 2026-08-19, copy still missing.**
+15. ✅ **[M3] E4. Hebrew - done 2026-09-01 (`df348d1`, Trello #6).** See step 22; the
+    layout notes below are the August half and are kept for the record.
     - ✅ **Mirroring.** Every physical edge in `src/` is now logical: `marginLeft/Right`,
       `paddingLeft/Right` and positional `left/right` → `marginStart/End`, `paddingStart/End`,
       `start/end`. Yoga mirrors those and reverses `flexDirection: 'row'` on its own; it does
@@ -194,8 +198,12 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
     - ⚠️ **Needs a rebuild to test** (`app.json` changed) and then a device set to Hebrew.
       Android: Expo's prebuild template already sets `android:supportsRtl="true"`; confirm
       after the next prebuild.
-    - ❌ **Still open: the actual Hebrew copy.** No i18n module, no translated strings - the
-      UI stays English in an RTL layout. That is the rest of E4.
+    - ✅ **The Hebrew copy shipped 2026-09-01** - see step 22.
+    - ⚠️ **The layout half was less done than this said.** It covered the screens that
+      existed in August. Nine back chevrons in the auth/settings cluster were never given
+      `directionalIconStyle`, and the camera viewfinder frame - excused above as
+      "symmetric" - is not: each bracket drops two of its four borders and rounds one
+      corner, so it came apart in RTL. Both fixed in step 22.
 16. ✅ **[ops] O2/O3/O4 observability - done 2026-08-22.** `/health?errors=1`'s bounded failure
     ring (2026-08-18) stays as-is. Added: every request/job log line is now one JSON object
     (`{at,rid,event,...}` via `logEvent()`/`fail()` in `server/index.ts`) instead of a
@@ -241,6 +249,22 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
     ⚠️ **Two things still open** - the 12-step device script (Trello #80), and whether Render
     actually has `SUPABASE_SERVICE_ROLE_KEY`, without which the shared scrape cache is silently
     off and every search is a live paid scrape (Trello #81).
+
+22. ✅ **[M3] E4. Hebrew, all three layers - done 2026-09-01 (`df348d1`, Trello #6).**
+    The app's own ~320 strings, the model's diagnosis and care plans, and the species
+    catalog. Language resolves from the device locale and is overridable in Settings,
+    which is now reachable WITHOUT an account - putting it behind a sign-up meant a user
+    who could not read the English UI had to create an account to reach the setting that
+    would fix it. `he.ts` is declared `typeof en`, so a drifted Hebrew tree cannot compile.
+    Six pure modules that held user-facing English now take their wording through an
+    injected object with an English default. The server takes `lang` and its prompts name
+    the fields that must NOT be translated - `condition`, `scientificName`, `genus`, the
+    growing-medium keys - because those are what the client branches on, and translating
+    one renders the wrong colour on a call that looked successful. `Treatment` gained
+    `product` so the buy button survives Hebrew; the old title parser stays for records
+    saved before it. Care-plan cache keys gained the language and bumped to v2.
+    ⚠️ **The scan flow has NOT been verified on a device** (Trello #82) - a real Hebrew
+    diagnosis with its condition colour and buy button intact.
 
 ---
 
@@ -324,6 +348,7 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
 | H7 | Nursery cache `Map` capped at 20, oldest-first. |
 | O1 | `GET /health` → `{gate: {day, allowed, rejected, wouldReject, cap, remaining}, jobs}`. |
 | Portfolio tab | 2026-08-29, PR #5. Portfolio replaces My Plants; hand-added plants; 359-entry species catalog; per-genus care plans across eight growing media in one call; soil picker; water/feed/repot schedules. Library v2 made `diagnosis` optional - and made a previously dead `persist(plants.filter(...))` line live, which would have silently erased damaged records on the first launch after upgrade. Caught in review, fixed, regression-tested. |
+| Hebrew (E4) | 2026-09-01, `df348d1`. UI copy, model output and species catalog, selected from the device locale and switchable in Settings without an account. tsc enforces that the Hebrew tree matches the English one. Scan flow not yet verified on a device (Trello #82). |
 | Epic 3a | 2026-08-29, PR #6. Plant library syncs to the Supabase account. Cloud-first writes with the local store as a mirror, one-shot import banner, private photo bucket, wipe on sign-out and on account delete. Also here: nursery scrapes cached server-side for a week and shared across users, and urgent treatments prewarmed from the diagnosis screen. |
 
 ## REVIEWS
