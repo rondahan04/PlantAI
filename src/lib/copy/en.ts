@@ -32,6 +32,129 @@ export const en = {
     ok: 'OK',
     back: 'Back',
   },
+  /*
+   * Display names for the growing media. `src/lib/soilMedia.ts` stays the
+   * structural source - ids and the watering multipliers that are physics, not
+   * language - and this is the translation overlay keyed by its ids. A test
+   * asserts the overlay covers every SOIL_MEDIUM_ID, so adding a ninth medium
+   * fails until its Hebrew exists rather than silently rendering English.
+   */
+  careHistory: {
+    /*
+     * `logged` and `noneThisMonth` are functions, not templates with a plural
+     * suffix: Hebrew agreement does not decompose into "noun + s", and the
+     * count word changes shape rather than gaining a letter.
+     */
+    water: {
+      short: 'Water',
+      title: 'Watering history',
+      empty: 'No waterings logged yet - tap Water now on the plant to start.',
+      logged: (n: number) => `${n} ${n === 1 ? 'watering' : 'waterings'} logged`,
+      noneThisMonth: 'No waterings this month',
+    },
+    repot: {
+      short: 'Repot',
+      title: 'Repotting history',
+      empty: 'No repotting logged yet - tap Log repot on the plant to start.',
+      logged: (n: number) => `${n} ${n === 1 ? 'repot' : 'repots'} logged`,
+      noneThisMonth: 'No repots this month',
+    },
+    fertilizer: {
+      short: 'Feed',
+      title: 'Fertilizer history',
+      empty: 'No feeding logged yet - tap Log feed on the plant to start.',
+      logged: (n: number) => `${n} ${n === 1 ? 'feed' : 'feeds'} logged`,
+      noneThisMonth: 'No feeds this month',
+    },
+    allTitle: 'Care history',
+    allEmpty: 'Nothing logged yet - water, repot or feed the plant to start.',
+    allLogged: (n: number) => `${n} care ${n === 1 ? 'entry' : 'entries'} logged`,
+    allNoneThisMonth: 'Nothing logged this month',
+    daysOfCare: (n: number) => `${n} ${n === 1 ? 'day' : 'days'} of care this month`,
+    filterAll: 'All',
+    missingTitle: 'This plant is no longer saved',
+    goBack: 'Go back',
+    unnamed: 'Unnamed plant',
+    prevMonth: 'Previous month',
+    nextMonth: 'Next month',
+    nextDue: 'Next due',
+    recent: 'Recent',
+    dayA11y: (date: string, done: string, due: string) => `${date}${done}${due}`,
+    doneSuffix: (kind: string) => `, ${kind.toLowerCase()} logged`,
+    dueSuffix: (kind: string) => `, ${kind.toLowerCase()} due`,
+  },
+  plantDetail: {
+    missingTitle: 'This plant is no longer saved',
+    backToPlants: 'Back to my plants',
+    backLabel: 'My Plants',
+    removeA11y: 'Remove this plant',
+    undiagnosed: 'You have not had this plant checked yet.',
+    checkIt: 'Check it',
+    checkA11y: (name: string) => `Check ${name} with the camera`,
+    issues: 'Issues detected',
+    treatments: 'Treatment plan',
+    urgent: 'URGENT',
+    findProduct: (product: string) => `Find ${product} nearby`,
+    findProductA11y: (product: string) => `Find ${product} at nurseries near you`,
+    careSchedule: 'Care schedule',
+    findAtNursery: 'Find this plant at a nursery',
+    findingNurseries: 'Finding nurseries...',
+    findAtNurseryA11y: (name: string) => `Find nurseries selling ${name}`,
+    replacementTitle: 'Find a healthy replacement',
+    replacementNote: (name: string) =>
+      `This plant is too damaged to save. Find a healthy ${name} near you.`,
+    findNearby: 'Find nearby nurseries',
+    findNearbyA11y: (name: string) => `Find ${name} at nurseries near you`,
+    savedOn: (date: string) => `Saved ${date}`,
+    removeTitle: 'Remove this plant?',
+    removeBody: (name: string) => `${name} will be removed from your plants.`,
+    cancel: 'Cancel',
+    remove: 'Remove',
+    /*
+     * Why a write did not land, in the user's terms. `network` only reaches a
+     * logged-in user, and telling them to free disk space for a request that
+     * never left the phone sends them after the wrong problem.
+     */
+    failNotFound: 'This plant is no longer saved.',
+    failNetwork: "We couldn't reach your account. Check your connection and try again.",
+    failStorage: 'Your device is out of storage space, so nothing was saved.',
+    saveFailedTitle: "Couldn't save that",
+    saveFailedStorage: 'Your device is out of storage space, so the growing medium was not saved.',
+    logFailedTitle: "Couldn't record that",
+    waterFailedStorage: 'Your device is out of storage space, so the watering was not saved.',
+    removeFailedTitle: "Couldn't remove",
+    removeFailedStorage: 'Your device is out of storage space.',
+  },
+  soilMedia: {
+    potting_mix: { label: 'Potting mix', description: 'Standard peat-based houseplant soil' },
+    aroid_mix: { label: 'Aroid mix', description: 'Chunky bark, perlite and coco, free-draining' },
+    leca: { label: 'LECA', description: 'Clay balls with a water reservoir' },
+    pon: { label: 'Pon', description: 'Pumice, zeolite and lava with slow-release feed' },
+    sphagnum: { label: 'Sphagnum moss', description: 'Long-fibre moss, holds a lot of water' },
+    bark: { label: 'Orchid bark', description: 'Coarse bark, very airy, dries quickly' },
+    perlite_mix: { label: 'Perlite heavy', description: 'Mostly perlite, near-hydroponic' },
+    water: { label: 'Water', description: 'Rooting or growing in plain water' },
+  },
+  carePlan: {
+    fallbackTitle: 'Care',
+    /* "Alocasia in LECA" promises the text was written for that combination,
+     * so a half-known version must not be built - it would claim a specificity
+     * the advice does not have. */
+    title: (genus: string, medium: string) => `${genus} in ${medium}`,
+    noteSpecific: 'Written for this plant in this growing medium.',
+    noteFallback: 'From the diagnosis, which did not know what it is potted in.',
+    light: 'Light',
+    humidity: 'Humidity',
+    soil: 'Soil',
+    water: 'Water',
+    rowA11y: (label: string, text: string) => `${label}: ${text}`,
+    warnA11y: (warning: string) => `Watch out: ${warning}`,
+  },
+  soilCard: {
+    title: 'Growing medium',
+    empty: 'Pick what this plant is growing in.',
+    optionA11y: (label: string, description: string) => `${label}. ${description}`,
+  },
   features: {
     /*
      * The three-beat product story. `desc` is the Home card voice (a clause,

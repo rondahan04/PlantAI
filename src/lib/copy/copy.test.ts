@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TREES } from './index.ts';
+import { SOIL_MEDIUM_IDS } from '../soilMedia.ts';
 
 test('every language names itself in its own script', () => {
   // A picker that offers "Hebrew" to someone who only reads Hebrew is a picker
@@ -43,4 +44,15 @@ test('no Hebrew string was left as its English original', () => {
     }
   };
   walk(TREES.en, TREES.he, 'copy');
+});
+
+test('every growing medium has copy in both languages', () => {
+  // The overlay is keyed by soilMedia.ts's ids, and this is what stops a ninth
+  // medium being added there and silently rendering English - or undefined.
+  for (const id of SOIL_MEDIUM_IDS) {
+    for (const lang of ['en', 'he'] as const) {
+      assert.ok(TREES[lang].soilMedia[id]?.label, `${lang}.${id} label`);
+      assert.ok(TREES[lang].soilMedia[id]?.description, `${lang}.${id} description`);
+    }
+  }
 });

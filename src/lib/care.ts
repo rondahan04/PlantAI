@@ -124,7 +124,14 @@ export function soilPlanFor(
  */
 export function soilAdjustedPlan(
   carePlan: CarePlan | undefined,
-  medium: SoilMediumId | undefined
+  medium: SoilMediumId | undefined,
+  /*
+   * The medium's display name, passed in rather than read from soilMedia here,
+   * because this module is pure and must not know which language the app is
+   * speaking. Defaults to the English label so every pre-Hebrew caller and
+   * test behaves exactly as before.
+   */
+  mediumLabel?: string
 ): CarePlan | undefined {
   if (!carePlan) return undefined;
   const multiplier = soilMediumById(medium)?.waterMultiplier;
@@ -164,7 +171,14 @@ export function soilAdjustedPlan(
 export function plantCarePlan(
   diagnosisPlan: CarePlan | undefined,
   genusPlan: GenusCarePlan | null | undefined,
-  medium: SoilMediumId | undefined
+  medium: SoilMediumId | undefined,
+  /*
+   * The medium's display name, passed in rather than read from soilMedia here,
+   * because this module is pure and must not know which language the app is
+   * speaking. Defaults to the English label so every pre-Hebrew caller and
+   * test behaves exactly as before.
+   */
+  mediumLabel?: string
 ): CarePlan | undefined {
   const soilPlan = soilPlanFor(genusPlan, medium);
   if (soilPlan) {
@@ -177,7 +191,7 @@ export function plantCarePlan(
      * it is growing in", and here we know it for a fact.
      */
     return {
-      soil: soilMediumById(medium)?.label ?? diagnosisPlan?.soil ?? '',
+      soil: mediumLabel ?? soilMediumById(medium)?.label ?? diagnosisPlan?.soil ?? '',
       light: soilPlan.light,
       water: soilPlan.water,
       waterEveryDays: soilPlan.waterEveryDays,

@@ -10,7 +10,7 @@ import { directionalIconStyle } from '../lib/rtl';
 import { plantRepo } from '../services/plantRepoInstance';
 import { careHistory, type CareKind } from '../services/plantStore';
 import { dayKey, dayKeySet, monthView, shiftMonth, weekdayLabels } from '../lib/calendar';
-import { getLanguage, localeTag } from '../services/language';
+import { copy, getLanguage, localeTag } from '../services/language';
 import { CARE_KINDS, careState } from '../lib/care';
 
 /*
@@ -42,8 +42,8 @@ interface KindCopy {
   /* Screen title when this kind is the filter. */
   title: string;
   empty: string;
-  one: string;
-  many: string;
+  logged: (n: number) => string;
+  noneThisMonth: string;
   icon: keyof typeof Ionicons.glyphMap;
   /* Theme token names, so light and dark both resolve through the palette. */
   color: 'water' | 'repot' | 'feed';
@@ -52,31 +52,31 @@ interface KindCopy {
 
 const COPY: Record<CareKind, KindCopy> = {
   water: {
-    short: 'Water',
-    title: 'Watering history',
-    empty: 'No waterings logged yet - tap Water now on the plant to start.',
-    one: 'watering',
-    many: 'waterings',
+    short: copy.careHistory.water.short,
+    title: copy.careHistory.water.title,
+    empty: copy.careHistory.water.empty,
+    logged: copy.careHistory.water.logged,
+    noneThisMonth: copy.careHistory.water.noneThisMonth,
     icon: 'water',
     color: 'water',
     onColor: 'onWater',
   },
   repot: {
-    short: 'Repot',
-    title: 'Repotting history',
-    empty: 'No repotting logged yet - tap Log repot on the plant to start.',
-    one: 'repot',
-    many: 'repots',
+    short: copy.careHistory.repot.short,
+    title: copy.careHistory.repot.title,
+    empty: copy.careHistory.repot.empty,
+    logged: copy.careHistory.repot.logged,
+    noneThisMonth: copy.careHistory.repot.noneThisMonth,
     icon: 'flower-outline',
     color: 'repot',
     onColor: 'onRepot',
   },
   fertilizer: {
-    short: 'Feed',
-    title: 'Fertilizer history',
-    empty: 'No feeding logged yet - tap Log feed on the plant to start.',
-    one: 'feed',
-    many: 'feeds',
+    short: copy.careHistory.fertilizer.short,
+    title: copy.careHistory.fertilizer.title,
+    empty: copy.careHistory.fertilizer.empty,
+    logged: copy.careHistory.fertilizer.logged,
+    noneThisMonth: copy.careHistory.fertilizer.noneThisMonth,
     icon: 'nutrition-outline',
     color: 'feed',
     onColor: 'onFeed',
@@ -151,9 +151,9 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
       <SafeAreaView style={s.container} edges={['top', 'bottom']}>
         <View style={s.missing}>
           <Ionicons name="calendar-outline" size={40} color={t.color.textMuted} />
-          <Text style={s.missingTitle}>This plant is no longer saved</Text>
+          <Text style={s.missingTitle}>{copy.careHistory.missingTitle}</Text>
           <Pressable style={s.backLink} onPress={() => navigation.goBack()} accessibilityRole="button">
-            <Text style={s.backLinkText}>Go back</Text>
+            <Text style={s.backLinkText}>{copy.careHistory.goBack}</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -163,7 +163,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
   /* Nickname first: what the user calls the plant beats what it is called, and
    * a hand-added plant has no diagnosis to fall back to. */
   const plantName =
-    plant.nickname ?? plant.species?.name ?? plant.diagnosis?.plantName ?? 'Unnamed plant';
+    plant.nickname ?? plant.species?.name ?? plant.diagnosis?.plantName ?? copy.careHistory.unnamed;
 
   /* Which kinds happened on a given day, in the fixed order of CARE_KINDS so
    * the dots never swap places between one square and the next. */
@@ -200,15 +200,15 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
           </Pressable>
         </View>
 
-        <Text style={s.title}>{single ? single.title : 'Care history'}</Text>
+        <Text style={s.title}>{single ? single.title : copy.careHistory.allTitle}</Text>
         <Text style={s.subtitle}>
           {total === 0
             ? single
               ? single.empty
-              : 'Nothing logged yet - water, repot or feed the plant to start.'
+              : copy.careHistory.allEmpty
             : single
-              ? `${total} ${total === 1 ? single.one : single.many} logged`
-              : `${total} care ${total === 1 ? 'entry' : 'entries'} logged`}
+              ? single.logged(total)
+              : copy.careHistory.allLogged(total)}
         </Text>
 
         {/* Filter, not navigation: every chip shows the same month of the same
@@ -216,7 +216,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
         <View style={s.filterRow}>
           {(['all', ...CARE_KINDS] as Filter[]).map((f) => {
             const active = filter === f;
-            const label = f === 'all' ? 'All' : COPY[f].short;
+            const label = f === 'all' ? copy.careHistory.filterAll : COPY[f].short;
             const count = f === 'all' ? undefined : histories[f].length;
             return (
               <Pressable
@@ -250,7 +250,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
               style={s.monthBtn}
               onPress={() => setView((v) => shiftMonth(v, -1, localeTag()))}
               accessibilityRole="button"
-              accessibilityLabel="Previous month"
+              accessibilityLabel={copy.careHistory.prevMonth}
               hitSlop={8}
             >
               <Ionicons name="chevron-back" size={20} color={t.color.primary} style={directionalIconStyle} />
@@ -260,7 +260,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
               style={s.monthBtn}
               onPress={() => setView((v) => shiftMonth(v, 1, localeTag()))}
               accessibilityRole="button"
-              accessibilityLabel="Next month"
+              accessibilityLabel={copy.careHistory.nextMonth}
               hitSlop={8}
             >
               <Ionicons name="chevron-forward" size={20} color={t.color.primary} style={directionalIconStyle} />
@@ -312,8 +312,8 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
                       accessible
                       accessibilityLabel={
                         `${cell.date.toLocaleDateString(localeTag(), { day: 'numeric', month: 'long' })}` +
-                        done.map((k) => `, ${COPY[k].short.toLowerCase()} logged`).join('') +
-                        dueKinds.map((k) => `, ${COPY[k].short.toLowerCase()} due`).join('') +
+                        done.map((k) => copy.careHistory.doneSuffix(COPY[k].short)).join('') +
+                        dueKinds.map((k) => copy.careHistory.dueSuffix(COPY[k].short)).join('') +
                         (isToday ? ', today' : '')
                       }
                     >
@@ -345,9 +345,9 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
           <Text style={s.monthCount}>
             {monthCount === 0
               ? single
-                ? `No ${single.many} this month`
-                : 'Nothing logged this month'
-              : `${monthCount} ${monthCount === 1 ? 'day' : 'days'} of care this month`}
+                ? single.noneThisMonth
+                : copy.careHistory.allNoneThisMonth
+              : copy.careHistory.daysOfCare(monthCount)}
           </Text>
         </View>
 
@@ -360,13 +360,13 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
           ))}
           <View style={s.legendItem}>
             <View style={[s.legendSwatch, s.legendSwatchDue]} />
-            <Text style={s.legendText}>Next due</Text>
+            <Text style={s.legendText}>{copy.careHistory.nextDue}</Text>
           </View>
         </View>
 
         {recent.length > 0 && (
           <View style={s.recent}>
-            <Text style={s.recentTitle}>Recent</Text>
+            <Text style={s.recentTitle}>{copy.careHistory.recent}</Text>
             {/*
               A short list under the grid, because a calendar shows THAT a day
               had care and this shows WHICH and WHEN - the kind and the time of

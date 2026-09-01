@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { Theme, useTheme } from '../theme';
 import { SOIL_MEDIA, soilMediumById, type SoilMediumId } from '../lib/soilMedia';
+import { copy } from '../services/language';
 import SoilMediumIcon, { withAlpha } from './SoilMediumIcon';
 
 /*
@@ -29,7 +30,7 @@ export interface SoilCardProps {
   title?: string;
 }
 
-export default function SoilCard({ value, onChange, title = 'Growing medium' }: SoilCardProps) {
+export default function SoilCard({ value, onChange, title = copy.soilCard.title }: SoilCardProps) {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
   const selected = soilMediumById(value);
@@ -67,14 +68,14 @@ export default function SoilCard({ value, onChange, title = 'Growing medium' }: 
               ]}
               accessibilityRole="radio"
               accessibilityState={{ selected: isSelected }}
-              accessibilityLabel={`${medium.label}. ${medium.description}`}
+              accessibilityLabel={copy.soilCard.optionA11y(copy.soilMedia[medium.id].label, copy.soilMedia[medium.id].description)}
             >
               <SoilMediumIcon id={medium.id} selected={isSelected} />
               <Text
                 style={[s.label, { color: isSelected ? tint : t.color.textSecondary }]}
                 numberOfLines={2}
               >
-                {medium.label}
+                {copy.soilMedia[medium.id].label}
               </Text>
             </Pressable>
           );
@@ -94,7 +95,7 @@ export default function SoilCard({ value, onChange, title = 'Growing medium' }: 
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
       >
-        {selected ? selected.description : 'Pick what this plant is growing in.'}
+        {selected ? copy.soilMedia[selected.id].description : copy.soilCard.empty}
       </Text>
     </View>
   );

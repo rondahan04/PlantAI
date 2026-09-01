@@ -9,7 +9,7 @@ import { Theme, useTheme } from '../theme';
 import { directionalIconStyle } from '../lib/rtl';
 import { LOGO_GLYPH } from '../brand';
 import { plantRepo } from '../services/plantRepoInstance';
-import { localeTag } from '../services/language';
+import { copy, localeTag } from '../services/language';
 import { plantPhotos } from '../services/photos';
 import { intervalLabel, wateringState } from '../lib/watering';
 import { treatmentProduct } from '../lib/treatments';
@@ -68,9 +68,9 @@ const CONDITION_COLOR: Record<string, keyof Theme['color']> = {
  * left the phone would send them looking for the wrong problem.
  */
 const SAVE_FAILURE: Record<string, string> = {
-  not_found: 'This plant is no longer saved.',
-  network: "We couldn't reach your account. Check your connection and try again.",
-  storage_full: 'Your device is out of storage space, so nothing was saved.',
+  not_found: copy.plantDetail.failNotFound,
+  network: copy.plantDetail.failNetwork,
+  storage_full: copy.plantDetail.failStorage,
 };
 
 export default function PlantDetailScreen({ navigation, route }: Props) {
@@ -156,9 +156,9 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
       <SafeAreaView style={s.container} edges={['top', 'bottom']}>
         <View style={s.missing}>
           <Image source={LOGO_GLYPH} style={[s.emptyGlyph, { tintColor: t.color.textMuted }]} />
-          <Text style={s.missingTitle}>This plant is no longer saved</Text>
+          <Text style={s.missingTitle}>{copy.plantDetail.missingTitle}</Text>
           <Pressable style={s.backLink} onPress={() => navigation.goBack()} accessibilityRole="button">
-            <Text style={s.backLinkText}>Back to my plants</Text>
+            <Text style={s.backLinkText}>{copy.plantDetail.backToPlants}</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -193,7 +193,12 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
    * this due" three different ways.
    */
   const soilPlan = soilPlanFor(genusPlan, plant.soilMedium);
-  const carePlan = plantCarePlan(diagnosis?.carePlan, genusPlan, plant.soilMedium);
+  const carePlan = plantCarePlan(
+    diagnosis?.carePlan,
+    genusPlan,
+    plant.soilMedium,
+    plant.soilMedium ? copy.soilMedia[plant.soilMedium].label : undefined
+  );
 
   /*
    * Changing the growing medium. Local and instant on purpose: every plan for
@@ -207,9 +212,8 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
     const stored = await plantRepo.update(plant.id, { soilMedium: next });
     if (!stored.ok) {
       Alert.alert(
-        "Couldn't save that",
-        SAVE_FAILURE[stored.reason] ??
-          'Your device is out of storage space, so the growing medium was not saved.'
+        copy.plantDetail.saveFailedTitle,
+        SAVE_FAILURE[stored.reason] ?? copy.plantDetail.saveFailedStorage
       );
       return;
     }
@@ -225,8 +229,8 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
     const logged = await plantRepo.markCare(plant.id, kind, Date.now());
     if (!logged.ok) {
       Alert.alert(
-        "Couldn't record that",
-        SAVE_FAILURE[logged.reason] ?? 'Your device is out of storage space, so nothing was saved.'
+        copy.plantDetail.logFailedTitle,
+        SAVE_FAILURE[logged.reason] ?? copy.plantDetail.failStorage
       );
       return;
     }
@@ -270,12 +274,8 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
       const logged = await plantRepo.markWatered(plant.id, at);
       if (!logged.ok) {
         Alert.alert(
-          "Couldn't record that",
-          logged.reason === 'not_found'
-            ? 'This plant is no longer saved.'
-            : logged.reason === 'network'
-              ? "Couldn't reach your account. Check your connection and try again."
-              : 'Your device is out of storage space, so the watering was not saved.'
+          copy.plantDetail.logFailedTitle,
+          SAVE_FAILURE[logged.reason] ?? copy.plantDetail.waterFailedStorage
         );
         return;
       }
@@ -308,10 +308,10 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
   };
 
   const confirmRemove = () => {
-    Alert.alert('Remove this plant?', `${plantName} will be removed from your plants.`, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(copy.plantDetail.removeTitle, copy.plantDetail.removeBody(plantName), [
+      { text: copy.plantDetail.cancel, style: 'cancel' },
       {
-        text: 'Remove',
+        text: copy.plantDetail.remove,
         style: 'destructive',
         onPress: async () => {
           if (removing) return;
@@ -320,10 +320,10 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
             const result = await plantRepo.remove(plant.id);
             if (!result.ok) {
               Alert.alert(
-                "Couldn't remove",
+                copy.plantDetail.removeFailedTitle,
                 result.reason === 'network'
-                  ? "Couldn't reach your account. Check your connection and try again."
-                  : 'Your device is out of storage space.'
+                  ? copy.plantDetail.failNetwork
+                  : copy.plantDetail.removeFailedStorage
               );
               return;
             }
@@ -349,17 +349,17 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
             style={s.backBtn}
             onPress={() => navigation.goBack()}
             accessibilityRole="button"
-            accessibilityLabel="Back to my plants"
+            accessibilityLabel={copy.plantDetail.backToPlants}
           >
             <Ionicons name="chevron-back" size={22} color={t.color.primary} style={directionalIconStyle} />
-            <Text style={s.backText}>My Plants</Text>
+            <Text style={s.backText}>{copy.plantDetail.backLabel}</Text>
           </Pressable>
           <Pressable
             style={s.removeBtn}
             onPress={confirmRemove}
             disabled={removing}
             accessibilityRole="button"
-            accessibilityLabel={`Remove ${plantName} from my plants`}
+            accessibilityLabel={copy.plantDetail.removeA11y}
             hitSlop={8}
           >
             <Ionicons name="trash-outline" size={20} color={t.color.danger} />
@@ -401,22 +401,22 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
         {!diagnosis && (
           <View style={s.undiagnosed}>
             <Ionicons name="scan-outline" size={18} color={t.color.textSecondary} />
-            <Text style={s.undiagnosedText}>You have not had this plant checked yet.</Text>
+            <Text style={s.undiagnosedText}>{copy.plantDetail.undiagnosed}</Text>
             <Pressable
               style={({ pressed }) => [s.undiagnosedBtn, pressed && { opacity: 0.7 }]}
               onPress={() => navigation.navigate('Camera')}
               accessibilityRole="button"
-              accessibilityLabel={`Check ${plantName} with the camera`}
+              accessibilityLabel={copy.plantDetail.checkA11y(plantName)}
               hitSlop={6}
             >
-              <Text style={s.undiagnosedBtnText}>Check it</Text>
+              <Text style={s.undiagnosedBtnText}>{copy.plantDetail.checkIt}</Text>
             </Pressable>
           </View>
         )}
 
         {!!diagnosis && diagnosis.issues.length > 0 && (
           <View style={s.section}>
-            <Text style={s.sectionTitle}>Issues detected</Text>
+            <Text style={s.sectionTitle}>{copy.plantDetail.issues}</Text>
             {diagnosis.issues.map((issue, i) => (
               <View key={i} style={s.issueRow}>
                 <View style={[s.issueDot, { backgroundColor: color }]} />
@@ -428,14 +428,14 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
 
         {!!diagnosis && diagnosis.treatments.length > 0 && (
           <View style={s.section}>
-            <Text style={s.sectionTitle}>Treatment plan</Text>
+            <Text style={s.sectionTitle}>{copy.plantDetail.treatments}</Text>
             {diagnosis.treatments.map((tr, i) => {
               const product = treatmentProduct(tr.title);
               return (
                 <View key={i} style={s.treatmentCard}>
                   {tr.urgent && (
                     <View style={s.urgentPill}>
-                      <Text style={s.urgentText}>URGENT</Text>
+                      <Text style={s.urgentText}>{copy.plantDetail.urgent}</Text>
                     </View>
                   )}
                   <Text style={s.treatmentTitle}>{tr.title}</Text>
@@ -445,10 +445,10 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
                       style={({ pressed }) => [s.shopBtn, pressed && { opacity: 0.6 }]}
                       onPress={() => findNearby(product)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Find ${product} at nurseries near you`}
+                      accessibilityLabel={copy.plantDetail.findProductA11y(product)}
                     >
                       <Ionicons name="storefront-outline" size={16} color={t.color.primary} />
-                      <Text style={s.shopBtnText}>Find {product} nearby</Text>
+                      <Text style={s.shopBtnText}>{copy.plantDetail.findProduct(product)}</Text>
                     </Pressable>
                   )}
                 </View>
@@ -465,7 +465,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
           media were fetched in the one call that cached this genus.
         */}
         <View style={s.section}>
-          <Text style={s.sectionTitle}>Care schedule</Text>
+          <Text style={s.sectionTitle}>{copy.plantDetail.careSchedule}</Text>
           <SoilCard value={plant.soilMedium} onChange={handleSoil} />
 
           {/*
@@ -525,11 +525,11 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
           disabled={searching}
           accessibilityRole="button"
           accessibilityState={{ disabled: searching }}
-          accessibilityLabel={`Find nurseries selling ${plantName}`}
+          accessibilityLabel={copy.plantDetail.findAtNurseryA11y(plantName)}
         >
           <Ionicons name="storefront-outline" size={18} color={t.color.primary} />
           <Text style={s.findBtnText}>
-            {searching ? 'Finding nurseries...' : 'Find this plant at a nursery'}
+            {searching ? copy.plantDetail.findingNurseries : copy.plantDetail.findAtNursery}
           </Text>
         </Pressable>
 
@@ -542,23 +542,25 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
         */}
         {!!diagnosis && !diagnosis.canBeSaved && (
           <View style={s.nurseryCard}>
-            <Text style={s.nurseryTitle}>Find a healthy replacement</Text>
+            <Text style={s.nurseryTitle}>{copy.plantDetail.replacementTitle}</Text>
             <Text style={s.nurseryNote}>
-              This plant is too damaged to save. Find a healthy {diagnosis.plantName} near you.
+              {copy.plantDetail.replacementNote(diagnosis.plantName)}
             </Text>
             <Pressable
               style={({ pressed }) => [s.nurseryBtn, pressed && { opacity: 0.85 }]}
               onPress={() => findNearby(diagnosis.plantName)}
               accessibilityRole="button"
-              accessibilityLabel={`Find ${diagnosis.plantName} at nurseries near you`}
+              accessibilityLabel={copy.plantDetail.findNearbyA11y(diagnosis.plantName)}
             >
               <Ionicons name="storefront-outline" size={18} color={t.color.onPrimary} />
-              <Text style={s.nurseryBtnText}>Find nearby nurseries</Text>
+              <Text style={s.nurseryBtnText}>{copy.plantDetail.findNearby}</Text>
             </Pressable>
           </View>
         )}
 
-        <Text style={s.savedAt}>Saved {new Date(plant.savedAt).toLocaleDateString(localeTag())}</Text>
+        <Text style={s.savedAt}>
+          {copy.plantDetail.savedOn(new Date(plant.savedAt).toLocaleDateString(localeTag()))}
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );

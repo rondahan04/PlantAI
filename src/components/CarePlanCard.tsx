@@ -5,6 +5,7 @@ import { Theme, useTheme } from '../theme';
 import type { CarePlan } from '../types';
 import type { SoilCarePlan } from '../lib/genusCarePlan';
 import { soilMediumById, type SoilMediumId } from '../lib/soilMedia';
+import { copy } from '../services/language';
 
 /*
  * The standing care advice, and WHOSE advice it is.
@@ -56,7 +57,7 @@ export default function CarePlanCard({ soilPlan, fallback, medium, genus }: Care
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
 
-  const mediumLabel = soilMediumById(medium)?.label;
+  const mediumLabel = medium ? copy.soilMedia[medium].label : undefined;
 
   /*
    * A fixed order rather than a loop over whatever keys arrived: soil, then
@@ -66,14 +67,14 @@ export default function CarePlanCard({ soilPlan, fallback, medium, genus }: Care
    */
   const rows: Row[] = soilPlan
     ? [
-        { key: 'light', label: 'Light', icon: 'sunny-outline', text: soilPlan.light },
-        { key: 'humidity', label: 'Humidity', icon: 'thermometer-outline', text: soilPlan.humidity },
+        { key: 'light', label: copy.carePlan.light, icon: 'sunny-outline', text: soilPlan.light },
+        { key: 'humidity', label: copy.carePlan.humidity, icon: 'thermometer-outline', text: soilPlan.humidity },
       ]
     : fallback
       ? [
-          { key: 'soil', label: 'Soil', icon: 'layers-outline', text: fallback.soil },
-          { key: 'light', label: 'Light', icon: 'sunny-outline', text: fallback.light },
-          { key: 'water', label: 'Water', icon: 'water-outline', text: fallback.water },
+          { key: 'soil', label: copy.carePlan.soil, icon: 'layers-outline', text: fallback.soil },
+          { key: 'light', label: copy.carePlan.light, icon: 'sunny-outline', text: fallback.light },
+          { key: 'water', label: copy.carePlan.water, icon: 'water-outline', text: fallback.water },
         ]
       : [];
 
@@ -91,10 +92,13 @@ export default function CarePlanCard({ soilPlan, fallback, medium, genus }: Care
    * half-known version ("Alocasia in" / a genus with no medium) must not be
    * made - it would claim a specificity the advice does not have.
    */
-  const title = soilPlan && genus && mediumLabel ? `${genus} in ${mediumLabel}` : 'Care';
+  const title =
+    soilPlan && genus && mediumLabel
+      ? copy.carePlan.title(genus, mediumLabel)
+      : copy.carePlan.fallbackTitle;
   const note = soilPlan
-    ? 'Written for this plant in this growing medium.'
-    : 'From the diagnosis, which did not know what it is potted in.';
+    ? copy.carePlan.noteSpecific
+    : copy.carePlan.noteFallback;
 
   return (
     <View style={s.section}>
@@ -108,7 +112,7 @@ export default function CarePlanCard({ soilPlan, fallback, medium, genus }: Care
           /* One node per row: a screen reader should say "Light: bright
              indirect", not read the icon and the label as separate stops. */
           accessible
-          accessibilityLabel={`${label}: ${text}`}
+          accessibilityLabel={copy.carePlan.rowA11y(label, text)}
         >
           <View style={s.careIconWrap}>
             <Ionicons name={icon} size={20} color={t.color.primary} />
@@ -132,7 +136,7 @@ export default function CarePlanCard({ soilPlan, fallback, medium, genus }: Care
       {!!soilPlan?.warnings?.length && (
         <View style={s.warnBlock}>
           {soilPlan.warnings.map((w, i) => (
-            <View key={i} style={s.warnRow} accessible accessibilityLabel={`Watch out: ${w}`}>
+            <View key={i} style={s.warnRow} accessible accessibilityLabel={copy.carePlan.warnA11y(w)}>
               <Ionicons name="alert-circle-outline" size={16} color={t.color.warning} />
               <Text style={s.warnText}>{w}</Text>
             </View>
