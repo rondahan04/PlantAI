@@ -70,8 +70,8 @@ test('parseGenusCarePlan throws on a partial response rather than caching it', (
 });
 
 test('cacheKeyFor is case-insensitive on the genus', () => {
-  assert.equal(cacheKeyFor('Alocasia'), cacheKeyFor('alocasia'));
-  assert.ok(cacheKeyFor('Alocasia').startsWith(CACHE_KEY_PREFIX));
+  assert.equal(cacheKeyFor('Alocasia', 'en'), cacheKeyFor('alocasia', 'en'));
+  assert.ok(cacheKeyFor('Alocasia', 'en').startsWith(CACHE_KEY_PREFIX));
 });
 
 test('a cached genus costs no fetch, even for a different species in it', async () => {
@@ -90,8 +90,8 @@ test('a cached genus costs no fetch, even for a different species in it', async 
     now: () => 0,
   });
 
-  const first = await cache.get('Alocasia', 'Aroids');
-  const second = await cache.get('Alocasia', 'Aroids');
+  const first = await cache.get('Alocasia', 'Aroids', 'en');
+  const second = await cache.get('Alocasia', 'Aroids', 'en');
 
   assert.equal(calls, 1);
   assert.equal(first?.genus, 'Alocasia');
@@ -115,15 +115,15 @@ test('a failed fetch returns null and caches nothing, so a retry can succeed', a
     now: () => 0,
   });
 
-  assert.equal(await cache.get('Hoya', 'Hoyas'), null);
+  assert.equal(await cache.get('Hoya', 'Hoyas', 'en'), null);
   assert.equal(store.size, 0);
-  assert.notEqual(await cache.get('Hoya', 'Hoyas'), null);
+  assert.notEqual(await cache.get('Hoya', 'Hoyas', 'en'), null);
   assert.equal(calls, 2);
 });
 
 test('peek reads the cache synchronously and never fetches', () => {
   const store = new Map<string, string>();
-  store.set(cacheKeyFor('Alocasia'), JSON.stringify(fullPlan()));
+  store.set(cacheKeyFor('Alocasia', 'en'), JSON.stringify(fullPlan()));
   const cache = createGenusCarePlanCache({
     storage: {
       getItem: (k) => store.get(k) ?? null,
@@ -136,12 +136,12 @@ test('peek reads the cache synchronously and never fetches', () => {
     now: () => 0,
   });
 
-  assert.equal(cache.peek('Alocasia')?.genus, 'Alocasia');
-  assert.equal(cache.peek('Ficus'), null);
+  assert.equal(cache.peek('Alocasia', 'en')?.genus, 'Alocasia');
+  assert.equal(cache.peek('Ficus', 'en'), null);
 });
 
 test('a corrupt cache entry is dropped rather than crashing the screen', () => {
-  const store = new Map<string, string>([[cacheKeyFor('Alocasia'), '{not json']]);
+  const store = new Map<string, string>([[cacheKeyFor('Alocasia', 'en'), '{not json']]);
   const cache = createGenusCarePlanCache({
     storage: {
       getItem: (k) => store.get(k) ?? null,
@@ -152,8 +152,8 @@ test('a corrupt cache entry is dropped rather than crashing the screen', () => {
     now: () => 0,
   });
 
-  assert.equal(cache.peek('Alocasia'), null);
-  assert.equal(store.has(cacheKeyFor('Alocasia')), false);
+  assert.equal(cache.peek('Alocasia', 'en'), null);
+  assert.equal(store.has(cacheKeyFor('Alocasia', 'en')), false);
 });
 
 /*
@@ -171,7 +171,7 @@ test('a plan from an older app version, missing a medium added since, is refetch
   const newestMedium = SOIL_MEDIUM_IDS[SOIL_MEDIUM_IDS.length - 1];
   delete (stale.bySoil as Record<string, unknown>)[newestMedium];
 
-  const store = new Map<string, string>([[cacheKeyFor('Alocasia'), JSON.stringify(stale)]]);
+  const store = new Map<string, string>([[cacheKeyFor('Alocasia', 'en'), JSON.stringify(stale)]]);
   let calls = 0;
   const cache = createGenusCarePlanCache({
     storage: {
@@ -188,16 +188,16 @@ test('a plan from an older app version, missing a medium added since, is refetch
 
   /* The hole is a miss, and the unusable entry is gone rather than left to be
    * re-read on the next launch. */
-  assert.equal(cache.peek('Alocasia'), null);
-  assert.equal(store.has(cacheKeyFor('Alocasia')), false);
+  assert.equal(cache.peek('Alocasia', 'en'), null);
+  assert.equal(store.has(cacheKeyFor('Alocasia', 'en')), false);
 
-  const fetched = await cache.get('Alocasia', 'Aroids');
+  const fetched = await cache.get('Alocasia', 'Aroids', 'en');
   assert.equal(calls, 1);
   assert.ok(fetched);
   assert.equal(Object.keys(fetched.bySoil).length, SOIL_MEDIUM_IDS.length);
   /* And the replacement is now what a hit returns, so the refetch happens once
    * rather than on every render. */
-  assert.equal(cache.peek('Alocasia')?.genus, 'Alocasia');
+  assert.equal(cache.peek('Alocasia', 'en')?.genus, 'Alocasia');
 });
 
 /*
@@ -222,7 +222,27 @@ test('a setItem that throws still returns the freshly fetched plan', async () =>
     now: () => 0,
   });
 
-  const plan = await cache.get('Alocasia', 'Aroids');
+  const plan = await cache.get('Alocasia', 'Aroids', 'en');
   assert.equal(plan?.genus, 'Alocasia');
   assert.equal(writes, 1);
+});
+
+/*
+ * Language in the cache key. Without it a user who switches to Hebrew reads
+ * their own cached English plans forever, and the first Hebrew fetch
+ * overwrites the English entry for every genus they own - so switching back
+ * does not restore them either.
+ */
+
+test('two languages cannot share a cache entry', () => {
+  assert.notEqual(cacheKeyFor('Monstera', 'en'), cacheKeyFor('Monstera', 'he'));
+});
+
+test('the key is still case and whitespace insensitive within a language', () => {
+  assert.equal(cacheKeyFor('  Monstera ', 'he'), cacheKeyFor('monstera', 'he'));
+});
+
+test('the prefix bumped, so plans cached before languages existed are not served', () => {
+  // A v1 entry holds English prose under a key a Hebrew reader would now hit.
+  assert.match(cacheKeyFor('Monstera', 'en'), /v2/);
 });

@@ -20,6 +20,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { copy } from '../services/language';
 import { directionalIconStyle } from '../lib/rtl';
 import { APP_LOGO } from '../brand';
 import { FEATURES } from '../content/features';
@@ -135,9 +136,9 @@ export default function OnboardingScreen({ navigation }: Props) {
             onPress={() => finish(name)}
             hitSlop={12}
             accessibilityRole="button"
-            accessibilityLabel="Skip onboarding and go to the app"
+            accessibilityLabel={copy.onboarding.skipA11y}
           >
-            <Text style={s.skip}>Skip</Text>
+            <Text style={s.skip}>{copy.onboarding.skip}</Text>
           </Pressable>
         </View>
 
@@ -181,7 +182,7 @@ export default function OnboardingScreen({ navigation }: Props) {
               <PrimaryButton
                 t={t}
                 s={s}
-                label={slide === FEATURES.length - 1 ? 'Get Started' : 'Next'}
+                label={slide === FEATURES.length - 1 ? copy.onboarding.getStarted : copy.onboarding.next}
                 onPress={() => (slide === FEATURES.length - 1 ? afterSlides() : goToSlide(slide + 1))}
               />
             </View>
@@ -194,13 +195,13 @@ export default function OnboardingScreen({ navigation }: Props) {
               <View style={s.slideIcon}>
                 <Image source={APP_LOGO} style={s.slideLogo} accessibilityIgnoresInvertColors />
               </View>
-              <Text style={s.slideTitle}>Hello,{'\n'}what should we call you?</Text>
+              <Text style={s.slideTitle}>{copy.onboarding.namePrompt}</Text>
 
               <TextInput
                 style={s.input}
                 value={name}
                 onChangeText={setName}
-                placeholder="Your name"
+                placeholder={copy.onboarding.namePlaceholder}
                 placeholderTextColor={t.color.textMuted}
                 maxLength={MAX_NAME_LENGTH}
                 autoFocus
@@ -208,12 +209,12 @@ export default function OnboardingScreen({ navigation }: Props) {
                 autoCorrect={false}
                 returnKeyType="done"
                 onSubmitEditing={() => setStep('slides')}
-                accessibilityLabel="Your name, optional"
+                accessibilityLabel={copy.onboarding.nameA11y}
               />
             </View>
 
             <View style={s.footer}>
-              <PrimaryButton t={t} s={s} label="Continue" onPress={() => setStep('slides')} />
+              <PrimaryButton t={t} s={s} label={copy.onboarding.continue} onPress={() => setStep('slides')} />
               <Pressable
                 /* Discards anything half-typed - "not now" means no name, not
                    whatever was left in the field. */
@@ -223,9 +224,9 @@ export default function OnboardingScreen({ navigation }: Props) {
                 }}
                 style={s.ghostBtn}
                 accessibilityRole="button"
-                accessibilityLabel="Continue without giving a name"
+                accessibilityLabel={copy.onboarding.notNowNameA11y}
               >
-                <Text style={s.ghostText}>Not now</Text>
+                <Text style={s.ghostText}>{copy.onboarding.notNow}</Text>
               </Pressable>
             </View>
           </>
@@ -238,11 +239,10 @@ export default function OnboardingScreen({ navigation }: Props) {
                 <Ionicons name="camera-outline" size={48} color={t.color.primary} />
               </View>
               <Text style={s.slideTitle}>
-                {name ? `One thing, ${name}` : 'One last thing'}
+                {copy.onboarding.cameraTitle(name)}
               </Text>
               <Text style={s.slideBlurb}>
-                A diagnosis starts with a photo of your plant, so PlantAI needs the camera. Photos
-                are used for the diagnosis and stay with the plant in your library.
+                {copy.onboarding.cameraBlurb}
               </Text>
             </View>
 
@@ -250,7 +250,7 @@ export default function OnboardingScreen({ navigation }: Props) {
               <PrimaryButton
                 t={t}
                 s={s}
-                label={asking ? 'Waiting…' : 'Allow camera'}
+                label={asking ? copy.onboarding.waiting : copy.onboarding.allowCamera}
                 onPress={allowCamera}
                 disabled={asking}
               />
@@ -258,9 +258,9 @@ export default function OnboardingScreen({ navigation }: Props) {
                 onPress={() => finish(name)}
                 style={s.ghostBtn}
                 accessibilityRole="button"
-                accessibilityLabel="Continue without camera access for now"
+                accessibilityLabel={copy.onboarding.notNowCameraA11y}
               >
-                <Text style={s.ghostText}>Not now</Text>
+                <Text style={s.ghostText}>{copy.onboarding.notNow}</Text>
               </Pressable>
             </View>
           </>

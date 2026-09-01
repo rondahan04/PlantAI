@@ -1,4 +1,5 @@
 import { PLANT_CATALOG, type CatalogEntry } from '../data/plantCatalog.ts';
+import { HEBREW_SYNONYMS, HEBREW_TAXA } from '../data/catalogHebrew.ts';
 
 /*
  * Searching and browsing the species tree.
@@ -39,10 +40,37 @@ interface IndexedEntry {
 export function fold(value: string): string {
   return value
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
+    /*
+     * Hebrew (U+0590-U+05FF) is kept alongside a-z0-9. Without it a Hebrew
+     * query folded to an empty string, which does not match nothing - it
+     * matches EVERYTHING, so the search box would have looked broken rather
+     * than empty-handed. Latin diacritics are still stripped above, so
+     * "zebrína" and "zebrina" remain the same word.
+     */
+    .replace(/[^a-z0-9\u0590-\u05ff]+/g, ' ')
     .trim();
+}
+
+/*
+ * Hebrew for the parts of the tree that genuinely have it: families, genera and
+ * shelf-label groups. Cultivars are deliberately not here - see `nameHe` on
+ * CatalogEntry.
+ *
+ * Keyed by the English string the catalog already stores, so adding a Hebrew
+ * name never means editing 359 entries, and a taxon with no Hebrew simply
+ * falls through to its English name.
+ */
+/* What to show a reader of `lang`, falling back to English rather than to
+ * nothing. */
+export function catalogDisplayName(entry: CatalogEntry, lang: 'en' | 'he'): string {
+  return lang === 'he' ? (entry.nameHe ?? entry.name) : entry.name;
+}
+
+/* Same rule for a taxon name (family / genus / group). */
+export function taxonDisplayName(name: string, lang: 'en' | 'he'): string {
+  return lang === 'he' ? (HEBREW_TAXA[name] ?? name) : name;
 }
 
 function flatten(): IndexedEntry[] {
@@ -58,6 +86,17 @@ function flatten(): IndexedEntry[] {
             entry.group,
             entry.family,
             ...(entry.synonyms ?? []),
+            /*
+             * Hebrew goes into the SAME haystack rather than a second index:
+             * one query has to match either script, because Israeli growers mix
+             * them constantly - "מונסטרה Thai Constellation" is one plant name.
+             */
+            entry.nameHe ?? '',
+            ...(entry.synonymsHe ?? []),
+            HEBREW_TAXA[entry.genus] ?? '',
+            HEBREW_TAXA[entry.group] ?? '',
+            HEBREW_TAXA[entry.family] ?? '',
+            ...(HEBREW_SYNONYMS[entry.genus] ?? []),
           ];
           out.push({ entry, haystack: fold(parts.join(' ')) });
         }
@@ -71,8 +110,8 @@ const INDEX: IndexedEntry[] = flatten();
 
 export const CATALOG_ENTRIES: CatalogEntry[] = INDEX.map((i) => i.entry);
 
-function sectionTitle(e: CatalogEntry): string {
-  return `${e.family} - ${e.genus} - ${e.group}`;
+function sectionTitle(e: CatalogEntry, lang: 'en' | 'he'): string {
+  return [e.family, e.genus, e.group].map((n) => taxonDisplayName(n, lang)).join(' - ');
 }
 
 /*
@@ -81,12 +120,12 @@ function sectionTitle(e: CatalogEntry): string {
  * aroids before everything else - and re-sorting alphabetically would bury the
  * plant most people are looking for.
  */
-function toSections(entries: CatalogEntry[]): CatalogSection[] {
+function toSections(entries: CatalogEntry[], lang: 'en' | 'he'): CatalogSection[] {
   const sections: CatalogSection[] = [];
   const byTitle = new Map<string, CatalogSection>();
 
   for (const entry of entries) {
-    const title = sectionTitle(entry);
+    const title = sectionTitle(entry, lang);
     let section = byTitle.get(title);
     if (!section) {
       section = {
@@ -107,8 +146,8 @@ function toSections(entries: CatalogEntry[]): CatalogSection[] {
 
 /* The whole tree, sectioned. What the picker shows before anything is typed -
  * an empty search field should be a menu, not a void. */
-export function browseSections(): CatalogSection[] {
-  return toSections(CATALOG_ENTRIES);
+export function browseSections(lang: 'en' | 'he' = 'en'): CatalogSection[] {
+  return toSections(CATALOG_ENTRIES, lang);
 }
 
 /*
@@ -117,14 +156,14 @@ export function browseSections(): CatalogSection[] {
  * made the second word useless, which is the opposite of what typing more
  * words means to a person.
  */
-export function searchCatalog(query: string): CatalogSection[] {
+export function searchCatalog(query: string, lang: 'en' | 'he' = 'en'): CatalogSection[] {
   const terms = fold(query).split(' ').filter(Boolean);
-  if (terms.length === 0) return browseSections();
+  if (terms.length === 0) return browseSections(lang);
 
   const hits = INDEX.filter((i) => terms.every((term) => i.haystack.includes(term))).map(
     (i) => i.entry
   );
-  return toSections(hits);
+  return toSections(hits, lang);
 }
 
 /*

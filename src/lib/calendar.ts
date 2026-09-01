@@ -11,8 +11,22 @@
  * local, and never through `toISOString().slice(0, 10)`, which is not.
  */
 
-/* Sunday-first, matching the region this app is used in. */
-export const WEEKDAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as const;
+import type { Language } from './language';
+
+/*
+ * Sunday-first in both languages, and that is not a compromise: the Israeli
+ * week starts on Sunday too, so translating the calendar changes the glyphs
+ * and moves no column. Hebrew days are named by letter - א through ו, then
+ * ש for Shabbat.
+ */
+const WEEKDAY_LABELS: Record<Language, readonly string[]> = {
+  en: ['S', 'M', 'T', 'W', 'T', 'F', 'S'],
+  he: ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'],
+};
+
+export function weekdayLabels(lang: Language): readonly string[] {
+  return WEEKDAY_LABELS[lang];
+}
 
 export interface MonthCell {
   /* Null for the padding squares before the 1st and after the last day. */
@@ -54,7 +68,7 @@ export function dayKeySet(timestamps: readonly string[]): Set<string> {
  * grid leaves a blank row under most months, and the calendar is a small
  * element inside a scrolling screen, not a page of its own.
  */
-export function monthView(year: number, month: number): MonthView {
+export function monthView(year: number, month: number, locale?: string): MonthView {
   // Normalizes out-of-range months, so `monthView(2026, 12)` is January 2027
   // and the caller's next/previous buttons need no wrapping logic of their own.
   const first = new Date(year, month, 1);
@@ -76,12 +90,23 @@ export function monthView(year: number, month: number): MonthView {
   return {
     year: y,
     month: m,
-    title: first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }),
+    /* `locale` optional and passed straight through: omitted it means the
+     * device default, which is the pre-Hebrew behaviour, so widening this
+     * signature cannot silently change an existing caller. */
+    title: first.toLocaleDateString(locale, { month: 'long', year: 'numeric' }),
     weeks,
   };
 }
 
 /* Step a month view forward or back. Year rollover is handled by monthView. */
-export function shiftMonth(view: { year: number; month: number }, by: number): MonthView {
-  return monthView(view.year, view.month + by);
+export function shiftMonth(
+  view: { year: number; month: number },
+  by: number,
+  locale?: string
+): MonthView {
+  /* The locale has to be passed in again rather than read off `view`: a
+   * MonthView carries a formatted title, not the locale that formatted it. Drop
+   * it here and paging the calendar reverts every title to the device language
+   * on the first tap, which is a bug that only appears one screen deep. */
+  return monthView(view.year, view.month + by, locale);
 }

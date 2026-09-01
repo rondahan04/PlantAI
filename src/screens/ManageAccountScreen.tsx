@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { directionalIconStyle } from '../lib/rtl';
+import { copy } from '../services/language';
 import SettingsCard from '../components/SettingsCard';
 import SettingsRow from '../components/SettingsRow';
 import { deleteAccount, signOut } from '../services/auth';
@@ -34,7 +36,7 @@ export default function ManageAccountScreen({ navigation }: Props) {
       await deleteAccount();
       navigation.navigate('Home');
     } catch {
-      Alert.alert('Delete failed', 'Something went wrong deleting your account. Try again.');
+      Alert.alert(copy.settings.deleteFailedTitle, copy.settings.deleteFailedBody);
     } finally {
       setBusy(false);
     }
@@ -42,8 +44,8 @@ export default function ManageAccountScreen({ navigation }: Props) {
 
   const confirmDelete = () => {
     Alert.alert(
-      'Delete account?',
-      'This permanently deletes your account and every plant on this device, including any saved before you signed in. There is no grace period and no undo.',
+      copy.settings.deleteTitle,
+      copy.settings.deleteBody,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: performDelete },
@@ -54,10 +56,10 @@ export default function ManageAccountScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Back" style={s.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={t.color.primary} />
+        <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel={copy.settings.back} style={s.backBtn}>
+          <Ionicons name="chevron-back" size={24} color={t.color.primary} style={directionalIconStyle} />
         </Pressable>
-        <Text style={s.headerTitle}>Manage account</Text>
+        <Text style={s.headerTitle}>{copy.settings.manageAccount}</Text>
         <View style={s.backBtn} />
       </View>
 
@@ -65,14 +67,14 @@ export default function ManageAccountScreen({ navigation }: Props) {
         <SettingsCard>
           <SettingsRow
             icon="lock-closed-outline"
-            label="Change password"
+            label={copy.settings.changePassword}
             onPress={() => navigation.navigate('ChangePassword')}
             disabled={busy}
           />
-          <SettingsRow icon="log-out-outline" label="Log out" onPress={handleLogout} disabled={busy} />
+          <SettingsRow icon="log-out-outline" label={copy.settings.logOut} onPress={handleLogout} disabled={busy} />
           <SettingsRow
             icon="trash-outline"
-            label={busy ? 'Deleting…' : 'Delete account'}
+            label={busy ? copy.settings.deleting : copy.settings.deleteAccount}
             onPress={confirmDelete}
             danger
             disabled={busy}

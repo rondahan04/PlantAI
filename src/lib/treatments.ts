@@ -77,8 +77,14 @@ const STRIP = /[^\p{L}\p{N}-]/gu;
 /*
  * The search term to scrape nurseries for, or null when the treatment is an
  * action rather than something on a shelf.
+ *
+ * ENGLISH ONLY, by construction: it matches English substance names and skips
+ * English opening verbs. That is why it is no longer the primary path - see
+ * `treatmentProduct` below - but it stays exactly as it was, because every
+ * diagnosis saved before the model started naming products has nothing else to
+ * fall back on.
  */
-export function treatmentProduct(title: string): string | null {
+export function parseProductFromTitle(title: string): string | null {
   const text = title.trim();
   if (!text) return null;
 
@@ -105,12 +111,26 @@ export function treatmentProduct(title: string): string | null {
   return null;
 }
 
+/*
+ * What to search a nursery for, given a treatment.
+ *
+ * The model's own answer wins. `undefined` means a record written before the
+ * field existed, and only that falls through to parsing the title; `''` is the
+ * model actively saying this treatment is advice, and must NOT be re-guessed -
+ * doing so would put a "buy it nearby" button under "wipe the scale off by
+ * hand".
+ */
+export function treatmentProduct(treatment: Treatment): string | null {
+  if (treatment.product !== undefined) return treatment.product || null;
+  return parseProductFromTitle(treatment.title);
+}
+
 /* The treatments worth showing a "find it nearby" button on, paired with
  * the term each one should scrape for. */
 export function shoppableTreatments(
   treatments: Treatment[]
 ): { treatment: Treatment; product: string }[] {
   return treatments
-    .map((treatment) => ({ treatment, product: treatmentProduct(treatment.title) }))
+    .map((treatment) => ({ treatment, product: treatmentProduct(treatment) }))
     .filter((entry): entry is { treatment: Treatment; product: string } => entry.product !== null);
 }

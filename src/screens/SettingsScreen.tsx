@@ -6,8 +6,10 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { directionalIconStyle } from '../lib/rtl';
 import SettingsCard from '../components/SettingsCard';
 import SettingsRow from '../components/SettingsRow';
+import { copy, getLanguage } from '../services/language';
 import { getProfile, Profile } from '../services/auth';
 import { supabase } from '../services/supabase';
 
@@ -50,30 +52,56 @@ export default function SettingsScreen({ navigation }: Props) {
     );
   }
 
+  /*
+   * The device rows - language and notifications - belong to the phone, not to
+   * an account, so they render in both branches. Putting them behind a login
+   * was a real trap in Hebrew: a user who could not read the English UI had to
+   * create an account before reaching the setting that would fix it.
+   */
+  const deviceCard = (
+    <SettingsCard>
+      <SettingsRow
+        icon="notifications-outline"
+        label={copy.settings.notifications}
+        onPress={() => navigation.navigate('Notifications')}
+      />
+      <SettingsRow
+        icon="language-outline"
+        label={copy.language.title}
+        /* The current language named in itself, so the row is legible to
+         * whichever language the reader actually speaks. */
+        value={getLanguage() === 'he' ? copy.language.hebrew : copy.language.english}
+        onPress={() => navigation.navigate('Language')}
+      />
+    </SettingsCard>
+  );
+
   if (!email || !profile) {
     return (
       <SafeAreaView style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
-          <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Back" style={s.backBtn}>
-            <Ionicons name="chevron-back" size={24} color={t.color.primary} />
+          <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel={copy.settings.back} style={s.backBtn}>
+            <Ionicons name="chevron-back" size={24} color={t.color.primary} style={directionalIconStyle} />
           </Pressable>
-          <Text style={s.headerTitle}>Profile settings</Text>
+          <Text style={s.headerTitle}>{copy.settings.title}</Text>
           <View style={s.backBtn} />
         </View>
-        <View style={s.loggedOutBody}>
-          <Text style={s.loggedOutText}>
-            Create an account to save your profile and manage your details. Diagnosis works fine
-            without one.
-          </Text>
-          <Pressable
-            style={({ pressed }) => [s.ctaBtn, pressed && s.ctaBtnPressed]}
-            onPress={() => navigation.navigate('Login')}
-            accessibilityRole="button"
-            accessibilityLabel="Log in or sign up"
-          >
-            <Text style={s.ctaText}>Log In / Sign Up</Text>
-          </Pressable>
-        </View>
+
+        <ScrollView contentContainerStyle={s.scroll}>
+          {deviceCard}
+
+          <View style={s.loggedOutBody}>
+            <Text style={s.loggedOutText}>{copy.settings.loggedOutBlurb}</Text>
+            <Pressable
+              style={({ pressed }) => [s.ctaBtn, pressed && s.ctaBtnPressed]}
+              onPress={() => navigation.navigate('Login')}
+              accessibilityRole="button"
+              accessibilityLabel={copy.settings.loginPromptA11y}
+            >
+              <Text style={s.ctaText}>{copy.settings.loginPrompt}</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -81,10 +109,10 @@ export default function SettingsScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Back" style={s.backBtn}>
-          <Ionicons name="chevron-back" size={24} color={t.color.primary} />
+        <Pressable onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel={copy.settings.back} style={s.backBtn}>
+          <Ionicons name="chevron-back" size={24} color={t.color.primary} style={directionalIconStyle} />
         </Pressable>
-        <Text style={s.headerTitle}>Profile settings</Text>
+        <Text style={s.headerTitle}>{copy.settings.profileSettings}</Text>
         <View style={s.backBtn} />
       </View>
 
@@ -98,38 +126,32 @@ export default function SettingsScreen({ navigation }: Props) {
         <SettingsCard>
           <SettingsRow
             icon="person-outline"
-            label="Full name"
+            label={copy.settings.fullName}
             onPress={() =>
               navigation.navigate('EditProfileField', { field: 'full_name', current: profile.full_name ?? '' })
             }
           />
           <SettingsRow
             icon="person-outline"
-            label="Username"
+            label={copy.settings.username}
             value={profile.username}
             onPress={() => navigation.navigate('EditProfileField', { field: 'username', current: profile.username })}
           />
-          <SettingsRow icon="mail-outline" label="Email address" value={email} showChevron={false} />
+          <SettingsRow icon="mail-outline" label={copy.settings.emailAddress} value={email} showChevron={false} />
           <SettingsRow
             icon="chatbubble-ellipses-outline"
-            label="Bio"
+            label={copy.settings.bio}
             value={profile.bio ?? undefined}
             onPress={() => navigation.navigate('EditProfileField', { field: 'bio', current: profile.bio ?? '' })}
           />
         </SettingsCard>
 
-        <SettingsCard>
-          <SettingsRow
-            icon="notifications-outline"
-            label="Notifications"
-            onPress={() => navigation.navigate('Notifications')}
-          />
-        </SettingsCard>
+        {deviceCard}
 
         <SettingsCard>
           <SettingsRow
             icon="settings-outline"
-            label="Manage account"
+            label={copy.settings.manageAccount}
             onPress={() => navigation.navigate('ManageAccount')}
           />
         </SettingsCard>
@@ -154,7 +176,7 @@ function makeStyles(t: Theme) {
     headerTitle: { ...t.type.heading, color: t.color.foreground },
     scroll: { padding: t.space.xl, paddingBottom: t.space['3xl'] },
 
-    loggedOutBody: { flex: 1, padding: t.space.xl, justifyContent: 'center' },
+    loggedOutBody: { paddingTop: t.space['2xl'] },
     loggedOutText: { ...t.type.body, color: t.color.textSecondary, textAlign: 'center', marginBottom: t.space.xl },
 
     avatarWrap: { alignItems: 'center', marginBottom: t.space.xl },

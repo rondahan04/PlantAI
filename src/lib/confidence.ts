@@ -40,6 +40,51 @@ export interface IdentityConfidence {
   genusLabel: string;
 }
 
+/*
+ * The wording, injected rather than hardcoded.
+ *
+ * The same seam as `StorageDeps` in plantStore and `LocationDeps` in
+ * lib/location: this module decides WHICH of four messages applies, and the
+ * caller supplies the words. Without it, four sentences of user-facing English
+ * sit inside a pure module the copy tree cannot reach - and `confidence.ts`
+ * would have to know which language the app is speaking, which is exactly what
+ * being pure is supposed to rule out.
+ */
+export interface IdentityCopy {
+  speciesMatch: (percent: number) => string;
+  genusMatch: (percent: number) => string;
+  probably: string;
+  possibly: string;
+  genusLedTitle: string;
+  genusLedBody: (p: {
+    genus: string;
+    genusPercent: number;
+    plantName: string;
+    percent: number;
+  }) => string;
+  moderateTitle: string;
+  moderateBody: (plantName: string) => string;
+  lowTitle: string;
+  lowBody: (plantName: string) => string;
+}
+
+/* English, so every existing caller and test behaves exactly as before. */
+export const EN_IDENTITY_COPY: IdentityCopy = {
+  speciesMatch: (percent) => `${percent}% species match`,
+  genusMatch: (percent) => `${percent}% genus match`,
+  probably: 'Probably',
+  possibly: 'Possibly',
+  genusLedTitle: 'We know the plant group, not the exact species',
+  genusLedBody: ({ genus, genusPercent, plantName, percent }) =>
+    `This is a ${genus} (${genusPercent}% match). We cannot tell which species - ${plantName} is the closest at ${percent}%. Care for the group is reliable; anything species-specific may not be.`,
+  moderateTitle: 'We are not certain of the species',
+  moderateBody: (plantName) =>
+    `This looks like ${plantName}, but it is not a confident match. The advice below assumes that identification is right.`,
+  lowTitle: 'We could not identify this plant',
+  lowBody: (plantName) =>
+    `${plantName} is our best guess and it is a weak one. Treat the advice below as a starting point, not a diagnosis. A photo with the leaves filling the frame, in daylight, usually identifies much better.`,
+};
+
 /** Genus and its aggregated score, when the server sent them. */
 export interface GenusInfo {
   genus?: string;
@@ -60,10 +105,11 @@ export function confidenceTier(percent: number): ConfidenceTier {
 export function identityConfidence(
   percent: number,
   plantName: string,
-  genusInfo: GenusInfo = {}
+  genusInfo: GenusInfo = {},
+  words: IdentityCopy = EN_IDENTITY_COPY
 ): IdentityConfidence {
   const tier = confidenceTier(percent);
-  const label = `${percent}% species match`;
+  const label = words.speciesMatch(percent);
   const { genus, genusPercent } = genusInfo;
 
   /*
@@ -85,7 +131,7 @@ export function identityConfidence(
      */
     genusPercent >= percent;
 
-  const genusLabel = hasGenus ? `${genusPercent}% genus match` : '';
+  const genusLabel = hasGenus ? words.genusMatch(genusPercent!) : '';
 
   /*
    * Genus-led is the Anthurium case: we are sure of the group and unsure only
@@ -105,8 +151,13 @@ export function identityConfidence(
       genusLabel,
       headline: genus!.trim(),
       genusLed: true,
-      noteTitle: 'We know the plant group, not the exact species',
-      noteBody: `This is a ${genus!.trim()} (${genusPercent}% match). We cannot tell which species - ${plantName} is the closest at ${percent}%. Care for the group is reliable; anything species-specific may not be.`,
+      noteTitle: words.genusLedTitle,
+      noteBody: words.genusLedBody({
+        genus: genus!.trim(),
+        genusPercent: genusPercent!,
+        plantName,
+        percent,
+      }),
       needsCaveat: true,
     };
   }
@@ -128,26 +179,26 @@ export function identityConfidence(
   if (tier === 'moderate') {
     return {
       tier,
-      namePrefix: 'Probably',
+      namePrefix: words.probably,
       label,
       genusLabel,
       headline: plantName,
       genusLed: false,
-      noteTitle: 'We are not certain of the species',
-      noteBody: `This looks like ${plantName}, but it is not a confident match. The advice below assumes that identification is right.`,
+      noteTitle: words.moderateTitle,
+      noteBody: words.moderateBody(plantName),
       needsCaveat: true,
     };
   }
 
   return {
     tier,
-    namePrefix: 'Possibly',
+    namePrefix: words.possibly,
     label,
     genusLabel,
     headline: plantName,
     genusLed: false,
-    noteTitle: "We could not identify this plant",
-    noteBody: `${plantName} is our best guess and it is a weak one. Treat the advice below as a starting point, not a diagnosis. A photo with the leaves filling the frame, in daylight, usually identifies much better.`,
+    noteTitle: words.lowTitle,
+    noteBody: words.lowBody(plantName),
     needsCaveat: true,
   };
 }

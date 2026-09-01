@@ -14,6 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { directionalIconStyle } from '../lib/rtl';
+import { copy } from '../services/language';
 import AuthTextField from '../components/AuthTextField';
 import { signUp, DuplicateUsernameError, DuplicateEmailError, AuthServiceError } from '../services/auth';
 
@@ -49,13 +51,13 @@ export default function SignupScreen({ navigation }: Props) {
       navigation.replace('Home');
     } catch (err) {
       if (err instanceof DuplicateUsernameError) {
-        setUsernameError('That username is taken.');
+        setUsernameError(copy.auth.usernameTaken);
       } else if (err instanceof DuplicateEmailError) {
-        setEmailError('An account with that email already exists.');
+        setEmailError(copy.auth.emailTaken);
       } else if (err instanceof AuthServiceError) {
-        setFormError(err.detail.length < 120 ? err.detail : 'Could not create your account.');
+        setFormError(err.detail.length < 120 ? err.detail : copy.auth.signupFailed);
       } else {
-        setFormError('Something went wrong. Please try again.');
+        setFormError(copy.auth.generic);
       }
     } finally {
       setLoading(false);
@@ -74,24 +76,24 @@ export default function SignupScreen({ navigation }: Props) {
           <Pressable
             onPress={() => navigation.goBack()}
             accessibilityRole="button"
-            accessibilityLabel="Back"
+            accessibilityLabel={copy.auth.back}
             style={s.backBtn}
           >
-            <Ionicons name="chevron-back" size={24} color={t.color.foreground} />
+            <Ionicons name="chevron-back" size={24} color={t.color.foreground} style={directionalIconStyle} />
           </Pressable>
 
-          <Text style={s.title}>Create account</Text>
-          <Text style={s.subtitle}>Optional - diagnosis works fine without one.</Text>
+          <Text style={s.title}>{copy.auth.signupTitle}</Text>
+          <Text style={s.subtitle}>{copy.auth.signupSubtitle}</Text>
 
-          <AuthTextField label="Full name" value={fullName} onChangeText={setFullName} autoCapitalize="words" />
+          <AuthTextField label={copy.auth.fullName} value={fullName} onChangeText={setFullName} autoCapitalize="words" />
           <AuthTextField
-            label="Username"
+            label={copy.auth.username}
             value={username}
             onChangeText={setUsername}
             error={usernameError ?? undefined}
           />
           <AuthTextField
-            label="Email"
+            label={copy.auth.email}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -99,7 +101,7 @@ export default function SignupScreen({ navigation }: Props) {
             error={emailError ?? undefined}
           />
           <AuthTextField
-            label="Password"
+            label={copy.auth.password}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -113,12 +115,12 @@ export default function SignupScreen({ navigation }: Props) {
             onPress={handleSignup}
             disabled={loading || !canSubmit}
             accessibilityRole="button"
-            accessibilityLabel="Create account"
+            accessibilityLabel={copy.auth.signupA11y}
           >
             {loading ? (
               <ActivityIndicator color={t.color.onPrimary} />
             ) : (
-              <Text style={s.ctaText}>Create Account</Text>
+              <Text style={s.ctaText}>{copy.auth.signupCta}</Text>
             )}
           </Pressable>
 
@@ -128,7 +130,7 @@ export default function SignupScreen({ navigation }: Props) {
             style={s.linkBtn}
           >
             <Text style={s.linkText}>
-              Already have an account? <Text style={s.linkTextStrong}>Log in</Text>
+              Already have an account? <Text style={s.linkTextStrong}>{copy.auth.loginLink}</Text>
             </Text>
           </Pressable>
         </ScrollView>

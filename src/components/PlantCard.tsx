@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Theme, useTheme } from '../theme';
+import { copy } from '../services/language';
 import { directionalIconStyle } from '../lib/rtl';
 import { LOGO_GLYPH } from '../brand';
 import { needsWater, wateringState } from '../lib/watering';
@@ -29,11 +30,11 @@ function relativeDay(iso: string, now: number): string {
   const then = Date.parse(iso);
   if (Number.isNaN(then)) return '';
   const days = Math.floor((now - then) / 86_400_000);
-  if (days <= 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days}d ago`;
-  if (days < 365) return `${Math.floor(days / 7)}w ago`;
-  return `${Math.floor(days / 365)}y ago`;
+  if (days <= 0) return copy.relativeDay.today;
+  if (days === 1) return copy.relativeDay.yesterday;
+  if (days < 7) return copy.relativeDay.daysAgo(days);
+  if (days < 365) return copy.relativeDay.weeksAgo(Math.floor(days / 7));
+  return copy.relativeDay.yearsAgo(Math.floor(days / 365));
 }
 
 export default function PlantCard({
@@ -74,7 +75,7 @@ export default function PlantCard({
    * its own line rather than being folded into the meta row - condition is why
    * the plant is in the library, watering is why they opened the app now.
    */
-  const water = wateringState(plant.diagnosis?.carePlan, plant.lastWateredAt, Date.now());
+  const water = wateringState(plant.diagnosis?.carePlan, plant.lastWateredAt, Date.now(), copy.watering);
   const thirsty = needsWater(water);
 
   return (
@@ -84,12 +85,13 @@ export default function PlantCard({
       accessibilityRole="button"
       // One label rather than four separate nodes: a screen reader user wants
       // the plant and its state in a single utterance, not a tour of the row.
-      accessibilityLabel={
-        `${name}${secondary ? `, ${secondary}` : ''}` +
-        (conditionLabel ? `, diagnosed ${conditionLabel}` : ', not diagnosed') +
-        `, saved ${when}` +
-        (thirsty ? `, watering ${water.label.toLowerCase()}` : '')
-      }
+      accessibilityLabel={copy.plantCard.a11y({
+        name,
+        secondary: secondary ?? '',
+        conditionLabel: conditionLabel ?? '',
+        when,
+        watering: thirsty ? water.label : '',
+      })}
     >
       {/*
         The photo may be gone. Item 9 copies it into the document directory on
@@ -158,7 +160,7 @@ export default function PlantCard({
       {plant.diagnosis !== undefined && (
         <View style={s.badge} importantForAccessibility="no">
           <Ionicons name="medkit-outline" size={11} color={t.color.textSecondary} />
-          <Text style={s.badgeText}>Diagnosed</Text>
+          <Text style={s.badgeText}>{copy.plantCard.diagnosedBadge}</Text>
         </View>
       )}
 

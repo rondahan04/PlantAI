@@ -14,6 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { directionalIconStyle } from '../lib/rtl';
+import { copy } from '../services/language';
 import AuthTextField from '../components/AuthTextField';
 import { signIn, AuthServiceError } from '../services/auth';
 
@@ -41,8 +43,8 @@ export default function LoginScreen({ navigation }: Props) {
       // password and a service outage should read identically here.
       setError(
         err instanceof AuthServiceError
-          ? 'Incorrect email or password.'
-          : 'Something went wrong. Please try again.'
+          ? copy.auth.wrongCredentials
+          : copy.auth.generic
       );
     } finally {
       setLoading(false);
@@ -59,24 +61,24 @@ export default function LoginScreen({ navigation }: Props) {
           <Pressable
             onPress={() => navigation.goBack()}
             accessibilityRole="button"
-            accessibilityLabel="Back"
+            accessibilityLabel={copy.auth.back}
             style={s.backBtn}
           >
-            <Ionicons name="chevron-back" size={24} color={t.color.foreground} />
+            <Ionicons name="chevron-back" size={24} color={t.color.foreground} style={directionalIconStyle} />
           </Pressable>
 
-          <Text style={s.title}>Log in</Text>
-          <Text style={s.subtitle}>Access your profile and settings.</Text>
+          <Text style={s.title}>{copy.auth.loginTitle}</Text>
+          <Text style={s.subtitle}>{copy.auth.loginSubtitle}</Text>
 
           <AuthTextField
-            label="Email"
+            label={copy.auth.email}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
             textContentType="emailAddress"
           />
           <AuthTextField
-            label="Password"
+            label={copy.auth.password}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -90,12 +92,12 @@ export default function LoginScreen({ navigation }: Props) {
             onPress={handleLogin}
             disabled={loading || !email || !password}
             accessibilityRole="button"
-            accessibilityLabel="Log in"
+            accessibilityLabel={copy.auth.loginA11y}
           >
             {loading ? (
               <ActivityIndicator color={t.color.onPrimary} />
             ) : (
-              <Text style={s.ctaText}>Log In</Text>
+              <Text style={s.ctaText}>{copy.auth.loginCta}</Text>
             )}
           </Pressable>
 
@@ -104,7 +106,7 @@ export default function LoginScreen({ navigation }: Props) {
             accessibilityRole="button"
             style={s.linkBtn}
           >
-            <Text style={s.linkText}>Forgot password?</Text>
+            <Text style={s.linkText}>{copy.auth.forgotPassword}</Text>
           </Pressable>
 
           <Pressable
@@ -113,7 +115,7 @@ export default function LoginScreen({ navigation }: Props) {
             style={s.linkBtn}
           >
             <Text style={s.linkText}>
-              No account? <Text style={s.linkTextStrong}>Sign up</Text>
+              No account? <Text style={s.linkTextStrong}>{copy.auth.signupLink}</Text>
             </Text>
           </Pressable>
         </ScrollView>

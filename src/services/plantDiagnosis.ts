@@ -1,6 +1,7 @@
 import { readAsStringAsync } from 'expo-file-system/legacy';
 import { PlantDiagnosis } from '../types';
 import { apiFetch, apiHeaders, readApiError } from '../lib/api';
+import { getLanguage } from './language';
 
 /*
  * Diagnosis client (TODOS A3).
@@ -109,7 +110,9 @@ export async function diagnosePlant(imageUri: string): Promise<PlantDiagnosis> {
     res = await apiFetch('/api/diagnose', {
       method: 'POST',
       headers: apiHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ imageBase64 }),
+      /* The model answers in this language; the enum fields it branches on
+       * stay English regardless - see server/diagnose.ts languageRule. */
+      body: JSON.stringify({ imageBase64, lang: getLanguage() }),
       timeoutMs: TIMEOUT_MS,
     });
   } catch (err: unknown) {

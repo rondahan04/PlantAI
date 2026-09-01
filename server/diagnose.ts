@@ -20,6 +20,7 @@
  */
 
 import { friendlyName } from './commonNames.ts';
+import type { Lang } from './carePlan.ts';
 
 const PLANTNET_URL = 'https://my-api.plantnet.org/v2/identify/all';
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
@@ -135,7 +136,7 @@ export interface HealthAssessment {
  */
 export interface DiagnosisDeps {
   identify(image: Buffer): Promise<Identification>;
-  assessHealth(image: Buffer, id: Identification): Promise<HealthAssessment>;
+  assessHealth(image: Buffer, id: Identification, lang?: Lang): Promise<HealthAssessment>;
   /*
    * Second opinion on the species, used only when the primary identifier is
    * weak or down. OPTIONAL: without it `diagnose` behaves exactly as it did
@@ -401,9 +402,13 @@ async function tiebreakSpecies(
   };
 }
 
-export async function diagnose(image: Buffer, deps: DiagnosisDeps): Promise<PlantDiagnosis> {
+export async function diagnose(
+  image: Buffer,
+  deps: DiagnosisDeps,
+  lang: Lang = 'en'
+): Promise<PlantDiagnosis> {
   const id = await resolveIdentification(image, deps);
-  const health = await deps.assessHealth(image, id);
+  const health = await deps.assessHealth(image, id, lang);
 
   return {
     /*
@@ -750,7 +755,11 @@ Keep ${hint.closestSpecies} if the photo really does support it; agreeing is a v
  * disease, pests, deficiency - rather than reciting generic by-name care tips.
  */
 export function openAiAssessHealth(apiKey: string) {
-  return async function assessHealth(image: Buffer, id: Identification): Promise<HealthAssessment> {
+  return async function assessHealth(
+    image: Buffer,
+    id: Identification,
+    lang: Lang = 'en'
+  ): Promise<HealthAssessment> {
     const res = await fetch(OPENAI_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
@@ -760,7 +769,7 @@ export function openAiAssessHealth(apiKey: string) {
           {
             role: 'user',
             content: [
-              { type: 'text', text: prompt(id) },
+              { type: 'text', text: prompt(id, lang) },
               {
                 type: 'image_url',
                 image_url: {
@@ -828,7 +837,11 @@ export function openAiAssessHealth(apiKey: string) {
  * in behind DIAGNOSIS_SKIP_OPENAI (see server/index.ts); never the default.
  * See TODOS.md "Restore OpenAI health assessment" for the revert.
  */
-export async function stubAssessHealth(_image: Buffer, _id: Identification): Promise<HealthAssessment> {
+export async function stubAssessHealth(
+  _image: Buffer,
+  _id: Identification,
+  _lang?: Lang
+): Promise<HealthAssessment> {
   return {
     condition: 'healthy',
     conditionLabel: 'Diagnosis skipped (dev stub)',
@@ -845,14 +858,37 @@ export async function stubAssessHealth(_image: Buffer, _id: Identification): Pro
   };
 }
 
-function prompt(id: Identification): string {
+/*
+ * What the model may and may not translate.
+ *
+ * The fields listed as untouchable are the ones the CLIENT BRANCHES ON.
+ * `condition` picks a colour and an icon; `scientificName` is botanical Latin,
+ * which translating destroys; `product` is a nursery search term; and the JSON
+ * keys are the contract itself. Translate any of those and the app keeps
+ * working in the sense that it renders - it just renders the wrong colour, or
+ * loses the buy button, on a call that was billed and looked successful.
+ */
+function languageRule(lang: Lang): string {
+  if (lang !== 'he') return '';
+  return `
+LANGUAGE: write every piece of human-readable text in Hebrew - "conditionLabel", "issues", "description", every treatment "title" and "description", and every "carePlan" sentence.
+DO NOT TRANSLATE, and return these exactly as specified in English:
+- the JSON field names
+- "condition", which must stay one of: healthy, mild, moderate, severe, critical
+- "scientificName" and the botanical name in "variety", which are Latin
+- "product", which is a search term typed into a shop
+Numbers and booleans stay as they are.
+`;
+}
+
+function prompt(id: Identification, lang: Lang = 'en'): string {
   return `You are a plant pathologist. The plant in this photo has been identified as ${id.commonName} (${id.scientificName}) - trust that identification and do NOT re-identify the species. Examine the photo and diagnose the health of THIS specific plant: look for disease, pests, nutrient deficiency, over/under-watering, or damage visible in the image. Base every issue on what you can actually see. If the plant looks healthy, say so. Return a JSON health assessment in this exact shape:
 {
   "condition": "healthy",
   "conditionLabel": "Healthy",
   "issues": ["short sentence naming one visible problem", "another one"],
   "treatments": [
-    { "title": "string", "description": "string (max 100 chars)", "urgent": false }
+    { "title": "string", "description": "string (max 100 chars)", "urgent": false, "product": "string" }
   ],
   "description": "string (max 180 chars)",
   "canBeSaved": true,
@@ -865,13 +901,15 @@ function prompt(id: Identification): string {
     "waterEveryDaysMax": 10
   }
 }
+Each treatment's "product" is what to search a nursery for - a substance or brand name, IN ENGLISH, e.g. "Neem oil" or "Confidor". Use an EMPTY STRING when the treatment is an action rather than something to buy ("wipe the scale off by hand"). This drives a shop link, so never put a verb or a sentence in it.
+
 condition must be one of: healthy, mild, moderate, severe, critical, reflecting what you see in the photo. "issues" must be an array of PLAIN STRINGS - one short sentence per visible problem, never objects. Use [] if the plant is healthy. Provide 2-3 treatments targeting those problems (or general care tips if healthy).
 
 "variety" is the specific cultivar or variety of ${id.commonName}, e.g. "Thai Constellation" for a Monstera deliciosa, named ONLY from what the photo actually shows - variegation pattern, leaf shape or color distinct from the typical species. Do not guess a popular cultivar name onto a plain, unremarkable specimen. Omit the field entirely (do not include the key) when the photo gives no visual evidence of a specific variety.
 
 "carePlan" is ongoing care for this SPECIES, not a fix for what is wrong today - a healthy plant still gets one. "soil": the potting mix and its drainage. "light": state explicitly whether the plant wants DIRECT or INDIRECT light, how bright, and any exposure to avoid. "water": how often, plus the physical check that says it is time (e.g. top 2cm of soil dry). Those three are required and each must be one short concrete phrase, never a paragraph.
 
-"waterEveryDays" is the SAME interval as a whole number of days, because the app schedules a watering reminder from it - it must agree with the "water" sentence. Give "waterEveryDaysMax" as well when the interval is a range ("every 7-10 days" is 7 and 10); omit it for a single figure. Both are between 1 and 90. Adjust the interval for the season and the plant's condition only if the photo justifies it. Return ONLY valid JSON.`;
+"waterEveryDays" is the SAME interval as a whole number of days, because the app schedules a watering reminder from it - it must agree with the "water" sentence. Give "waterEveryDaysMax" as well when the interval is a range ("every 7-10 days" is 7 and 10); omit it for a single figure. Both are between 1 and 90. Adjust the interval for the season and the plant's condition only if the photo justifies it. Return ONLY valid JSON.${languageRule(lang)}`;
 }
 
 // ─── Validation ───────────────────────────────────────────────────────────────
@@ -884,7 +922,10 @@ function isTreatment(value: unknown): value is Treatment {
   return (
     typeof t.title === 'string' &&
     typeof t.description === 'string' &&
-    typeof t.urgent === 'boolean'
+    typeof t.urgent === 'boolean' &&
+    /* Optional: an older model response has no opinion, and the client falls
+     * back to parsing the title for those. */
+    (t.product === undefined || typeof t.product === 'string')
   );
 }
 

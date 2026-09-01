@@ -5,6 +5,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
+import { directionalIconStyle } from '../lib/rtl';
+import { copy } from '../services/language';
 import AuthTextField from '../components/AuthTextField';
 import { requestPasswordReset } from '../services/auth';
 
@@ -40,13 +42,13 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
         <Pressable
           onPress={() => navigation.goBack()}
           accessibilityRole="button"
-          accessibilityLabel="Back"
+          accessibilityLabel={copy.auth.back}
           style={s.backBtn}
         >
-          <Ionicons name="chevron-back" size={24} color={t.color.foreground} />
+          <Ionicons name="chevron-back" size={24} color={t.color.foreground} style={directionalIconStyle} />
         </Pressable>
 
-        <Text style={s.title}>Reset password</Text>
+        <Text style={s.title}>{copy.auth.resetTitle}</Text>
 
         {sent ? (
           <Text style={s.subtitle}>
@@ -59,7 +61,7 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
               Enter your email and we'll send you a link to set a new password.
             </Text>
             <AuthTextField
-              label="Email"
+              label={copy.auth.email}
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -70,12 +72,12 @@ export default function ForgotPasswordScreen({ navigation }: Props) {
               onPress={handleSend}
               disabled={loading || !email}
               accessibilityRole="button"
-              accessibilityLabel="Send reset link"
+              accessibilityLabel={copy.auth.resetA11y}
             >
               {loading ? (
                 <ActivityIndicator color={t.color.onPrimary} />
               ) : (
-                <Text style={s.ctaText}>Send Reset Link</Text>
+                <Text style={s.ctaText}>{copy.auth.resetCta}</Text>
               )}
             </Pressable>
           </>

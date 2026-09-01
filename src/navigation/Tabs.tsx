@@ -23,6 +23,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MainTabParamList, RootStackParamList } from '../types';
 import PortfolioScreen from '../screens/PortfolioScreen';
 import PlantSearchScreen from '../screens/PlantSearchScreen';
+import { copy } from '../services/language';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -52,7 +53,7 @@ export default function Tabs() {
         name="Portfolio"
         component={PortfolioScreen}
         options={{
-          title: 'Portfolio',
+          title: copy.tabs.portfolio,
           tabBarIcon: ({ color, size }) => <Ionicons name="leaf-outline" size={size} color={color} />,
         }}
       />
@@ -60,7 +61,7 @@ export default function Tabs() {
         name="Scan"
         component={ScanPlaceholder}
         options={{
-          title: 'Scan',
+          title: copy.tabs.scan,
           tabBarIcon: ({ color, size }) => <Ionicons name="camera-outline" size={size} color={color} />,
         }}
         listeners={({ navigation }) => ({
@@ -81,7 +82,7 @@ export default function Tabs() {
         name="Find"
         component={PlantSearchScreen}
         options={{
-          title: 'Find',
+          title: copy.tabs.find,
           tabBarIcon: ({ color, size }) => <Ionicons name="search-outline" size={size} color={color} />,
         }}
       />

@@ -15,6 +15,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Theme, useTheme } from '../theme';
+import { copy } from '../services/language';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -47,7 +48,7 @@ export default function StatusView({
   const iconColor = tone === 'error' ? t.color.danger : t.color.textMuted;
 
   return (
-    <View style={s.wrap} accessibilityRole="summary" accessibilityLabel={`${title}. ${body ?? ''}`}>
+    <View style={s.wrap} accessibilityRole="summary" accessibilityLabel={copy.statusView.a11y(title, body ?? '')}>
       <View style={s.iconWrap}>
         <Ionicons name={icon} size={40} color={iconColor} />
       </View>

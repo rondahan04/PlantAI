@@ -37,6 +37,7 @@ import { FEATURES } from '../content/features';
 import { onboarding } from '../services/onboarding';
 import { useSession } from '../hooks/useSession';
 import { getSessionHint } from '../services/sessionHint';
+import { copy } from '../services/language';
 import PlantCard from '../components/PlantCard';
 import ImportBanner from '../components/ImportBanner';
 
@@ -208,7 +209,7 @@ export default function PortfolioScreen({ navigation }: Props) {
   const sections = useMemo<{ key: string; title: string; data: StoredPlant[] }[]>(
     () =>
       filter === 'all'
-        ? triageSections(visible)
+        ? triageSections(visible, copy.triage)
         : /* One untitled section, so SectionList renders a flat list without a
            * second code path for it. `TriageKey` is deliberately not widened to
            * hold a 'diagnosed' bucket - this is a rendering shape, not a triage
@@ -231,10 +232,16 @@ export default function PortfolioScreen({ navigation }: Props) {
    * existed, so the miss costs nothing that was ever there.
    */
   const due = useMemo(() => {
-    return dueSoon(library.plants, Date.now(), (plant: StoredPlant) => {
-      const genus = plant.species?.genus ?? plant.diagnosis?.genus;
-      return genus ? genusCarePlans.peek(genus) : null;
-    });
+    return dueSoon(
+      library.plants,
+      Date.now(),
+      (plant: StoredPlant) => {
+        const genus = plant.species?.genus ?? plant.diagnosis?.genus;
+        return genus ? genusCarePlans.peek(genus) : null;
+      },
+      copy.care,
+      copy.watering
+    );
     // `library` is the input; the clock is read once per library read on
     // purpose - re-running this on a timer would reshuffle the strip under a
     // user mid-scroll for a day boundary they cannot see.
@@ -289,7 +296,7 @@ export default function PortfolioScreen({ navigation }: Props) {
         // Selected state announced rather than left to colour alone (a11y).
         accessibilityState={{ selected: active }}
         accessibilityLabel={
-          value === 'all' ? 'Show all plants' : 'Show only plants you have diagnosed'
+          value === 'all' ? copy.portfolio.filterAllA11y : copy.portfolio.filterDiagnosedA11y
         }
       >
         <Text style={[s.chipText, active && s.chipTextActive]}>{label}</Text>
@@ -349,15 +356,17 @@ export default function PortfolioScreen({ navigation }: Props) {
               <View style={s.header}>
                 <Image source={APP_LOGO} style={s.logoIcon} accessibilityIgnoresInvertColors />
                 <View style={s.headerText}>
-                  <Text style={s.logoText}>PlantAI</Text>
+                  <Text style={s.logoText}>{copy.portfolio.brand}</Text>
                   <Text style={s.logoSub}>
-                    {profileName ? `${profileName}'s plants` : 'Plant Doctor'}
+                    {profileName
+                      ? copy.portfolio.greetingNamed(profileName)
+                      : copy.portfolio.greetingAnonymous}
                   </Text>
                 </View>
                 <Pressable
                   onPress={() => navigation.navigate('Settings')}
                   accessibilityRole="button"
-                  accessibilityLabel="Account settings"
+                  accessibilityLabel={copy.portfolio.settingsA11y}
                   style={s.settingsBtn}
                   hitSlop={8}
                 >
@@ -390,13 +399,13 @@ export default function PortfolioScreen({ navigation }: Props) {
                   <View style={s.warnBody}>
                     <Text style={s.warnTitle}>
                       {library.reason === 'future_version'
-                        ? 'Saved by a newer version'
-                        : "Some saved plants couldn't be read"}
+                        ? copy.portfolio.warnFutureTitle
+                        : copy.portfolio.warnUnreadableTitle}
                     </Text>
                     <Text style={s.warnText}>
                       {library.reason === 'future_version'
-                        ? 'Update PlantAI to see this library again. Nothing has been deleted.'
-                        : 'Your data has been set aside, not deleted. New plants save normally.'}
+                        ? copy.portfolio.warnFutureText
+                        : copy.portfolio.warnUnreadableText}
                     </Text>
                   </View>
                 </View>
@@ -404,21 +413,21 @@ export default function PortfolioScreen({ navigation }: Props) {
 
               {due.length > 0 && (
                 <View style={s.dueCard}>
-                  <Text style={s.dueTitle}>Due this week</Text>
+                  <Text style={s.dueTitle}>{copy.portfolio.dueThisWeek}</Text>
                   {due.slice(0, DUE_ROW_CAP).map(renderDueRow)}
                   {due.length > DUE_ROW_CAP && (
                     <Text style={s.dueMore}>
-                      +{due.length - DUE_ROW_CAP} more in your plants below
+                      {copy.portfolio.dueMore(due.length - DUE_ROW_CAP)}
                     </Text>
                   )}
                 </View>
               )}
 
-              <Text style={s.libTitle}>Portfolio</Text>
+              <Text style={s.libTitle}>{copy.portfolio.title}</Text>
 
               <View style={s.chipRow}>
-                {renderChip('all', 'All')}
-                {renderChip('diagnosed', 'Diagnosed')}
+                {renderChip('all', copy.portfolio.filterAll)}
+                {renderChip('diagnosed', copy.portfolio.filterDiagnosed)}
               </View>
 
               {/*
@@ -428,7 +437,7 @@ export default function PortfolioScreen({ navigation }: Props) {
               */}
               {visible.length === 0 && filter === 'diagnosed' && (
                 <Text style={s.emptyFilter}>
-                  None of your plants have been diagnosed yet. Scan one to see what it needs.
+                  {copy.portfolio.noneDiagnosed}
                 </Text>
               )}
             </>
@@ -449,10 +458,10 @@ export default function PortfolioScreen({ navigation }: Props) {
               style={({ pressed }) => [s.ctaBtn, s.libCta, pressed && s.ctaBtnPressed]}
               onPress={() => navigation.navigate('Camera')}
               accessibilityRole="button"
-              accessibilityLabel="Diagnose another plant - open the camera"
+              accessibilityLabel={copy.portfolio.diagnoseAnotherA11y}
             >
               <Ionicons name="camera" size={22} color={t.color.onPrimary} />
-              <Text style={s.ctaText}>Diagnose Another Plant</Text>
+              <Text style={s.ctaText}>{copy.portfolio.diagnoseAnother}</Text>
             </Pressable>
           }
         />
@@ -468,10 +477,10 @@ export default function PortfolioScreen({ navigation }: Props) {
           style={({ pressed }) => [s.fab, pressed && s.fabPressed]}
           onPress={() => navigation.navigate('AddPlant')}
           accessibilityRole="button"
-          accessibilityLabel="Add a plant you already own"
+          accessibilityLabel={copy.portfolio.addPlantA11y}
         >
           <Ionicons name="add" size={20} color={t.color.onPrimary} />
-          <Text style={s.fabText}>Add plant</Text>
+          <Text style={s.fabText}>{copy.portfolio.addPlant}</Text>
         </Pressable>
       </SafeAreaView>
     );
@@ -484,13 +493,15 @@ export default function PortfolioScreen({ navigation }: Props) {
         <Animated.View style={[s.header, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
           <Image source={APP_LOGO} style={s.logoIcon} accessibilityIgnoresInvertColors />
           <View style={s.headerText}>
-            <Text style={s.logoText}>PlantAI</Text>
-            <Text style={s.logoSub}>{profileName ? `Hello, ${profileName}` : 'Plant Doctor'}</Text>
+            <Text style={s.logoText}>{copy.portfolio.brand}</Text>
+            <Text style={s.logoSub}>
+              {profileName ? copy.portfolio.helloNamed(profileName) : copy.portfolio.greetingAnonymous}
+            </Text>
           </View>
           <Pressable
             onPress={() => navigation.navigate('Settings')}
             accessibilityRole="button"
-            accessibilityLabel="Account settings"
+            accessibilityLabel={copy.portfolio.settingsA11y}
             style={s.settingsBtn}
             hitSlop={8}
           >
@@ -503,10 +514,8 @@ export default function PortfolioScreen({ navigation }: Props) {
           <View style={s.heroIcon}>
             <Ionicons name="medkit-outline" size={36} color={t.color.primary} />
           </View>
-          <Text style={s.heroTitle}>Is your plant{'\n'}in trouble?</Text>
-          <Text style={s.heroSub}>
-            Snap a photo. Get a diagnosis in seconds.{'\n'}Find a healthy replacement if needed.
-          </Text>
+          <Text style={s.heroTitle}>{copy.portfolio.heroTitle}</Text>
+          <Text style={s.heroSub}>{copy.portfolio.heroSub}</Text>
         </Animated.View>
 
         {/*
@@ -521,10 +530,10 @@ export default function PortfolioScreen({ navigation }: Props) {
             style={({ pressed }) => [s.ctaBtn, pressed && s.ctaBtnPressed]}
             onPress={() => navigation.navigate('Camera')}
             accessibilityRole="button"
-            accessibilityLabel="Diagnose my plant - open the camera"
+            accessibilityLabel={copy.portfolio.diagnoseMineA11y}
           >
             <Ionicons name="camera" size={22} color={t.color.onPrimary} />
-            <Text style={s.ctaText}>Diagnose My Plant</Text>
+            <Text style={s.ctaText}>{copy.portfolio.diagnoseMine}</Text>
           </Pressable>
         </Animated.View>
 
@@ -533,16 +542,16 @@ export default function PortfolioScreen({ navigation }: Props) {
             style={({ pressed }) => [s.secondaryBtn, pressed && s.secondaryBtnPressed]}
             onPress={() => navigation.navigate('AddPlant')}
             accessibilityRole="button"
-            accessibilityLabel="Add a plant you already own, without a photo"
+            accessibilityLabel={copy.portfolio.addOwnedA11y}
           >
             <Ionicons name="add-circle-outline" size={20} color={t.color.primary} />
-            <Text style={s.secondaryText}>Add a plant I already own</Text>
+            <Text style={s.secondaryText}>{copy.portfolio.addOwned}</Text>
           </Pressable>
         </Animated.View>
 
         {/* Features */}
         <Animated.View style={[s.features, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-          <Text style={s.featuresTitle}>How it works</Text>
+          <Text style={s.featuresTitle}>{copy.portfolio.howItWorks}</Text>
           {FEATURES.map((f, i) => (
             <View key={f.title} style={s.featureCard}>
               <View style={s.featureIconWrap}>
@@ -560,7 +569,7 @@ export default function PortfolioScreen({ navigation }: Props) {
         </Animated.View>
 
         <Animated.View style={{ opacity: fadeAnim }}>
-          <Text style={s.bottomNote}>We diagnose 1000+ plant species · fast and accurate</Text>
+          <Text style={s.bottomNote}>{copy.portfolio.bottomNote}</Text>
         </Animated.View>
       </ScrollView>
     </SafeAreaView>

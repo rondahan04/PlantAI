@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Theme, useTheme } from '../theme';
+import { copy } from '../services/language';
 import { directionalIconStyle } from '../lib/rtl';
 import type { CarePlan } from '../types';
 import type { CareKind } from '../services/plantStore';
@@ -66,34 +67,34 @@ interface KindStyle {
 
 const KINDS: Record<CareKind, KindStyle> = {
   water: {
-    title: 'Watering',
+    title: copy.scheduleCard.water.title,
     icon: 'water-outline',
     actionIcon: 'water',
     tint: 'water',
     onTint: 'onWater',
-    action: 'Water now',
-    start: 'I watered it today',
-    done: 'Watered',
+    action: copy.scheduleCard.water.action,
+    start: copy.scheduleCard.water.start,
+    done: copy.scheduleCard.water.done,
   },
   fertilizer: {
-    title: 'Feeding',
+    title: copy.scheduleCard.fertilizer.title,
     icon: 'nutrition-outline',
     actionIcon: 'nutrition',
     tint: 'feed',
     onTint: 'onFeed',
-    action: 'Feed now',
-    start: 'I fed it today',
-    done: 'Fed',
+    action: copy.scheduleCard.fertilizer.action,
+    start: copy.scheduleCard.fertilizer.start,
+    done: copy.scheduleCard.fertilizer.done,
   },
   repot: {
-    title: 'Repotting',
+    title: copy.scheduleCard.repot.title,
     icon: 'flower-outline',
     actionIcon: 'flower',
     tint: 'repot',
     onTint: 'onRepot',
-    action: 'Repot now',
-    start: 'I repotted it today',
-    done: 'Repotted',
+    action: copy.scheduleCard.repot.action,
+    start: copy.scheduleCard.repot.start,
+    done: copy.scheduleCard.repot.done,
   },
 };
 
@@ -112,14 +113,14 @@ export default function ScheduleCard({
   const tint = t.color[k.tint];
   const onTint = t.color[k.onTint];
 
-  const state = careState(kind, carePlan, lastAt, Date.now(), soilPlan);
+  const state = careState(kind, carePlan, lastAt, Date.now(), soilPlan, copy.care, copy.watering);
   /*
    * The interval as the user reads it, taken from the SAME plan the state
    * machine was given. Deriving it separately from `carePlan` would print the
    * watering interval above a feeding schedule, which is exactly the bug the
    * old two-card layout shipped with.
    */
-  const interval = intervalLabel(intervalPlanFor(kind, carePlan, soilPlan));
+  const interval = intervalLabel(intervalPlanFor(kind, carePlan, soilPlan), copy.watering);
 
   /*
    * Done, and not due again yet - there is nothing to log. `ok` is the only
@@ -157,10 +158,10 @@ export default function ScheduleCard({
           style={({ pressed }) => [s.historyBtn, pressed && { opacity: 0.6 }]}
           onPress={onHistory}
           accessibilityRole="button"
-          accessibilityLabel={`See the ${k.title.toLowerCase()} history`}
+          accessibilityLabel={copy.scheduleCard.historyA11y(k.title)}
           hitSlop={8}
         >
-          <Text style={[s.historyText, { color: tint }]}>History</Text>
+          <Text style={[s.historyText, { color: tint }]}>{copy.scheduleCard.history}</Text>
           <Ionicons name="chevron-forward" size={14} color={tint} style={directionalIconStyle} />
         </Pressable>
       </View>
@@ -172,7 +173,7 @@ export default function ScheduleCard({
         an OS reminder, and the user ends up on a schedule the app invented.
       */}
       <Text style={s.interval}>
-        {state.status === 'unscheduled' ? 'No schedule yet' : interval}
+        {state.status === 'unscheduled' ? copy.scheduleCard.noSchedule : interval}
       </Text>
 
       {/*
@@ -230,10 +231,10 @@ export default function ScheduleCard({
         accessibilityState={{ disabled: busy }}
         accessibilityLabel={
           settled
-            ? `${k.done}. ${state.label}`
-            : `${k.title}: ${k.action}.${state.label ? ` ${state.label}` : ''}`
+            ? copy.scheduleCard.settledA11y(k.done, state.label)
+            : copy.scheduleCard.actionA11y(k.title, k.action, state.label)
         }
-        accessibilityHint={settled ? `Double tap and hold to log an early ${k.title.toLowerCase()}` : undefined}
+        accessibilityHint={settled ? copy.scheduleCard.earlyHint(k.title) : undefined}
       >
         <Ionicons
           name={settled ? 'checkmark-circle' : k.actionIcon}

@@ -1,4 +1,5 @@
 import type { Ionicons } from '@expo/vector-icons';
+import { copy } from '../services/language';
 
 /*
  * The three-beat product story, in one place.
@@ -11,6 +12,9 @@ import type { Ionicons } from '@expo/vector-icons';
  * `blurb` is the onboarding voice (second person, one full sentence, room to
  * breathe under a display headline); `desc` is the Home card voice (a clause,
  * sized for a row). Same feature, different amount of space.
+ *
+ * The WORDS live in the copy tree so they can be Hebrew; this file keeps the
+ * order and the icons, which are the parts that are not language.
  */
 
 export type IconName = keyof typeof Ionicons.glyphMap;
@@ -23,22 +27,7 @@ export interface Feature {
 }
 
 export const FEATURES: Feature[] = [
-  {
-    icon: 'scan-outline',
-    title: 'Snap & Diagnose',
-    desc: 'AI identifies what is hurting your plant instantly',
-    blurb: 'Point your camera at a struggling plant. In seconds you get the species, what is wrong, and how to fix it.',
-  },
-  {
-    icon: 'water-outline',
-    title: 'Track & Water',
-    desc: 'A watering schedule tuned to each plant you save',
-    blurb: 'Every plant you save gets a care plan and a watering rhythm, with a reminder so you never guess again.',
-  },
-  {
-    icon: 'storefront-outline',
-    title: 'Find Replacements',
-    desc: 'Locate healthy plants at nurseries near you',
-    blurb: 'When a plant is past saving, we find a healthy one at a nursery near you - delivered or ready to collect.',
-  },
+  { icon: 'scan-outline', ...copy.features.scan },
+  { icon: 'water-outline', ...copy.features.track },
+  { icon: 'storefront-outline', ...copy.features.replace },
 ];

@@ -12,17 +12,39 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
-export function stockAgeLabel(scrapedAt: number | null, now: number): string | null {
+export function stockAgeLabel(
+  scrapedAt: number | null,
+  now: number,
+  words: FreshnessCopy = EN_FRESHNESS_COPY
+): string | null {
   if (scrapedAt === null || !Number.isFinite(scrapedAt)) return null;
 
   const age = now - scrapedAt;
   // A clock skew between server and phone must not produce "in 3 minutes".
-  if (age < 2 * MINUTE) return 'Stock checked just now';
-  if (age < HOUR) return `Stock checked ${Math.floor(age / MINUTE)} min ago`;
-  if (age < DAY) {
-    const hours = Math.floor(age / HOUR);
-    return `Stock checked ${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
-  }
+  if (age < 2 * MINUTE) return words.justNow;
+  if (age < HOUR) return words.minutesAgo(Math.floor(age / MINUTE));
+  if (age < DAY) return words.hoursAgo(Math.floor(age / HOUR));
   const days = Math.floor(age / DAY);
-  return days === 1 ? 'Stock checked yesterday' : `Stock checked ${days} days ago`;
+  return days === 1 ? words.yesterday : words.daysAgo(days);
 }
+
+/*
+ * The wording, injected like the other pure modules. Rounding stays DOWN here
+ * on purpose - overstating freshness is the failure that matters.
+ */
+export interface FreshnessCopy {
+  justNow: string;
+  minutesAgo: (minutes: number) => string;
+  hoursAgo: (hours: number) => string;
+  yesterday: string;
+  daysAgo: (days: number) => string;
+}
+
+/* English, so every existing caller and test behaves exactly as before. */
+export const EN_FRESHNESS_COPY: FreshnessCopy = {
+  justNow: 'Stock checked just now',
+  minutesAgo: (minutes) => `Stock checked ${minutes} min ago`,
+  hoursAgo: (hours) => `Stock checked ${hours} ${hours === 1 ? 'hour' : 'hours'} ago`,
+  yesterday: 'Stock checked yesterday',
+  daysAgo: (days) => `Stock checked ${days} days ago`,
+};

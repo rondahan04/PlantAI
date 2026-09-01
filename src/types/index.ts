@@ -72,6 +72,21 @@ export interface Treatment {
   title: string;
   description: string;
   urgent: boolean;
+  /*
+   * What to search a nursery for - an English or brand name - or an empty
+   * string when this treatment is advice rather than a purchase.
+   *
+   * Supplied by the model, which already knows whether it just recommended a
+   * buyable thing. It exists because the client used to work this out by
+   * parsing the English title against English substance and action words, and
+   * that returns null for every Hebrew title - silently removing the only
+   * commerce path out of a diagnosis.
+   *
+   * OPTIONAL, and the three states are distinct: a string is a product, '' is
+   * the model saying there is nothing to buy, and absent is a record written
+   * before this field existed. Only the last falls through to the parser.
+   */
+  product?: string;
 }
 
 export interface Nursery {
@@ -162,6 +177,7 @@ export type RootStackParamList = {
   ManageAccount: undefined;
   ChangePassword: undefined;
   Notifications: undefined;
+  Language: undefined;
   /*
    * The species catalog, pushed from the add-plant form. It cannot take an
    * onPick callback - params are persisted and restored, so they have to stay

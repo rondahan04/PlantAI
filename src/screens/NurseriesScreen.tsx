@@ -7,6 +7,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, Nursery, DeliveryMode } from '../types';
 import { Theme, useTheme } from '../theme';
+import { copy } from '../services/language';
 import { directionalIconStyle } from '../lib/rtl';
 import { fetchNearbyNurseries } from '../services/nurseryService';
 import { stockAgeLabel } from '../lib/freshness';
@@ -30,8 +31,8 @@ interface NurseryFailure {
 }
 
 const GENERIC_FAILURE: NurseryFailure = {
-  title: "We couldn't reach the nursery service",
-  body: 'The search did not come back. Nothing is wrong with your plant or your location.',
+  title: copy.nurseries.unreachableTitle,
+  body: copy.nurseries.unreachableBody,
 };
 
 /*
@@ -45,8 +46,8 @@ function describeFailure(err: unknown): NurseryFailure {
   const name = err instanceof Error ? err.name : '';
   if (name === 'AbortError' || name === 'TimeoutError') {
     return {
-      title: 'The search took too long',
-      body: 'Checking live stock across nearby nurseries can run past our limit. Trying again often works.',
+      title: copy.nurseries.timeoutTitle,
+      body: copy.nurseries.timeoutBody,
     };
   }
   return GENERIC_FAILURE;
@@ -85,7 +86,7 @@ function StarRating({ rating, t, s }: { rating: number; t: Theme; s: Styles }) {
 function AvailabilityPill({ nursery }: { nursery: Nursery }) {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
-  const badge = availabilityBadge(nursery);
+  const badge = availabilityBadge(nursery, copy.availability);
 
   const tone = {
     good: { bg: undefined, fg: t.color.primary, icon: 'checkmark-circle-outline' as const },
@@ -115,8 +116,8 @@ function AvailabilityPill({ nursery }: { nursery: Nursery }) {
       onPress={() => Alert.alert(badge.text, badge.detail)}
       accessibilityRole="button"
       // The truncated line is meaningless to a screen reader; speak all of it.
-      accessibilityLabel={`${badge.text}. ${badge.detail}`}
-      accessibilityHint="Shows why"
+      accessibilityLabel={copy.nurseries.pillA11y(badge.text, badge.detail)}
+      accessibilityHint={copy.nurseries.pillHint}
     >
       {body}
     </Pressable>
@@ -176,7 +177,7 @@ function NurseryCard({
         )}
         {index === 0 && nursery.hasPlant && (
           <View style={s.closestBadge}>
-            <Text style={s.closestText}>In stock</Text>
+            <Text style={s.closestText}>{copy.nurseries.inStock}</Text>
           </View>
         )}
       </View>
@@ -189,7 +190,7 @@ function NurseryCard({
               <>
                 <StarRating rating={nursery.rating} t={t} s={s} />
                 {typeof nursery.reviewCount === 'number' && (
-                  <Text style={s.reviewCount}>({nursery.reviewCount} reviews)</Text>
+                  <Text style={s.reviewCount}>{copy.nurseries.reviews(nursery.reviewCount)}</Text>
                 )}
               </>
             )}
@@ -202,7 +203,7 @@ function NurseryCard({
              */
             <View style={[s.priceTag, nursery.priceSuspect && s.priceTagMuted]}>
               <Text style={[s.priceText, nursery.priceSuspect && s.priceTextMuted]}>
-                {nursery.priceSuspect ? 'See price' : nursery.plantPrice}
+                {nursery.priceSuspect ? copy.nurseries.seePrice : nursery.plantPrice}
               </Text>
             </View>
           ) : null}
@@ -227,15 +228,15 @@ function NurseryCard({
 
         <View style={s.actionRow}>
           {!!nursery.phone && (
-            <Pressable style={s.actionSecondary} onPress={onCall} accessibilityRole="button" accessibilityLabel="Call nursery">
+            <Pressable style={s.actionSecondary} onPress={onCall} accessibilityRole="button" accessibilityLabel={copy.nurseries.callA11y}>
               <Ionicons name="call-outline" size={16} color={t.color.foreground} />
-              <Text style={s.actionSecondaryText}>Call</Text>
+              <Text style={s.actionSecondaryText}>{copy.nurseries.call}</Text>
             </Pressable>
           )}
           {hasCoords(nursery) && (
-            <Pressable style={s.actionSecondary} onPress={onDirections} accessibilityRole="button" accessibilityLabel="Directions">
+            <Pressable style={s.actionSecondary} onPress={onDirections} accessibilityRole="button" accessibilityLabel={copy.nurseries.directions}>
               <Ionicons name="navigate-outline" size={16} color={t.color.foreground} />
-              <Text style={s.actionSecondaryText}>Directions</Text>
+              <Text style={s.actionSecondaryText}>{copy.nurseries.directions}</Text>
             </Pressable>
           )}
           <Pressable
@@ -246,7 +247,11 @@ function NurseryCard({
             accessibilityState={{ disabled: !isAvailable }}
           >
             <Text style={s.actionPrimaryText}>
-              {mode === 'delivery' ? (isAvailable ? 'Order' : 'Unavailable') : 'Visit Store'}
+              {mode === 'delivery'
+                ? isAvailable
+                  ? copy.nurseries.order
+                  : copy.nurseries.unavailable
+                : copy.nurseries.visitStore}
             </Text>
           </Pressable>
         </View>
@@ -302,7 +307,7 @@ export default function NurseriesScreen({ navigation, route }: Props) {
   // Computed on render rather than stored: the label is derived from a stamp
   // that never changes, and a "3 hours ago" frozen at load time would keep
   // ageing wrongly the longer the screen stays open.
-  const ageLabel = stockAgeLabel(scrapedAt, Date.now());
+  const ageLabel = stockAgeLabel(scrapedAt, Date.now(), copy.freshness);
 
   /*
    * Shops that demonstrably do not stock the plant are dropped outright - see
@@ -352,7 +357,7 @@ export default function NurseriesScreen({ navigation, route }: Props) {
       Linking.openURL(`tel:${nursery.phone}`);
       return;
     }
-    Alert.alert(nursery.name, 'No website or phone number available for this nursery.');
+    Alert.alert(nursery.name, copy.nurseries.noContact);
   };
   const handleCall = (nursery: Nursery) => nursery.phone && Linking.openURL(`tel:${nursery.phone}`);
   const handleDirections = (nursery: Nursery) =>
@@ -362,13 +367,17 @@ export default function NurseriesScreen({ navigation, route }: Props) {
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       {/* Header */}
       <Animated.View style={[s.header, { opacity: headerFade }]}>
-        <Pressable style={s.backBtn} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Back">
+        <Pressable style={s.backBtn} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel={copy.nurseries.back}>
           <Ionicons name="chevron-back" size={22} color={t.color.primary} style={directionalIconStyle} />
         </Pressable>
         <View style={s.headerCenter}>
           <Text style={s.headerTitle} numberOfLines={2}>{plantName}</Text>
           <Text style={s.headerSub}>
-            {status === 'ready' ? `${nurseries.length} nurseries nearby` : status === 'loading' ? 'Searching…' : 'Search failed'}
+            {status === 'ready'
+              ? copy.nurseries.countNearby(nurseries.length)
+              : status === 'loading'
+                ? copy.nurseries.searching
+                : copy.nurseries.searchFailed}
           </Text>
         </View>
         <Pressable
@@ -376,7 +385,7 @@ export default function NurseriesScreen({ navigation, route }: Props) {
           onPress={() => setViewMode(viewMode === 'list' ? 'map' : 'list')}
           disabled={status !== 'ready' || mapNurseries.length === 0}
           accessibilityRole="button"
-          accessibilityLabel={viewMode === 'list' ? 'Show map' : 'Show list'}
+          accessibilityLabel={viewMode === 'list' ? copy.nurseries.showMap : copy.nurseries.showList}
         >
           <Ionicons name={viewMode === 'list' ? 'map-outline' : 'list-outline'} size={18} color={t.color.primary} />
         </Pressable>
@@ -395,10 +404,10 @@ export default function NurseriesScreen({ navigation, route }: Props) {
             style={({ pressed }) => [s.freshBtn, pressed && { opacity: 0.6 }]}
             onPress={() => load(true)}
             accessibilityRole="button"
-            accessibilityLabel="Check stock again now"
+            accessibilityLabel={copy.nurseries.refreshA11y}
             hitSlop={8}
           >
-            <Text style={s.freshBtnText}>Refresh</Text>
+            <Text style={s.freshBtnText}>{copy.nurseries.refresh}</Text>
           </Pressable>
         </View>
       )}
@@ -423,7 +432,7 @@ export default function NurseriesScreen({ navigation, route }: Props) {
                   color={active ? t.color.primary : t.color.textMuted}
                 />
                 <Text style={[s.modeBtnText, active && s.modeBtnTextActive]}>
-                  {m === 'delivery' ? 'Deliver Today' : 'Pick Up'}
+                  {m === 'delivery' ? copy.nurseries.deliverToday : copy.nurseries.pickUp}
                 </Text>
                 <View style={[s.modeCount, active && s.modeCountActive]}>
                   <Text style={[s.modeCountText, active && s.modeCountTextActive]}>{count}</Text>
@@ -438,8 +447,8 @@ export default function NurseriesScreen({ navigation, route }: Props) {
       {status === 'loading' && (
         <View style={s.centerFill}>
           <ActivityIndicator size="large" color={t.color.primary} />
-          <Text style={s.stateTitle}>Searching nearby nurseries</Text>
-          <Text style={s.stateText}>Discovering shops within 10km and checking live stock for {plantName}. This can take 30–60 seconds.</Text>
+          <Text style={s.stateTitle}>{copy.nurseries.searchingTitle}</Text>
+          <Text style={s.stateText}>{copy.nurseries.searchingBody(plantName)}</Text>
         </View>
       )}
 
@@ -450,8 +459,8 @@ export default function NurseriesScreen({ navigation, route }: Props) {
           title={failure.title}
           body={failure.body}
           tone="error"
-          primaryAction={{ label: 'Try again', icon: 'refresh-outline', onPress: () => load(true) }}
-          secondaryAction={{ label: 'Back to home', onPress: () => navigation.navigate('Home') }}
+          primaryAction={{ label: copy.nurseries.tryAgain, icon: 'refresh-outline', onPress: () => load(true) }}
+          secondaryAction={{ label: copy.nurseries.backToHome, onPress: () => navigation.navigate('Home') }}
         />
       )}
 
@@ -459,10 +468,10 @@ export default function NurseriesScreen({ navigation, route }: Props) {
       {status === 'ready' && nurseries.length === 0 && (
         <StatusView
           icon="leaf-outline"
-          title="No nurseries found nearby"
-          body={`No shop within 10km came back with ${plantName} in stock. Stock changes often, so it is worth another look later.`}
-          primaryAction={{ label: 'Search again', icon: 'refresh-outline', onPress: () => load(true) }}
-          secondaryAction={{ label: 'Diagnose another plant', onPress: () => navigation.navigate('Home') }}
+          title={copy.nurseries.emptyTitle}
+          body={copy.nurseries.emptyBody(plantName)}
+          primaryAction={{ label: copy.nurseries.searchAgain, icon: 'refresh-outline', onPress: () => load(true) }}
+          secondaryAction={{ label: copy.nurseries.diagnoseAnother, onPress: () => navigation.navigate('Home') }}
         />
       )}
 
@@ -483,7 +492,7 @@ export default function NurseriesScreen({ navigation, route }: Props) {
                 key={nursery.id}
                 coordinate={{ latitude: nursery.latitude, longitude: nursery.longitude }}
                 title={nursery.name}
-                description={`${nursery.distance}${nursery.inStockKnown ? ` · ${nursery.plantPrice} · in stock` : ''}`}
+                description={copy.nurseries.mapCallout(nursery.distance ?? '', nursery.inStockKnown ? nursery.plantPrice ?? '' : '')}
                 pinColor={nursery.hasPlant ? t.color.primary : t.color.textMuted}
                 onCalloutPress={() => handleDirections(nursery)}
               />
@@ -506,7 +515,7 @@ export default function NurseriesScreen({ navigation, route }: Props) {
             ))}
             <Pressable style={s.scanMoreBtn} onPress={() => navigation.navigate('Home')} accessibilityRole="button">
               <Ionicons name="camera-outline" size={18} color={t.color.primary} />
-              <Text style={s.scanMoreText}>Diagnose Another Plant</Text>
+              <Text style={s.scanMoreText}>{copy.nurseries.diagnoseAnotherCta}</Text>
             </Pressable>
           </ScrollView>
         )

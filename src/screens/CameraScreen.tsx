@@ -20,6 +20,7 @@ import {
   UnsupportedImageError,
 } from '../services/plantDiagnosis';
 import { Theme, useTheme } from '../theme';
+import { copy } from '../services/language';
 import { APP_LOGO } from '../brand';
 import StatusView from '../components/StatusView';
 
@@ -45,8 +46,8 @@ function describeFailure(err: unknown, uri: string): Failure {
   if (err instanceof NotAPlantError) {
     return {
       icon: 'leaf-outline',
-      title: "We couldn't find a plant in that photo",
-      body: 'Point the camera at leaves, stems, or flowers, close enough to fill most of the frame.',
+      title: copy.camera.notAPlantTitle,
+      body: copy.camera.notAPlantBody,
       retryUri: null,
     };
   }
@@ -54,8 +55,8 @@ function describeFailure(err: unknown, uri: string): Failure {
   if (err instanceof UnsupportedImageError) {
     return {
       icon: 'image-outline',
-      title: "We can't read that image",
-      body: 'That file is in a format we cannot open. A photo taken with the camera, or a JPEG or PNG from your library, will work.',
+      title: copy.camera.unsupportedTitle,
+      body: copy.camera.unsupportedBody,
       retryUri: null,
     };
   }
@@ -63,16 +64,16 @@ function describeFailure(err: unknown, uri: string): Failure {
   if (err instanceof DiagnosisUnavailableError) {
     return {
       icon: 'construct-outline',
-      title: 'Diagnosis is unavailable',
-      body: 'This build is not pointed at a plant identification service. Nothing is wrong with your photo or your plant.',
+      title: copy.camera.unavailableTitle,
+      body: copy.camera.unavailableBody,
       retryUri: null,
     };
   }
 
   return {
     icon: 'cloud-offline-outline',
-    title: "We couldn't finish the diagnosis",
-    body: 'The plant service did not answer. Your photo is fine - this one is on us.',
+    title: copy.camera.failedTitle,
+    body: copy.camera.failedBody,
     retryUri: uri,
   };
 }
@@ -122,8 +123,8 @@ export default function CameraScreen({ navigation }: Props) {
     } catch {
       setFailure({
         icon: 'camera-outline',
-        title: "The camera didn't capture that",
-        body: 'Something interrupted the shot. Try again, or pick an existing photo instead.',
+        title: copy.camera.captureFailedTitle,
+        body: copy.camera.captureFailedBody,
         retryUri: null,
       });
     }
@@ -134,8 +135,8 @@ export default function CameraScreen({ navigation }: Props) {
     if (status !== 'granted') {
       setFailure({
         icon: 'images-outline',
-        title: 'PlantAI needs access to your photos',
-        body: 'Allow photo access in Settings to pick a picture you already took.',
+        title: copy.camera.photoPermissionTitle,
+        body: copy.camera.photoPermissionBody,
         retryUri: null,
       });
       return;
@@ -162,18 +163,18 @@ export default function CameraScreen({ navigation }: Props) {
         <View style={s.permissionIcon}>
           <Ionicons name="camera-outline" size={40} color={t.color.primary} />
         </View>
-        <Text style={s.permissionTitle}>Camera access needed</Text>
-        <Text style={s.permissionDesc}>PlantAI needs your camera to diagnose plant health issues.</Text>
+        <Text style={s.permissionTitle}>{copy.camera.permissionTitle}</Text>
+        <Text style={s.permissionDesc}>{copy.camera.permissionDesc}</Text>
         <Pressable
           style={({ pressed }) => [s.permissionBtn, pressed && s.btnPressed]}
           onPress={requestPermission}
           accessibilityRole="button"
-          accessibilityLabel="Allow camera access"
+          accessibilityLabel={copy.camera.allowCameraA11y}
         >
-          <Text style={s.permissionBtnText}>Allow Camera</Text>
+          <Text style={s.permissionBtnText}>{copy.camera.allowCamera}</Text>
         </Pressable>
         <Pressable style={s.galleryAlt} onPress={pickFromGallery} accessibilityRole="button">
-          <Text style={s.galleryAltText}>Or pick from gallery instead</Text>
+          <Text style={s.galleryAltText}>{copy.camera.orGallery}</Text>
         </Pressable>
       </SafeAreaView>
     );
@@ -193,7 +194,7 @@ export default function CameraScreen({ navigation }: Props) {
             style={s.failureClose}
             onPress={() => navigation.goBack()}
             accessibilityRole="button"
-            accessibilityLabel="Close"
+            accessibilityLabel={copy.camera.close}
           >
             <Ionicons name="close" size={24} color={t.color.foreground} />
           </Pressable>
@@ -205,13 +206,13 @@ export default function CameraScreen({ navigation }: Props) {
           tone="error"
           primaryAction={
             failure.retryUri
-              ? { label: 'Try again', icon: 'refresh', onPress: () => void analyzeImage(failure.retryUri!) }
-              : { label: 'Take another photo', icon: 'camera', onPress: dismiss }
+              ? { label: copy.camera.tryAgain, icon: 'refresh', onPress: () => void analyzeImage(failure.retryUri!) }
+              : { label: copy.camera.takeAnother, icon: 'camera', onPress: dismiss }
           }
           secondaryAction={
             failure.retryUri
-              ? { label: 'Take another photo', onPress: dismiss }
-              : { label: 'Back to home', onPress: () => navigation.navigate('Home') }
+              ? { label: copy.camera.takeAnother, onPress: dismiss }
+              : { label: copy.camera.backToHome, onPress: () => navigation.navigate('Home') }
           }
         />
       </SafeAreaView>
@@ -231,10 +232,8 @@ export default function CameraScreen({ navigation }: Props) {
             */}
             <Image source={APP_LOGO} style={s.analyzeLogo} accessibilityIgnoresInvertColors />
             <ActivityIndicator color={t.color.primary} size="large" style={{ marginVertical: t.space.lg }} />
-            <Text style={s.analyzeTitle}>Analyzing your plant</Text>
-            <Text style={s.analyzeDesc}>
-              We're examining the symptoms,{'\n'}identifying the species and condition...
-            </Text>
+            <Text style={s.analyzeTitle}>{copy.camera.analyzingTitle}</Text>
+            <Text style={s.analyzeDesc}>{copy.camera.analyzingDesc}</Text>
           </View>
         </SafeAreaView>
       </View>
@@ -248,15 +247,15 @@ export default function CameraScreen({ navigation }: Props) {
       <SafeAreaView style={s.overlay}>
         {/* Top bar - dark pills over the live camera feed (correct for camera UI) */}
         <View style={s.topBar}>
-          <Pressable style={s.iconPill} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel="Close camera">
+          <Pressable style={s.iconPill} onPress={() => navigation.goBack()} accessibilityRole="button" accessibilityLabel={copy.camera.closeCamera}>
             <Ionicons name="close" size={24} color="#fff" />
           </Pressable>
-          <Text style={s.topTitle}>Scan Plant</Text>
+          <Text style={s.topTitle}>{copy.camera.scanTitle}</Text>
           <Pressable
             style={s.iconPill}
             onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
             accessibilityRole="button"
-            accessibilityLabel="Flip camera"
+            accessibilityLabel={copy.camera.flipCamera}
           >
             <Ionicons name="camera-reverse-outline" size={24} color="#fff" />
           </Pressable>
@@ -269,20 +268,20 @@ export default function CameraScreen({ navigation }: Props) {
             <View style={[s.corner, s.cornerBL]} />
             <View style={[s.corner, s.cornerBR]} />
           </View>
-          <Text style={s.hint}>Center your plant in the frame</Text>
+          <Text style={s.hint}>{copy.camera.hint}</Text>
         </View>
 
         <View style={s.controls}>
-          <Pressable style={s.galleryBtn} onPress={pickFromGallery} accessibilityRole="button" accessibilityLabel="Pick from gallery">
+          <Pressable style={s.galleryBtn} onPress={pickFromGallery} accessibilityRole="button" accessibilityLabel={copy.camera.pickFromGallery}>
             <Ionicons name="images-outline" size={26} color="#fff" />
-            <Text style={s.galleryBtnText}>Gallery</Text>
+            <Text style={s.galleryBtnText}>{copy.camera.gallery}</Text>
           </Pressable>
 
           <Pressable
             style={({ pressed }) => [s.captureBtn, pressed && { transform: [{ scale: 0.95 }] }]}
             onPress={takePicture}
             accessibilityRole="button"
-            accessibilityLabel="Take photo"
+            accessibilityLabel={copy.camera.takePhoto}
           >
             <View style={s.captureBtnInner} />
           </Pressable>
@@ -317,11 +316,50 @@ function makeStyles(t: Theme) {
     topTitle: { ...t.type.heading, color: '#fff' },
     viewfinderWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     viewfinder: { width: 260, height: 260, position: 'relative' },
+    /*
+     * The viewfinder brackets, in LOGICAL edges.
+     *
+     * These were physical (`left`/`right`, `borderRightWidth`,
+     * `borderTopLeftRadius`) and the RTL note in lib/rtl.ts excused them as
+     * "symmetric". They are not: each bracket drops two of its four borders and
+     * rounds one corner, so which sides it keeps has to travel with its
+     * position. In a mirrored layout React Native swaps some of those physical
+     * props and not others, and the frame came apart - brackets with their
+     * stroke on the wrong side, which on a black camera screen reads as a
+     * rendering fault rather than a locale.
+     *
+     * Start/end mirror as one set, so the frame stays a frame in both
+     * directions.
+     */
     corner: { position: 'absolute', width: 28, height: 28, borderColor: '#fff', borderWidth: 3 },
-    cornerTL: { top: 0, left: 0, borderBottomWidth: 0, borderRightWidth: 0, borderTopLeftRadius: 6 },
-    cornerTR: { top: 0, right: 0, borderBottomWidth: 0, borderLeftWidth: 0, borderTopRightRadius: 6 },
-    cornerBL: { bottom: 0, left: 0, borderTopWidth: 0, borderRightWidth: 0, borderBottomLeftRadius: 6 },
-    cornerBR: { bottom: 0, right: 0, borderTopWidth: 0, borderLeftWidth: 0, borderBottomRightRadius: 6 },
+    cornerTL: {
+      top: 0,
+      start: 0,
+      borderBottomWidth: 0,
+      borderEndWidth: 0,
+      borderTopStartRadius: 6,
+    },
+    cornerTR: {
+      top: 0,
+      end: 0,
+      borderBottomWidth: 0,
+      borderStartWidth: 0,
+      borderTopEndRadius: 6,
+    },
+    cornerBL: {
+      bottom: 0,
+      start: 0,
+      borderTopWidth: 0,
+      borderEndWidth: 0,
+      borderBottomStartRadius: 6,
+    },
+    cornerBR: {
+      bottom: 0,
+      end: 0,
+      borderTopWidth: 0,
+      borderStartWidth: 0,
+      borderBottomEndRadius: 6,
+    },
     hint: { color: 'rgba(255,255,255,0.85)', ...t.type.label, marginTop: t.space.xl, textAlign: 'center' },
     controls: {
       flexDirection: 'row',

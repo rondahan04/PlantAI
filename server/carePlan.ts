@@ -110,12 +110,42 @@ export class CarePlanError extends Error {
 const MIN_INTERVAL_DAYS = 1;
 const MAX_INTERVAL_DAYS = 365;
 
-export function carePlanPrompt(genus: string, family: string): string {
+/*
+ * The languages the API answers in. Kept here rather than imported from the
+ * client's src/lib/language.ts: server/ and src/ are separate TypeScript
+ * programs (tsconfig.node.json), and reaching across would drag React Native's
+ * globals into the server build - the same reason src/types is hand-written
+ * rather than importing from @react-navigation.
+ */
+export type Lang = 'en' | 'he';
+
+/*
+ * What the model may and may not translate.
+ *
+ * The danger is not that it refuses Hebrew - it is that it helpfully
+ * translates the JSON KEYS as well, and the client indexes `bySoil` by growing
+ * medium id. A translated key produces a plan the app cannot read, on a call
+ * that was billed and looked like it succeeded.
+ */
+function languageRule(lang: Lang): string {
+  if (lang !== 'he') return '';
+  return `
+Write every piece of human-readable text in Hebrew.
+DO NOT TRANSLATE any of the following, which are keys and identifiers rather than prose:
+- the JSON field names ("bySoil", "water", "waterEveryDays", "fertilizer", "light", "humidity", "warnings")
+- the growing medium keys (${SOIL_MEDIUM_IDS.join(', ')})
+- the genus and family names, which are botanical Latin
+Numbers stay numbers.
+`;
+}
+
+export function carePlanPrompt(genus: string, family: string, lang: Lang = 'en'): string {
   const media = SOIL_MEDIUM_IDS.map((id) => `  "${id}": ${MEDIUM_DESCRIPTIONS[id]}`).join('\n');
 
   return `You are a horticulturist writing care guidance for the genus ${genus}${
     family ? ` (family ${family})` : ''
   }. Write it for the genus as a whole, not for one species - advice that holds across the ${genus} a houseplant grower is likely to own.
+${languageRule(lang)}
 
 Cover EVERY ONE of these growing media, using exactly these keys:
 ${media}
@@ -257,9 +287,10 @@ export interface CarePlanDeps {
 export async function buildCarePlan(
   genus: string,
   family: string,
-  deps: CarePlanDeps
+  deps: CarePlanDeps,
+  lang: Lang = 'en'
 ): Promise<GenusCarePlanBody> {
-  const answer = await deps.askModel(carePlanPrompt(genus, family));
+  const answer = await deps.askModel(carePlanPrompt(genus, family, lang));
 
   let parsed: unknown;
   try {

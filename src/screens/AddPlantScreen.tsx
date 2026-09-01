@@ -40,9 +40,10 @@ import { Theme, useTheme } from '../theme';
 import type { RootStackParamList } from '../types';
 import SoilCard from '../components/SoilCard';
 import { DEFAULT_SOIL_MEDIUM, type SoilMediumId } from '../lib/soilMedia';
-import { catalogEntryById, type CatalogEntry } from '../lib/catalogSearch';
+import { catalogDisplayName, catalogEntryById, type CatalogEntry } from '../lib/catalogSearch';
 import { plantLibrary } from '../services/plantLibrary';
 import { plantRepo } from '../services/plantRepoInstance';
+import { copy, getLanguage } from '../services/language';
 import { getSessionHint } from '../services/sessionHint';
 import { plantPhotos } from '../services/photos';
 import { genusCarePlans } from '../services/genusCarePlans';
@@ -96,7 +97,7 @@ export default function AddPlantScreen({ navigation, route }: Props) {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       setPhotoNotice(
-        'PlantAI cannot open your photos yet. Allow photo access in Settings, or add the plant without a picture and attach one later.'
+        copy.addPlant.photoDenied
       );
       return;
     }
@@ -114,7 +115,7 @@ export default function AddPlantScreen({ navigation, route }: Props) {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
       setPhotoNotice(
-        'PlantAI cannot use the camera yet. Allow camera access in Settings, or pick a photo you already took.'
+        copy.addPlant.cameraDenied
       );
       return;
     }
@@ -142,7 +143,13 @@ export default function AddPlantScreen({ navigation, route }: Props) {
        */
       photoUri: photoUri ?? '',
       species: {
-        name: entry.name,
+        /*
+         * The name AS DISPLAYED when it was picked. A plant keeps the language
+         * it was added in, exactly as a diagnosis keeps the language it was
+         * written in - re-translating a stored record under someone reading it
+         * is worse than a record that is honest about when it was made.
+         */
+        name: catalogDisplayName(entry, getLanguage()),
         scientificName: entry.scientificName,
         genus: entry.genus,
         family: entry.family,
@@ -160,10 +167,10 @@ export default function AddPlantScreen({ navigation, route }: Props) {
        * would send half the users looking for a bug that is not there.
        */
       Alert.alert(
-        "Couldn't save",
+        copy.addPlant.saveFailedTitle,
         result.reason === 'network'
-          ? "We couldn't reach your account. Check your connection and try again."
-          : 'Your device is out of storage space. Free some space and try again.',
+          ? copy.addPlant.saveFailedNetwork
+          : copy.addPlant.saveFailedStorage,
         [{ text: 'OK' }]
       );
       return;
@@ -216,11 +223,11 @@ export default function AddPlantScreen({ navigation, route }: Props) {
           onPress={() => navigation.goBack()}
           hitSlop={8}
           accessibilityRole="button"
-          accessibilityLabel="Close"
+          accessibilityLabel={copy.addPlant.close}
         >
           <Ionicons name="close" size={24} color={t.color.textSecondary} />
         </Pressable>
-        <Text style={s.title}>Add a plant</Text>
+        <Text style={s.title}>{copy.addPlant.title}</Text>
         {/* Balances the close button so the title sits centred. */}
         <View style={s.headerSpacer} />
       </View>
@@ -233,7 +240,7 @@ export default function AddPlantScreen({ navigation, route }: Props) {
       >
         {/* --- Photo (optional) --- */}
         <View style={s.card}>
-          <Text style={s.cardTitle}>Photo</Text>
+          <Text style={s.cardTitle}>{copy.addPlant.photo}</Text>
           {photoUri ? (
             <View style={s.previewWrap}>
               <Image source={{ uri: photoUri }} style={s.preview} accessibilityIgnoresInvertColors />
@@ -242,13 +249,13 @@ export default function AddPlantScreen({ navigation, route }: Props) {
                 onPress={() => setPhotoUri(null)}
                 hitSlop={8}
                 accessibilityRole="button"
-                accessibilityLabel="Remove photo"
+                accessibilityLabel={copy.addPlant.removePhoto}
               >
                 <Ionicons name="close" size={18} color="#fff" />
               </Pressable>
             </View>
           ) : (
-            <Text style={s.cardHint}>Optional. You can add one later.</Text>
+            <Text style={s.cardHint}>{copy.addPlant.photoHint}</Text>
           )}
 
           <View style={s.photoButtons}>
@@ -256,19 +263,19 @@ export default function AddPlantScreen({ navigation, route }: Props) {
               style={({ pressed }) => [s.photoBtn, pressed && s.photoBtnPressed]}
               onPress={takePhoto}
               accessibilityRole="button"
-              accessibilityLabel={photoUri ? 'Take a different photo' : 'Take a photo'}
+              accessibilityLabel={photoUri ? copy.addPlant.takeDifferent : copy.addPlant.takePhoto}
             >
               <Ionicons name="camera-outline" size={20} color={t.color.primary} />
-              <Text style={s.photoBtnText}>Camera</Text>
+              <Text style={s.photoBtnText}>{copy.addPlant.camera}</Text>
             </Pressable>
             <Pressable
               style={({ pressed }) => [s.photoBtn, pressed && s.photoBtnPressed]}
               onPress={pickFromLibrary}
               accessibilityRole="button"
-              accessibilityLabel={photoUri ? 'Choose a different photo' : 'Choose a photo from your library'}
+              accessibilityLabel={photoUri ? copy.addPlant.chooseDifferent : copy.addPlant.choosePhoto}
             >
               <Ionicons name="images-outline" size={20} color={t.color.primary} />
-              <Text style={s.photoBtnText}>Library</Text>
+              <Text style={s.photoBtnText}>{copy.addPlant.library}</Text>
             </Pressable>
           </View>
 
@@ -277,25 +284,28 @@ export default function AddPlantScreen({ navigation, route }: Props) {
 
         {/* --- Species (required) --- */}
         <View style={s.card}>
-          <Text style={s.cardTitle}>Species</Text>
+          <Text style={s.cardTitle}>{copy.addPlant.species}</Text>
           <Pressable
             style={({ pressed }) => [s.speciesRow, pressed && s.speciesRowPressed]}
             onPress={() => navigation.navigate('SpeciesPicker')}
             accessibilityRole="button"
             accessibilityLabel={
               entry
-                ? `Species, ${entry.name}, ${entry.scientificName}. Change species`
-                : 'Choose a species'
+                ? copy.addPlant.speciesChosenA11y(
+                    catalogDisplayName(entry, getLanguage()),
+                    entry.scientificName
+                  )
+                : copy.addPlant.chooseSpecies
             }
           >
             <View style={s.speciesText}>
               {entry ? (
                 <>
-                  <Text style={s.speciesName}>{entry.name}</Text>
+                  <Text style={s.speciesName}>{catalogDisplayName(entry, getLanguage())}</Text>
                   <Text style={s.speciesScientific}>{entry.scientificName}</Text>
                 </>
               ) : (
-                <Text style={s.speciesPlaceholder}>Choose a species</Text>
+                <Text style={s.speciesPlaceholder}>{copy.addPlant.chooseSpecies}</Text>
               )}
             </View>
             <Ionicons name="chevron-forward" size={18} color={t.color.textMuted} />
@@ -307,19 +317,19 @@ export default function AddPlantScreen({ navigation, route }: Props) {
 
         {/* --- Nickname (optional) --- */}
         <View style={s.card}>
-          <Text style={s.cardTitle}>Nickname</Text>
+          <Text style={s.cardTitle}>{copy.addPlant.nickname}</Text>
           <Text style={s.cardHint}>
-            Optional. Useful when you own three of the same species.
+            {copy.addPlant.nicknameHint}
           </Text>
           <TextInput
             style={s.input}
             value={nickname}
             onChangeText={setNickname}
-            placeholder="Big Bertha"
+            placeholder={copy.addPlant.nicknamePlaceholder}
             placeholderTextColor={t.color.textMuted}
             maxLength={NICKNAME_MAX}
             returnKeyType="done"
-            accessibilityLabel="Plant nickname"
+            accessibilityLabel={copy.addPlant.nicknameA11y}
           />
         </View>
 
@@ -333,12 +343,12 @@ export default function AddPlantScreen({ navigation, route }: Props) {
           disabled={!canSave}
           accessibilityRole="button"
           accessibilityState={{ disabled: !canSave }}
-          accessibilityLabel="Add plant"
+          accessibilityLabel={copy.addPlant.save}
           /* Said out loud rather than left as a greyed button the user has to
              reason about. */
-          accessibilityHint={entry ? undefined : 'Choose a species first'}
+          accessibilityHint={entry ? undefined : copy.addPlant.saveHint}
         >
-          <Text style={s.saveBtnText}>Add plant</Text>
+          <Text style={s.saveBtnText}>{copy.addPlant.save}</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
