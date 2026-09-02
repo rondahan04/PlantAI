@@ -29,8 +29,17 @@ import {
   hasHebrew,
   sanityCheckPrices,
   callOpenAIJson,
+  searchWaitFor,
+  loadHostPlatforms,
+  RENDER_WAIT_MS,
+  HOMEPAGE_MAX_AGE_MS,
+  SEARCH_MAX_AGE_MS,
+  HOST_PLATFORM_TTL_MS,
 } from './core.ts';
 import type { ScrapeFn, ClassifyFn, Plant, VerificationReport } from './core.ts';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 test('detectPlatform: Shopify markers', () => {
   assert.equal(detectPlatform('![x](https://rootine.co.il/cdn/shop/files/a.png)'), 'shopify');
@@ -881,5 +890,147 @@ test('callOpenAIJson: a good first answer costs no second call', async () => {
     assert.deepEqual(caps, [6000]);
   } finally {
     globalThis.fetch = original;
+  }
+});
+
+// --- scrape speed: cached reads, quick-then-careful search, host memory -----
+
+/* A ScrapeFn that records every call and answers from a URL-substring map. */
+function recordingScrape(map: Record<string, string>) {
+  const calls: Array<{ url: string; opts: any }> = [];
+  const fn: ScrapeFn = async (url, _key, opts) => {
+    calls.push({ url, opts: opts ?? {} });
+    for (const [needle, body] of Object.entries(map)) {
+      if (url.includes(needle)) return body;
+    }
+    return '';
+  };
+  return { fn, calls };
+}
+
+const SHOPIFY_HOME = '[all](https://shop.co.il/collections/all)';
+const RESULTS = '[מרווה](https://shop.co.il/products/salvia) ₪49';
+
+test('searchWaitFor: server-rendered platforms skip the render wait, others keep it', () => {
+  assert.equal(searchWaitFor('shopify'), 0);
+  assert.equal(searchWaitFor('woo'), 0);
+  assert.equal(searchWaitFor('WooCommerce'), 0); // alias-normalized
+  assert.equal(searchWaitFor('wix'), RENDER_WAIT_MS);
+  assert.equal(searchWaitFor('unknown'), RENDER_WAIT_MS);
+  assert.equal(searchWaitFor('some-llm-taught-platform'), RENDER_WAIT_MS);
+});
+
+test('identification reads accept a week-old Firecrawl copy', async () => {
+  const { fn, calls } = recordingScrape({ 'shop.co.il': SHOPIFY_HOME });
+  await identifyPlatform('https://shop.co.il', 'k', { scrape: fn });
+  assert.ok(calls.length >= 1);
+  for (const c of calls) assert.equal(c.opts.maxAge, HOMEPAGE_MAX_AGE_MS, c.url);
+});
+
+test('fetchSearchMarkdown: known platform reads quick first - no wait, hour-old copy OK', async () => {
+  const { fn, calls } = recordingScrape({ 'search?q=': RESULTS, 'shop.co.il': SHOPIFY_HOME });
+  const searcher = createSearcher('k', { scrape: fn, tavilyKey: 't' });
+  const r = await searcher.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
+  assert.equal(r.platform, 'shopify');
+  assert.equal(r.md, RESULTS);
+  const search = calls.filter((c) => c.url.includes('search?q='));
+  assert.equal(search.length, 1); // the quick read was enough
+  assert.equal(search[0].opts.waitFor, 0);
+  assert.equal(search[0].opts.maxAge, SEARCH_MAX_AGE_MS);
+  assert.equal(search[0].opts.tavilyKey, undefined); // Tavily is the careful read's job
+});
+
+test('fetchSearchMarkdown: an empty quick read is followed by a careful one', async () => {
+  let searchReads = 0;
+  const fn: ScrapeFn = async (url, _key, opts) => {
+    if (url.includes('collections') || url === 'https://shop.co.il') return SHOPIFY_HOME;
+    if (url.includes('search?q=')) {
+      searchReads++;
+      // Quick read: the grid had not painted. Careful read: results.
+      return opts?.waitFor === RENDER_WAIT_MS ? RESULTS : '';
+    }
+    return '';
+  };
+  const calls: any[] = [];
+  const spy: ScrapeFn = (u, k, o) => (calls.push({ u, o }), fn(u, k, o));
+  const searcher = createSearcher('k', { scrape: spy, tavilyKey: 't' });
+  const r = await searcher.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
+  assert.equal(r.md, RESULTS);
+  assert.equal(searchReads, 2);
+  const careful = calls.filter((c) => c.u.includes('search?q=')).at(-1);
+  assert.equal(careful.o.waitFor, RENDER_WAIT_MS);
+  assert.equal(careful.o.maxAge, 0); // fresh, never a cached miss
+  assert.equal(careful.o.tavilyKey, 't');
+});
+
+test('fetchSearchMarkdown: a quick read that throws is not fatal - the careful read runs', async () => {
+  let first = true;
+  const fn: ScrapeFn = async (url) => {
+    if (!url.includes('search?q=')) return SHOPIFY_HOME;
+    if (first) {
+      first = false;
+      throw new Error('timeout');
+    }
+    return RESULTS;
+  };
+  const searcher = createSearcher('k', { scrape: fn });
+  const r = await searcher.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
+  assert.equal(r.md, RESULTS);
+});
+
+test('createSearcher: remembers a host platform on disk, and a new process skips identification', async () => {
+  const file = path.join(os.tmpdir(), `known-hosts-${process.pid}-${Date.now()}.json`);
+  try {
+    const a = recordingScrape({ 'search?q=': RESULTS, 'shop.co.il': SHOPIFY_HOME });
+    const s1 = createSearcher('k', { scrape: a.fn, hostsFile: file });
+    await s1.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
+    assert.ok(a.calls.some((c) => !c.url.includes('search?q=')), 'cold host was identified');
+    assert.equal(loadHostPlatforms(file)['shop.co.il']?.platform, 'shopify');
+
+    const b = recordingScrape({ 'search?q=': RESULTS });
+    const s2 = createSearcher('k', { scrape: b.fn, hostsFile: file });
+    const r = await s2.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
+    assert.equal(r.platform, 'shopify');
+    assert.ok(b.calls.every((c) => c.url.includes('search?q=')), 'warm host: search only');
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+});
+
+test('createSearcher: an expired host memory is re-identified, unknown is never written', async () => {
+  const file = path.join(os.tmpdir(), `known-hosts-${process.pid}-${Date.now()}-ttl.json`);
+  try {
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ 'shop.co.il': { platform: 'woo', at: 0 } }) // ancient
+    );
+    const a = recordingScrape({ 'search?q=': RESULTS, 'shop.co.il': SHOPIFY_HOME });
+    const s = createSearcher('k', { scrape: a.fn, hostsFile: file, now: () => HOST_PLATFORM_TTL_MS + 1 });
+    const r = await s.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
+    assert.equal(r.platform, 'shopify'); // not the stale 'woo'
+
+    const u = recordingScrape({});
+    const s3 = createSearcher('k', { scrape: u.fn, hostsFile: file });
+    await s3.fetchSearchMarkdown('https://nothing.co.il', 'x', 'nothing.co.il');
+    assert.equal(loadHostPlatforms(file)['nothing.co.il'], undefined);
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+});
+
+test('createSearcher: a remembered host that reads nothing is forgotten, so the next search re-identifies', async () => {
+  const file = path.join(os.tmpdir(), `known-hosts-${process.pid}-${Date.now()}-forget.json`);
+  try {
+    fs.writeFileSync(file, JSON.stringify({ 'shop.co.il': { platform: 'shopify', at: Date.now() } }));
+    const a = recordingScrape({}); // every read empty
+    const s = createSearcher('k', { scrape: a.fn, hostsFile: file });
+    const r = await s.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
+    assert.equal(r.md, '');
+    assert.equal(loadHostPlatforms(file)['shop.co.il'], undefined);
+    const before = a.calls.length;
+    await s.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
+    assert.ok(a.calls.length - before > 1, 'second search identified again');
+  } finally {
+    fs.rmSync(file, { force: true });
   }
 });

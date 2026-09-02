@@ -107,6 +107,9 @@ const NATIONAL_NURSERIES = ['https://al-haderech.co.il/', 'https://rootine.co.il
 const searcher = createSearcher(FIRECRAWL_KEY, {
   openaiKey: OPENAI_KEY,
   learnedFile: path.join(ROOT, 'scraper', 'learned-platforms.json'),
+  /* Host → platform, remembered across restarts so a search never re-pays
+   * identification for a shop we have already met. See SearcherOpts. */
+  hostsFile: path.join(ROOT, 'scraper', 'known-hosts.json'),
   tavilyKey: TAVILY_KEY,
 });
 
