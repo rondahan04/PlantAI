@@ -136,11 +136,110 @@ export function createLimiter(max: number) {
  * environment variable and silently ignore the one in .env.
  */
 let firecrawlLimiter: ReturnType<typeof createLimiter> | null = null;
+let firecrawlRate: ReturnType<typeof createRateLimiter> | null = null;
 function firecrawlLimit<T>(fn: () => Promise<T>): Promise<T> {
   firecrawlLimiter ??= createLimiter(
     Number(env('FIRECRAWL_MAX_CONCURRENCY')) || DEFAULT_MAX_CONCURRENCY
   );
-  return firecrawlLimiter(fn);
+  firecrawlRate ??= createRateLimiter(
+    Number(env('FIRECRAWL_MAX_PER_MINUTE')) || DEFAULT_MAX_PER_MINUTE
+  );
+  // Rate token first, then a concurrency slot: a request waiting for its turn
+  // in the minute window must not sit in a slot another request could use.
+  return firecrawlRate.take().then(() => firecrawlLimiter!(fn));
+}
+
+/*
+ * Requests per minute the Firecrawl plan allows. Measured 2026-09-02 against
+ * this project's key: the 11th request inside a minute is refused with
+ * "Rate limit exceeded. Consumed (req/min): 15, Remaining (req/min): 0 ...
+ * please retry after 51s". Cached (`maxAge`) hits count too.
+ *
+ * This, not concurrency, is what the benchmark ran into: 13 sites x (one
+ * identification read + probes) blew the window in seconds, every refused
+ * identification came back 'unknown', and 'unknown' is the path that spends
+ * THREE more requests per site per search. A request that waits its turn here
+ * succeeds; the same request fired into the window is refused, retried 1-4s
+ * later inside the same window, refused again, and finally counted as a site
+ * we could not read. Override when the plan changes - Hobby is 100/min and
+ * would make this limiter a no-op.
+ */
+const DEFAULT_MAX_PER_MINUTE = 10;
+
+/*
+ * Sliding-window rate limiter. `take()` resolves when a request may be sent;
+ * `holdUntil(ts)` freezes the window until a server-stated reset time, so one
+ * 429 stops the whole queue from marching into the same refusal. `now` is
+ * injectable for tests; `wait` too, so a test never sleeps for real.
+ */
+export function createRateLimiter(
+  perMinute: number,
+  deps: { now?: () => number; wait?: (ms: number) => Promise<void> } = {}
+) {
+  const now = deps.now ?? Date.now;
+  const wait = deps.wait ?? sleep;
+  /*
+   * A minute plus slack. The server stamps a request when it ARRIVES, a few
+   * hundred ms after we counted it, so a window measured exactly here frees a
+   * token the server is still holding - two refusals per window in the trace.
+   */
+  const WINDOW = 62_000;
+  const sent: number[] = [];
+  let heldUntil = 0;
+  const expire = (t: number) => {
+    while (sent.length && t - sent[0] >= WINDOW) sent.shift();
+  };
+  return {
+    /* ms a take() would spend waiting right now; 0 when a token is free. */
+    waitEstimateMs(): number {
+      const t = now();
+      expire(t);
+      const hold = Math.max(0, heldUntil - t);
+      if (sent.length < perMinute) return hold;
+      return Math.max(hold, sent[0] + WINDOW - t);
+    },
+    async take(): Promise<void> {
+      for (;;) {
+        const t = now();
+        expire(t);
+        const holdMs = heldUntil - t;
+        if (holdMs > 0) {
+          await wait(holdMs);
+          continue;
+        }
+        if (sent.length < perMinute) {
+          sent.push(t);
+          return;
+        }
+        await wait(sent[0] + WINDOW - t);
+      }
+    },
+    holdUntil(ts: number): void {
+      heldUntil = Math.max(heldUntil, ts);
+    },
+    inFlightWindow(): number {
+      expire(now());
+      return sent.length;
+    },
+  };
+}
+
+/* How long the next Firecrawl request would queue for the minute window. */
+export function firecrawlWaitMs(): number {
+  return firecrawlRate?.waitEstimateMs() ?? 0;
+}
+
+/*
+ * How long a 429 is asking us to wait, in ms, or null when it does not say.
+ * Firecrawl puts the answer in the body ("please retry after 51s"), not in a
+ * Retry-After header; the header is honoured first when present.
+ */
+export function rateLimitWaitMs(retryAfter: string | null | undefined, body: string): number | null {
+  const seconds = Number(retryAfter);
+  if (Number.isFinite(seconds) && seconds > 0) return seconds * 1000;
+  const m = /retry after (\d+)\s*s/i.exec(body || '');
+  if (m) return Number(m[1]) * 1000;
+  return null;
 }
 
 const MAX_SCRAPE_ATTEMPTS = 4;
@@ -242,10 +341,25 @@ async function firecrawlScrape(
     if (attempt < MAX_SCRAPE_ATTEMPTS) return retry();
     throw err;
   }
-  if (
-    (res.status === 408 || res.status === 429 || res.status >= 500) &&
-    attempt < MAX_SCRAPE_ATTEMPTS
-  ) {
+  if (res.status === 429 && attempt < MAX_SCRAPE_ATTEMPTS) {
+    /*
+     * The plan's minute window is spent. Wait for the reset the server names
+     * (51s is normal) rather than the 1-4s backoff, which retried inside the
+     * same window and turned a delay into a lost site - and freeze the shared
+     * limiter so the requests queued behind this one wait too instead of each
+     * collecting a refusal of their own.
+     */
+    const body = await res.text().catch(() => '');
+    const waitMs = rateLimitWaitMs(res.headers.get('retry-after'), body);
+    if (waitMs !== null) {
+      const until = Date.now() + Math.min(waitMs, 65_000) + 500;
+      firecrawlRate?.holdUntil(until);
+      await sleep(until - Date.now());
+      return firecrawlScrape(url, firecrawlKey, { waitFor, maxAge, attempt: attempt + 1 });
+    }
+    return retry();
+  }
+  if ((res.status === 408 || res.status >= 500) && attempt < MAX_SCRAPE_ATTEMPTS) {
     return retry(res.headers.get('retry-after'));
   }
   if (!res.ok) throw new Error(`Firecrawl ${res.status}`);
@@ -613,6 +727,14 @@ const SERVER_RENDERED = new Set(['shopify', 'woo', 'magento', 'bigcommerce', 'pr
 export function searchWaitFor(platform: string): number {
   return SERVER_RENDERED.has(normalizePlatform(platform)) ? 0 : RENDER_WAIT_MS;
 }
+
+/*
+ * A probe scoring this high is a results page beyond doubt: scoreMarkdown adds
+ * 50 for the query echoed on the page, so this is "echo plus something" or a
+ * grid of 50+ priced products. Below it the next probe still runs, so a
+ * homepage that merely lists a few prices cannot end the probe early.
+ */
+export const PROBE_CONFIDENT_SCORE = 51;
 
 /*
  * Build product-search URL(s) for a site. Known/learned platforms return one
@@ -1280,7 +1402,18 @@ export interface SearcherOpts {
   scrape?: ScrapeFn;
   /* Injectable clock for the TTL, tests only. */
   now?: () => number;
+  /* Injectable view of the Firecrawl minute window, tests only. */
+  firecrawlWaitMs?: () => number;
 }
+
+/*
+ * Firecrawl's plan allows ten requests a minute; when they are spent the next
+ * search read would queue for up to a minute. Past this much queue, and only
+ * when Tavily is configured, the read goes to Tavily instead - it is already
+ * the provider we trust when Firecrawl reads nothing, so a page it returns is
+ * a page we would have accepted anyway, a minute later.
+ */
+export const TAVILY_OVERFLOW_MS = 5_000;
 
 /*
  * A remembered platform is trusted for 30 days, then re-identified. Only real
@@ -1289,7 +1422,14 @@ export interface SearcherOpts {
  * fresh chance next start.
  */
 export const HOST_PLATFORM_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-export type HostPlatforms = Record<string, { platform: string; at: number }>;
+/* See rememberHost: how long an in-memory 'unknown' verdict stands. */
+export const UNKNOWN_TTL_MS = 60 * 60 * 1000;
+/*
+ * `template` is a per-host search URL learned from a probe that clearly hit a
+ * results page, for hosts whose platform we could not name. It turns the
+ * three-request probe path into one request, like a known platform.
+ */
+export type HostPlatforms = Record<string, { platform: string; at: number; template?: string }>;
 
 export function loadHostPlatforms(file: string): HostPlatforms {
   try {
@@ -1329,6 +1469,8 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
    * estimate reads, and that does not change within a process lifetime.
    */
   const homeCache = new Map<string, string>();
+  /* Per-host search URL templates learned from a confident probe hit. */
+  const hostTemplates = new Map<string, string>();
   const scrape: ScrapeFn = opts.scrape ?? scrapeUrl;
   const now = opts.now ?? Date.now;
   if (opts.learnedFile) loadLearnedPlatforms(opts.learnedFile);
@@ -1337,17 +1479,45 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
   const persisted: HostPlatforms = opts.hostsFile ? loadHostPlatforms(opts.hostsFile) : {};
   for (const [host, entry] of Object.entries(persisted)) {
     const fresh = now() - entry.at < HOST_PLATFORM_TTL_MS;
-    if (fresh && entry.platform && entry.platform !== 'unknown') {
+    const known = entry.platform && entry.platform !== 'unknown';
+    if (fresh && known) {
       platformCache.set(host, entry.platform);
+    } else if (fresh && entry.template) {
+      hostTemplates.set(host, entry.template);
     } else {
       delete persisted[host];
     }
   }
+  const waitMs = opts.firecrawlWaitMs ?? firecrawlWaitMs;
 
+  /*
+   * 'unknown' is remembered only briefly, in memory. It is as often a verdict
+   * about Firecrawl's minute window as about the site - a refused homepage
+   * read looks exactly like a platform we cannot name - and a host stuck on
+   * 'unknown' pays the probe path on every search. An hour later it gets one
+   * cheap (Firecrawl-cached) identification read and a fresh chance.
+   */
+  const unknownSince = new Map<string, number>();
   function rememberHost(host: string, platform: string): void {
     platformCache.set(host, platform);
-    if (!opts.hostsFile || platform === 'unknown') return;
+    if (platform === 'unknown') {
+      unknownSince.set(host, now());
+      return;
+    }
+    unknownSince.delete(host);
+    if (!opts.hostsFile) return;
     persisted[host] = { platform, at: now() };
+    saveHostPlatforms(opts.hostsFile, persisted);
+  }
+
+  function rememberTemplate(host: string, picked: string, origin: string, query: string): void {
+    const template = picked
+      .replace(encodeURIComponent(query), '{query}')
+      .replace(origin, '{origin}');
+    if (!template.includes('{query}')) return;
+    hostTemplates.set(host, template);
+    if (!opts.hostsFile) return;
+    persisted[host] = { platform: 'unknown', at: now(), template };
     saveHostPlatforms(opts.hostsFile, persisted);
   }
 
@@ -1359,6 +1529,7 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
    */
   function forgetHost(host: string): void {
     platformCache.delete(host);
+    hostTemplates.delete(host);
     if (!opts.hostsFile || !(host in persisted)) return;
     delete persisted[host];
     saveHostPlatforms(opts.hostsFile, persisted);
@@ -1366,7 +1537,12 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
 
   async function resolvePlatform(origin: string, host: string): Promise<string> {
     const cached = platformCache.get(host);
-    if (cached) return cached;
+    const since = unknownSince.get(host);
+    const staleUnknown = cached === 'unknown' && since !== undefined && now() - since >= UNKNOWN_TTL_MS;
+    if (cached && !staleUnknown) return cached;
+    // A host we could not name but CAN search (learned template) is not worth
+    // re-identifying: the template already does what a platform name would.
+    if (!cached && hostTemplates.has(host)) return 'unknown';
     const platform = await identifyPlatform(origin, firecrawlKey, {
       scrape,
       openaiKey: opts.openaiKey,
@@ -1389,7 +1565,8 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
   ): Promise<SearchResult> {
     const { origin } = new URL(baseUrl);
     const platform = await resolvePlatform(origin, host);
-    const urls = searchUrlsFor(origin, query, platform);
+    const learned = platform === 'unknown' ? hostTemplates.get(host) : undefined;
+    const urls = learned ? [applyTemplate(learned, origin, query)] : searchUrlsFor(origin, query, platform);
 
     if (urls.length === 1) {
       /*
@@ -1398,22 +1575,37 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
        * Quick: no render wait on server-rendered platforms, and a Firecrawl copy
        * up to an hour old is accepted. This is the whole search for most sites.
        *
-       * Careful: only when the quick read has nothing that scores as results -
-       * no prices, no product links, no echo of the query. Full render wait,
-       * fresh copy, and the Tavily fallback if Firecrawl still reads nothing.
-       * The quick read's failure modes (grid not yet painted, a stale cached
-       * copy of an error page) are exactly what a slow fresh read repairs, so
-       * success rate is bounded below by the old always-careful behaviour.
+       * Careful: only when the quick read came back with no page at all - empty,
+       * or a bot wall. Full render wait, fresh copy, and the Tavily fallback if
+       * Firecrawl still reads nothing. Those are exactly the quick read's
+       * failure modes, so success rate is bounded below by the old
+       * always-careful behaviour.
+       *
+       * NOT a trigger: a page that scores zero. On a server-rendered platform a
+       * results page for a plant the shop does not stock has no prices and no
+       * product links - it IS the answer ("not sold"), and re-reading it slowly
+       * (measured: on 6 of 13 sites per search) spent the plan's minute window
+       * confirming what we already knew.
        */
       const url = urls[0];
       const quickWait = searchWaitFor(platform);
       let md = '';
-      try {
-        md = await scrape(url, firecrawlKey, { waitFor: quickWait, maxAge: SEARCH_MAX_AGE_MS });
-      } catch {
-        /* the careful read below is the retry */
+      if (opts.tavilyKey && waitMs() > TAVILY_OVERFLOW_MS) {
+        // Firecrawl's minute is spent: Tavily now beats Firecrawl in a minute.
+        try {
+          md = await tavilyExtract(url, opts.tavilyKey);
+        } catch {
+          /* fall through to Firecrawl, which is what waiting would have done */
+        }
       }
-      if (scoreMarkdown(md, query) <= 0) {
+      if (looksUnreadable(md)) {
+        try {
+          md = await scrape(url, firecrawlKey, { waitFor: quickWait, maxAge: SEARCH_MAX_AGE_MS });
+        } catch {
+          /* the careful read below is the retry */
+        }
+      }
+      if (looksUnreadable(md)) {
         md = await scrape(url, firecrawlKey, {
           waitFor: RENDER_WAIT_MS,
           maxAge: 0,
@@ -1424,18 +1616,30 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
       return { md, platform, picked: url };
     }
 
-    // Unknown platform → probe candidates with Firecrawl only (no per-probe
-    // tavilyKey: most probes are empty by design and would waste credits).
-    const settled = await Promise.allSettled(
-      urls.map((u) => scrape(u, firecrawlKey, { maxAge: SEARCH_MAX_AGE_MS }))
-    );
+    /*
+     * Unknown platform → probe candidates ONE AT A TIME, stopping at the first
+     * page that clearly is a results page (echoes the query, or lists plenty
+     * of products). The probes used to fire together and keep the best, which
+     * spent three of the plan's ten requests a minute on every unknown site,
+     * every search - the budget that starved identification for the others.
+     * Firecrawl only, no per-probe tavilyKey: most probes are empty by design
+     * and would waste credits.
+     */
     let best: SearchResult & { score: number } = { md: '', platform, picked: null, score: -1 };
-    settled.forEach((s, i) => {
-      if (s.status === 'fulfilled') {
-        const score = scoreMarkdown(s.value, query);
-        if (score > best.score) best = { md: s.value, platform, picked: urls[i], score };
+    for (const u of urls) {
+      let md = '';
+      try {
+        md = await scrape(u, firecrawlKey, { maxAge: SEARCH_MAX_AGE_MS });
+      } catch {
+        continue;
       }
-    });
+      const score = scoreMarkdown(md, query);
+      if (score > best.score) best = { md, platform, picked: u, score };
+      if (score >= PROBE_CONFIDENT_SCORE) {
+        rememberTemplate(host, u, origin, query);
+        break;
+      }
+    }
 
     // All probes came back empty/failed - try Tavily once on the top candidate.
     if (best.score <= 0 && opts.tavilyKey) {
