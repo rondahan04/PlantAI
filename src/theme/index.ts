@@ -3,7 +3,7 @@
  *
  * Single source of design tokens for the whole app. Style: cream paper canvas,
  * deep forest green as the brand voice, terracotta as the one hot accent, an
- * editorial serif for display type over a warm humanist sans. Light + dark
+ * single warm humanist sans - Nunito - at every size. Light + dark
  * are designed together (dark is a warm near-black paper, not an inversion).
  *
  * Usage:
@@ -149,45 +149,44 @@ export const radius = {
   pill: 999,
 } as const;
 
-/* Type scale - Playfair Display (display/headings) + Nunito (text).
- * fontFamily names must match the keys registered in useFonts() in App.tsx.
- * Note: with static custom fonts iOS binds weight to the family, so an inline
- * fontWeight override does not change weight - switch fontFamily for a
+/* Type scale - Nunito throughout, in four weights. One family for the whole
+ * app: display type is separated from body by size and weight, not by a second
+ * typeface. fontFamily names must match the keys registered in useFonts() in
+ * App.tsx. Note: with static custom fonts iOS binds weight to the family, so an
+ * inline fontWeight override does not change weight - switch fontFamily for a
  * heavier/lighter cut. */
 export const type = {
   display: {
-    fontFamily: 'PlayfairDisplay_700Bold',
-    fontSize: 34,
-    lineHeight: 42,
-    fontWeight: '700' as const,
+    fontFamily: 'Nunito_800ExtraBold',
+    fontSize: 32,
+    lineHeight: 40,
+    fontWeight: '800' as const,
     letterSpacing: -0.8,
   },
   title: {
-    fontFamily: 'PlayfairDisplay_700Bold',
-    fontSize: 24,
-    lineHeight: 31,
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 23,
+    lineHeight: 30,
     fontWeight: '700' as const,
     letterSpacing: -0.4,
   },
   heading: {
-    fontFamily: 'PlayfairDisplay_600SemiBold',
-    fontSize: 19,
-    lineHeight: 26,
-    fontWeight: '600' as const,
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 18,
+    lineHeight: 25,
+    fontWeight: '700' as const,
     letterSpacing: -0.2,
   },
-  /* A point larger than the Poppins scale these replaced: Nunito has a smaller
-   * x-height, so the same nominal size reads noticeably smaller on glass. */
   body: { fontFamily: 'Nunito_400Regular', fontSize: 16, lineHeight: 24, fontWeight: '400' as const },
   bodyStrong: { fontFamily: 'Nunito_600SemiBold', fontSize: 16, lineHeight: 24, fontWeight: '600' as const },
   label: { fontFamily: 'Nunito_500Medium', fontSize: 14, lineHeight: 20, fontWeight: '500' as const },
   caption: { fontFamily: 'Nunito_500Medium', fontSize: 12, lineHeight: 16, fontWeight: '500' as const },
   /* Small all-caps eyebrow above a display heading ("MONDAY, JUNE 24"). */
   eyebrow: {
-    fontFamily: 'Nunito_600SemiBold',
+    fontFamily: 'Nunito_700Bold',
     fontSize: 11,
     lineHeight: 15,
-    fontWeight: '600' as const,
+    fontWeight: '700' as const,
     letterSpacing: 1.1,
     textTransform: 'uppercase' as const,
   },

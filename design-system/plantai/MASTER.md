@@ -40,14 +40,14 @@ this table mirrors them.
 
 ### Typography
 
-- **Heading Font:** Playfair Display (600, 700)
+- **Heading Font:** Nunito (700, 800)
 - **Body Font:** Nunito (400, 500, 600)
-- **Mood:** editorial, warm, calm, natural, considered
-- **Google Fonts:** [Playfair Display + Nunito](https://fonts.google.com/share?selection.family=Playfair+Display:wght@600;700|Nunito:wght@400;500;600)
+- **Mood:** warm, calm, natural, considered - one family at every size
+- **Google Fonts:** [Nunito](https://fonts.google.com/share?selection.family=Nunito:wght@400;500;600;700;800)
 
 **CSS Import:**
 ```css
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Nunito:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap');
 ```
 
 ### Spacing Variables

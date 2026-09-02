@@ -11,15 +11,15 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
 /*
- * Per-weight subpath imports, not the package roots. A root import pulls the
+ * Per-weight subpath imports, not the package root. A root import pulls the
  * whole family into the bundle - every weight and every italic - which was
- * thirty font files for the five cuts the type scale actually names.
+ * thirty font files for the handful of cuts the type scale actually names.
  */
-import { PlayfairDisplay_600SemiBold } from '@expo-google-fonts/playfair-display/600SemiBold';
-import { PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display/700Bold';
 import { Nunito_400Regular } from '@expo-google-fonts/nunito/400Regular';
 import { Nunito_500Medium } from '@expo-google-fonts/nunito/500Medium';
 import { Nunito_600SemiBold } from '@expo-google-fonts/nunito/600SemiBold';
+import { Nunito_700Bold } from '@expo-google-fonts/nunito/700Bold';
+import { Nunito_800ExtraBold } from '@expo-google-fonts/nunito/800ExtraBold';
 import * as SplashScreen from 'expo-splash-screen';
 
 import { RootStackParamList } from './src/types';
@@ -55,7 +55,7 @@ const linking = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-// Keep the splash up until brand fonts (Playfair Display / Nunito) are ready, so text
+// Keep the splash up until the brand font (Nunito) is ready, so text
 // doesn't flash in the system font then reflow.
 SplashScreen.preventAutoHideAsync();
 
@@ -66,11 +66,11 @@ export default function App() {
 
   // fontFamily names in the type scale (src/theme) must match these keys.
   const [fontsLoaded, fontError] = useFonts({
-    PlayfairDisplay_600SemiBold,
-    PlayfairDisplay_700Bold,
     Nunito_400Regular,
     Nunito_500Medium,
     Nunito_600SemiBold,
+    Nunito_700Bold,
+    Nunito_800ExtraBold,
   });
 
   useEffect(() => {
