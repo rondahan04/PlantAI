@@ -6,6 +6,7 @@ import { copy } from '../services/language';
 import { directionalIconStyle } from '../lib/rtl';
 import { LOGO_GLYPH } from '../brand';
 import { plantDisplayName, plantSecondaryName, type CareSlot } from '../lib/portfolio';
+import { samePlantCard } from '../lib/plantCardEquality';
 import type { StoredPlant } from '../services/plantStore';
 
 /*
@@ -58,12 +59,11 @@ function relativeDay(iso: string, now: number): string {
   return copy.relativeDay.yearsAgo(Math.floor(days / 365));
 }
 
-export default function PlantCard({
-  plant,
-  slots = [],
-  onPress,
-  onEdit,
-}: {
+/* Stable identity, so a plant with no schedule does not look like a changed
+ * prop on every render just because `?? []` minted a fresh array. */
+const EMPTY_SLOTS: CareSlot[] = [];
+
+export interface PlantCardProps {
   plant: StoredPlant;
   /* All three care kinds, built by `plantSchedule`. Passed in rather than
    * computed here because the schedule needs a clock and the genus plan the
@@ -82,9 +82,13 @@ export default function PlantCard({
    * whole tappable row already says.
    */
   onEdit?: () => void;
-}) {
+}
+
+function PlantCard({ plant, slots = EMPTY_SLOTS, onPress, onEdit }: PlantCardProps) {
   const t = useTheme();
-  const s = React.useMemo(() => makeStyles(t), [t]);
+  /* Shared across every card rather than one StyleSheet per card - a list of
+   * thirty plants was building thirty identical style objects. */
+  const s = stylesFor(t);
   /*
    * A hand-added plant has no diagnosis and so NO condition - not a healthy
    * one, and not a grey one either. An absent condition is not a condition:
@@ -305,3 +309,19 @@ const makeStyles = (t: Theme) =>
     metaItem: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
     meta: { ...t.type.caption, color: t.color.textMuted, flexShrink: 1, writingDirection: 'auto' },
   });
+
+/*
+ * One StyleSheet per theme, not per card. Keyed weakly so a theme object that
+ * goes away takes its styles with it.
+ */
+const STYLE_CACHE = new WeakMap<Theme, ReturnType<typeof makeStyles>>();
+function stylesFor(t: Theme): ReturnType<typeof makeStyles> {
+  let s = STYLE_CACHE.get(t);
+  if (!s) {
+    s = makeStyles(t);
+    STYLE_CACHE.set(t, s);
+  }
+  return s;
+}
+
+export default React.memo(PlantCard, samePlantCard);
