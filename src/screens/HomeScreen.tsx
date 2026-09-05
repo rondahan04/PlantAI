@@ -385,7 +385,11 @@ const makeStyles = (t: Theme) =>
       overflow: 'hidden',
       ...t.elevation.raised,
     },
-    heroTop: { padding: t.space.xl },
+    /* The whole block is deliberately tighter than the 8pt rhythm's default
+     * would give it: this is the first thing on the screen and it was taking
+     * enough height to push the actual content - tasks, and the plant list -
+     * below the fold on a smaller phone. */
+    heroTop: { padding: t.space.lg },
     heroHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: t.space.sm },
     heroEyebrow: { ...t.type.label, color: t.color.onPrimary, opacity: 0.82, flexShrink: 1, writingDirection: 'auto' },
     heroCountPill: {
@@ -399,18 +403,25 @@ const makeStyles = (t: Theme) =>
       borderColor: t.color.onPrimary,
     },
     heroCountText: { ...t.type.caption, color: t.color.onPrimary },
-    heroTitle: { ...t.type.display, color: t.color.onPrimary, marginTop: t.space.md, writingDirection: 'auto' },
+    /* `title` rather than `display`: 23/30 instead of 32/40. The hero is a
+     * greeting, not a headline, and the 32pt cut was buying presence at the
+     * cost of two lines of wrap on any name longer than a few words. */
+    heroTitle: { ...t.type.title, color: t.color.onPrimary, marginTop: t.space.sm, writingDirection: 'auto' },
     heroCta: {
       flexDirection: 'row',
       alignItems: 'center',
       alignSelf: 'flex-start',
       gap: t.space.sm,
-      marginTop: t.space.lg,
+      marginTop: t.space.md,
       backgroundColor: t.color.accent,
       borderRadius: t.radius.pill,
-      paddingHorizontal: t.space.xl,
-      paddingVertical: t.space.md,
-      minHeight: 48,
+      paddingHorizontal: t.space.lg,
+      paddingVertical: t.space.sm,
+      /* 44, not lower. That is the accessibility floor for a tap target and
+       * the audit on NurseriesScreen already holds every other button to it -
+       * shrinking the hero must not quietly make its main action harder to
+       * hit than the ones around it. */
+      minHeight: 44,
     },
     heroCtaPressed: { opacity: 0.85 },
     heroCtaText: { ...t.type.bodyStrong, color: t.color.onAccent },
