@@ -247,11 +247,21 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
     `supabasePlantCloud` the only file that talks to Supabase. New route `POST /api/care-plan`.
     All four migrations applied to the live project and verified.
     ⚠️ **One thing still open** - the 12-step device script (Trello #80).
-    Trello #81 is now answerable rather than open: `/health` reports
-    `cache: {enabled, hits, misses, stores, errors}` as of 2026-09-05, so
-    "is the shared cache actually on in production" is one curl and one boolean
-    instead of an inference from the provider bill. Production still predates
-    the field - read it after this deploys.
+    🔴 **Trello #81 is ANSWERED, and the answer is no.** `/health` gained
+    `cache: {enabled, hits, misses, stores, errors}` on 2026-09-05 (PR #13,
+    `cedc432`); read against Render immediately after that deploy it says
+    **`"enabled": false`**. The week-long shared scrape cache Epic 3a shipped
+    has never actually run in production - every nursery search on the live
+    service is a full live scrape, paid to Firecrawl/Tavily/OpenAI, reusing
+    nothing between users or between days.
+    **Fix is a Render dashboard change and needs a login:** add `SUPABASE_URL`
+    and `SUPABASE_SERVICE_ROLE_KEY` (service_role, NOT anon - RLS denies anon
+    every row in `nursery_searches`, which would silently cache nothing and
+    reproduce this bug exactly). Both are `sync: false` in `render.yaml` on
+    purpose: the service-role key bypasses RLS and must never reach the app
+    bundle. Confirm with `cache.enabled: true`, then run one search twice and
+    watch `hits` move - `enabled` proves the credentials exist, `hits` proves
+    the table and its policies work.
 
 22. ✅ **[M3] E4. Hebrew, all three layers - done 2026-09-01 (`df348d1`, Trello #6).**
     The app's own ~320 strings, the model's diagnosis and care plans, and the species
@@ -269,7 +279,7 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
     ⚠️ **The scan flow has NOT been verified on a device** (Trello #82) - a real Hebrew
     diagnosis with its condition colour and buy button intact.
 
-23. ✅ **[ops] Silent failures made visible - done 2026-09-05.** Five items that needed no
+23. ✅ **[ops] Silent failures made visible - done 2026-09-05, merged `cedc432`, live.** Five items that needed no
     OpenAI credits and no device check, so all five are verified by tests, a local server and
     CI rather than by eye.
     - **Scrape cache visibility (Trello #81).** A missing `SUPABASE_SERVICE_ROLE_KEY` breaks
@@ -287,7 +297,16 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
     - **E11 scrape freshness.** See BACKLOG.
     - **Stock unknown.** See BACKLOG.
     ⚠️ **Nothing here was verified on a device, by design** - these were chosen as the items
-    that do not need one. The camera's too-large copy has never been seen rendered.
+    that do not need one. The camera's too-large copy has never been seen rendered, and being
+    client-side it reaches nobody until the next `eas update` or build.
+    🔵 **The cache field paid for itself within a minute of deploying**: it reported
+    `enabled: false`, which is the finding above. That is the entire argument for this kind of
+    work - the failure had been running in production, costing money, since Epic 3a.
+    ⚠️ **CI is not a required check yet.** It runs on every PR and every push to main, but
+    nothing blocks a merge on it - PR #13 was merged while its own run was still going. Branch
+    protection on `main` requiring "typecheck + tests" is what turns the signal into a gate.
+    ⚠️ **The API docs site is updated in the repo but not deployed** - needs `vercel --prod`
+    from `docs/api-site` (Trello #52).
 
 ---
 
