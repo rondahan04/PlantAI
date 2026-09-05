@@ -33,14 +33,31 @@ restricting it to the app breaks Places, and splitting needs an `android.package
 doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Android + Places API.
 
 0. ⏳ **[P0] Restore OpenAI health assessment - blocked on lecturer's OpenAI credits.**
-   `server/index.ts` sets `DIAGNOSIS_SKIP_OPENAI=true` (in `.env`, gitignored) so `/api/diagnose`
-   serves `stubAssessHealth` (`server/diagnose.ts`) - species ID via PlantNet still runs for real,
-   but the health assessment is a labelled placeholder, never a real diagnosis. Root cause: the
-   shared OpenAI key returned `429 insufficient_quota / credit_balance_exhausted` (confirmed live
-   via `/health?errors=1` on 2026-08-22). **To revert once credits are back:** delete the
-   `DIAGNOSIS_SKIP_OPENAI=true` line from `.env` (and any Render env var of the same name) -
-   `server/index.ts` falls back to the real `openAiAssessHealth` automatically, no code change
-   needed.
+   The shared OpenAI key has no credit: `429 insufficient_quota / credit_balance_exhausted`
+   (confirmed live 2026-08-22, still true 2026-09-05).
+
+   **Corrected 2026-09-05 - the stub is NOT switched on.** This entry used to say
+   `DIAGNOSIS_SKIP_OPENAI=true` was set in `.env`, so `/api/diagnose` served
+   `stubAssessHealth` (`server/diagnose.ts`). It is set in neither `.env` nor `render.yaml`, so
+   the real OpenAI call runs, fails, and `/api/diagnose` answers **502 diagnosis_failed**.
+   Verified against Render: `/health` reports `plantnet_identify` succeeding and
+   `health_assessment` never having succeeded - species ID is genuinely fine, the health
+   assessment is the half that is down.
+
+   Blast radius is wider than diagnosis, because three OpenAI calls sit on separate paths:
+   - `/api/diagnose` health assessment → 502, so the whole camera flow dead-ends.
+   - `translateQuery` → returns the English name unchanged, so Israeli catalogues match nothing
+     and every nursery search reports "not found" even when the shop stocks the plant.
+   - `extractAndVerifyPlants` → fails immediately, so no products or prices are ever extracted.
+     The scrape layer itself is healthy (al-haderech returns 64,688 chars of real results page).
+
+   **To make the camera flow testable TODAY without credits:** set `DIAGNOSIS_SKIP_OPENAI=true`
+   in the Render dashboard. `server/index.ts` swaps in the labelled stub, so identification,
+   gating and the whole client UI become exercisable. Nursery search stays broken either way -
+   translation and extraction have no stub.
+
+   **To revert once credits are back:** remove that env var if it was ever set;
+   `server/index.ts` falls back to the real `openAiAssessHealth` with no code change.
 1. ✅ **[P0] Old OpenAI key revoked 2026-08-17.** The leak is closed.
 2. ✅ **[M1] DEPLOYED - https://plantai-api-eev0.onrender.com (2026-08-18).** The app now talks
    to a backend that exists when the laptop doesn't. Fly was abandoned: it will not provision
@@ -361,7 +378,7 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
 | # | Item | Size | Note |
 |---|------|------|------|
 | P2 | In-app live nursery discovery | M | GPS → `scraper/places.ts` `discoverNurseries()` server-side. The real product goal. Gated on scrape speed. |
-| - | Scrape speed | S | Quality problem now, not correctness. Best observed 47s (2026-08-17, 7 nurseries); worst seen 480s. **Four serial round trips removed 2026-08-25**, all on the slow path: `identifyPlatform` L2+L3 now fire as one parallel stage instead of three serial scrapes; the homepage read during identification is cached per host and reused by the availability estimate instead of being re-scraped; the auditor pass is skipped when extraction returned 0 rows (the common case in a fan-out). Still open: cheaper model, precomputed index. Needs a fresh timed run to re-measure. |
+| ✅ | ~~Scrape speed~~ | S | **Done 2026-09-05 (PRs #8, #9, Trello #13).** Measured end to end on the production shape (12 nurseries, default 10km radius, same query, LLM stage equally unavailable in both runs): **81.0s → 36.5s**, slowest single site 79.6s → 34.7s. Healthy shops went from 26-41s each to 0.5-1.3s. Readable sites on the 13-site benchmark rose 11/13 → 13/13 and scored results 8 → 10, so success rate went UP. Root cause was never concurrency: the Firecrawl key allows **10 requests/minute** (cached hits count), and a refused homepage read is indistinguishable from "platform unknown", which is the path that spends 3 more requests per site - the limit fed itself. Fixes: Tavily reads pages as served (~700ms, 100/min) and Firecrawl only renders; platform detection stops paying a second provider for a meaningful empty read (35 → 10 requests per search); timeouts are no longer retried 4x at 25s; every nursery gets a 45s deadline so one dead shop cannot set the pace. **Remaining lever: Firecrawl Hobby is 100 req/min - after upgrading set `FIRECRAWL_MAX_PER_MINUTE=100` and the last tail disappears.** |
 | - | **Scrape success rate** | M | The real quality metric, now measurable: `PipelineResult.funnel.stage` splits every 0-item site into `no_markdown` / `no_excerpt` / `no_match` / `rejected`, logged per site by the dashboard. Fixed 2026-08-25: Wix `/product-page/` links and Hebrew/Latin ILS forms (`ש"ח`, `שח`, `NIS`, `ILS`) were invisible to `priceFocusedExcerpt` + `scoreMarkdown`, so Wix stores and word-priced sites returned an empty excerpt and the model never saw the page. **Next: run the dashboard, tally stages across ~20 sites, and fix whichever bucket dominates.** Candidates if `no_excerpt` leads: more platform link shapes. If `no_match`: the site's own search is failing (try a sitemap/collection crawl instead of `?s=`). If `rejected`: the auditor is too strict about stock wording. |
 | ✅ | ~~Show "stock unknown" instead of dropping the row~~ | S | **Done 2026-09-05.** Auditor prompt now keeps a row whose product and price are supported but whose stock is unstated, as `availability: "unknown"`; it still drops unsupported/invented rows. Pipeline keeps `inStockKnown: false` for those (the flag means "exact listing" and the badge reads it as certainty), carries a `stock_unknown` availability, and the badge reads "Listed · stock not stated", tone `maybe`. Out-of-stock untouched - sold out is knowledge, not absence of it. The auditor half needs OpenAI credits to exercise live; the decision half is tested from injected verdicts. |
 | E2 | Photo timeline per plant | M | Nearly free after PlantStore (5). |

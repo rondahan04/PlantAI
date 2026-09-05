@@ -3,7 +3,7 @@
  *
  * Single source of design tokens for the whole app. Style: cream paper canvas,
  * deep forest green as the brand voice, terracotta as the one hot accent, an
- * single warm humanist sans - Nunito - at every size. Light + dark
+ * single low-contrast grotesque - Inter - at every size. Light + dark
  * are designed together (dark is a warm near-black paper, not an inversion).
  *
  * Usage:
@@ -149,7 +149,7 @@ export const radius = {
   pill: 999,
 } as const;
 
-/* Type scale - Nunito throughout, in four weights. One family for the whole
+/* Type scale - Inter throughout, in four weights. One family for the whole
  * app: display type is separated from body by size and weight, not by a second
  * typeface. fontFamily names must match the keys registered in useFonts() in
  * App.tsx. Note: with static custom fonts iOS binds weight to the family, so an
@@ -157,33 +157,33 @@ export const radius = {
  * heavier/lighter cut. */
 export const type = {
   display: {
-    fontFamily: 'Nunito_800ExtraBold',
+    fontFamily: 'Inter_800ExtraBold',
     fontSize: 32,
     lineHeight: 40,
     fontWeight: '800' as const,
     letterSpacing: -0.8,
   },
   title: {
-    fontFamily: 'Nunito_700Bold',
+    fontFamily: 'Inter_700Bold',
     fontSize: 23,
     lineHeight: 30,
     fontWeight: '700' as const,
     letterSpacing: -0.4,
   },
   heading: {
-    fontFamily: 'Nunito_700Bold',
+    fontFamily: 'Inter_700Bold',
     fontSize: 18,
     lineHeight: 25,
     fontWeight: '700' as const,
     letterSpacing: -0.2,
   },
-  body: { fontFamily: 'Nunito_400Regular', fontSize: 16, lineHeight: 24, fontWeight: '400' as const },
-  bodyStrong: { fontFamily: 'Nunito_600SemiBold', fontSize: 16, lineHeight: 24, fontWeight: '600' as const },
-  label: { fontFamily: 'Nunito_500Medium', fontSize: 14, lineHeight: 20, fontWeight: '500' as const },
-  caption: { fontFamily: 'Nunito_500Medium', fontSize: 12, lineHeight: 16, fontWeight: '500' as const },
+  body: { fontFamily: 'Inter_400Regular', fontSize: 16, lineHeight: 24, fontWeight: '400' as const },
+  bodyStrong: { fontFamily: 'Inter_600SemiBold', fontSize: 16, lineHeight: 24, fontWeight: '600' as const },
+  label: { fontFamily: 'Inter_500Medium', fontSize: 14, lineHeight: 20, fontWeight: '500' as const },
+  caption: { fontFamily: 'Inter_500Medium', fontSize: 12, lineHeight: 16, fontWeight: '500' as const },
   /* Small all-caps eyebrow above a display heading ("MONDAY, JUNE 24"). */
   eyebrow: {
-    fontFamily: 'Nunito_700Bold',
+    fontFamily: 'Inter_700Bold',
     fontSize: 11,
     lineHeight: 15,
     fontWeight: '700' as const,
