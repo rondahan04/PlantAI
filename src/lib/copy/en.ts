@@ -344,10 +344,28 @@ export const en = {
     /* Water-all names the plants it will NOT touch, because the surprise is
      * always that it did less than "all". */
     waterConfirmTitle: 'Water the plants that need it?',
-    waterConfirmBody: (n: number, total: number) =>
-      n === total
-        ? `This marks all ${n} ${n === 1 ? 'plant' : 'plants'} as watered now.`
-        : `${n} of your ${total} plants are due or overdue. Only those are marked, so the rest keep their real schedule.`,
+    /*
+     * The two groups are named separately because they are true for different
+     * reasons: one is late, the other has simply never been started. Collapsing
+     * them into one number would tell a user with a brand new library that six
+     * plants are "overdue" when none of them are.
+     */
+    waterConfirmBody: (n: number, total: number, firstWater: number) => {
+      const due = n - firstWater;
+      const parts: string[] = [];
+      if (due > 0) parts.push(`${due} ${due === 1 ? 'is' : 'are'} due or overdue`);
+      if (firstWater > 0)
+        parts.push(`${firstWater} ${firstWater === 1 ? 'has' : 'have'} never been watered`);
+      const reason = parts.join(', and ');
+      if (n === total) {
+        return total === 1
+          ? `Your plant will be marked as watered now - it has ${firstWater === 1 ? 'never been watered' : 'water due'}.`
+          : `All ${n} of your plants will be marked as watered now - ${reason}.`;
+      }
+      return n === 1
+        ? `${reason}. Only that one of your ${total} plants is marked, so the rest keep their real schedule.`
+        : `${reason}. Only those ${n} of your ${total} plants are marked, so the rest keep their real schedule.`;
+    },
     waterNothingTitle: 'Nothing is due',
     waterNothingBody: 'No plant needs watering today. Marking one early would reset its schedule and record water it did not get.',
     waterDone: (n: number) => `Watered ${n} ${n === 1 ? 'plant' : 'plants'}`,
@@ -355,7 +373,7 @@ export const en = {
     confirm: 'Do it',
     cancelAction: 'Cancel',
     a11yDiagnoseAll: 'Diagnose all undiagnosed plants',
-    a11yWaterAll: 'Water all plants that are due',
+    a11yWaterAll: 'Water all plants that are due or have never been watered',
   },
   speciesPicker: {
     title: 'Choose a species',

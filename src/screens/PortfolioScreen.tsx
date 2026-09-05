@@ -25,6 +25,7 @@ import { genusCarePlans } from '../services/genusCarePlans';
 import { triageSections } from '../lib/triage';
 import {
   dueSoon,
+  neverWatered as neverWateredPlants,
   filterPortfolio,
   isBehindOnCare,
   plantSchedule,
@@ -318,6 +319,26 @@ export default function PortfolioScreen({ navigation }: Props) {
     // user mid-scroll for a day boundary they cannot see.
   }, [library]);
 
+  /*
+   * Plants with a schedule that have never been watered. Deliberately NOT part
+   * of `due` - they have no due date, so the strip cannot honestly place them -
+   * but they are exactly what "water all" should reach on a library the user
+   * has just filled in. Same genus lookup as above, so the two agree on which
+   * plan a plant is on.
+   */
+  const neverWatered = useMemo(() => {
+    return neverWateredPlants(
+      library.plants,
+      Date.now(),
+      (plant: StoredPlant) => {
+        const genus = plant.species?.genus ?? plant.diagnosis?.genus;
+        return genus ? genusCarePlans.peek(genus) : null;
+      },
+      copy.care,
+      copy.watering
+    );
+  }, [library]);
+
   /* Both bulk actions act on many plants at once, so both state the count
    * before spending anything - see lib/bulkCare.ts for who they act on. */
   const onDiagnoseAll = useCallback(() => {
@@ -352,14 +373,19 @@ export default function PortfolioScreen({ navigation }: Props) {
   }, [library]);
 
   const onWaterAll = useCallback(() => {
-    const targets = waterTargets(due);
+    /*
+     * Two sources, because a plant that has never been watered has no due date
+     * and so cannot appear in `due` at all - which is why this button used to
+     * skip every plant the user had just added.
+     */
+    const { targets, firstWaterCount } = waterTargets(due, neverWatered);
     if (targets.length === 0) {
       Alert.alert(copy.bulkCare.waterNothingTitle, copy.bulkCare.waterNothingBody);
       return;
     }
     Alert.alert(
       copy.bulkCare.waterConfirmTitle,
-      copy.bulkCare.waterConfirmBody(targets.length, library.plants.length),
+      copy.bulkCare.waterConfirmBody(targets.length, library.plants.length, firstWaterCount),
       [
         { text: copy.bulkCare.cancelAction, style: 'cancel' },
         {
@@ -384,7 +410,7 @@ export default function PortfolioScreen({ navigation }: Props) {
         },
       ]
     );
-  }, [due, library]);
+  }, [due, neverWatered, library]);
 
   /*
    * NOT just "does the library have plants". When logged in, `library` is the cloud mirror, and a

@@ -50,17 +50,39 @@ export function diagnoseTargets(plants: StoredPlant[]): DiagnoseTargets {
  * reminder a full interval late - and overwatering is the most common way a
  * houseplant dies, so the failure is not cosmetic.
  *
- * Due and overdue only. That is also what actually happened if the user walked
- * around with a can doing the ones that needed it, which is the errand this
- * button exists for.
+ * Two groups qualify, for different reasons:
  *
- * Deduplicated by plant: `due` carries one row per care KIND, so a plant that
- * is due for both water and fertilizer appears twice and would otherwise be
- * marked (and counted) twice.
+ *   due / overdue  what the user just walked around with a can and did. This
+ *                  is the errand the button exists for.
+ *   never watered  a plant with a schedule that has no first watering logged.
+ *                  It has no due date - that is precisely why `dueSoon` leaves
+ *                  it out - but "no anchor yet" is not "recently watered", and
+ *                  treating the two the same meant the button skipped every
+ *                  plant the user had just added. Marking it is what starts the
+ *                  schedule the plant is already waiting on.
+ *
+ * A plant merely APPROACHING its due date is still excluded: `dueSoon` carries
+ * the whole week, and watering something three days early is the overwatering
+ * case above wearing a different hat.
+ *
+ * Deduplicated by plant across both groups: `due` carries one row per care
+ * KIND, so a plant due for both water and fertilizer appears twice and would
+ * otherwise be marked (and counted) twice.
  */
-export function waterTargets(due: DueItem[]): StoredPlant[] {
+export interface WaterTargets {
+  targets: StoredPlant[];
+  /* The two reasons, counted separately so the confirmation can say which is
+   * which. They sum to targets.length. */
+  dueCount: number;
+  firstWaterCount: number;
+}
+
+export function waterTargets(due: DueItem[], neverWatered: StoredPlant[] = []): WaterTargets {
   const seen = new Set<string>();
-  const out: StoredPlant[] = [];
+  const targets: StoredPlant[] = [];
+  let dueCount = 0;
+  let firstWaterCount = 0;
+
   for (const item of due) {
     if (item.kind !== 'water') continue;
     // `dueSoon` also carries plants that are merely approaching. Only what is
@@ -68,7 +90,23 @@ export function waterTargets(due: DueItem[]): StoredPlant[] {
     if (item.daysUntilDue > 0) continue;
     if (seen.has(item.plant.id)) continue;
     seen.add(item.plant.id);
-    out.push(item.plant);
+    targets.push(item.plant);
+    dueCount += 1;
   }
-  return out;
+
+  /*
+   * Second, so a plant that somehow appears in both is counted as due - the
+   * stronger, date-backed reason - rather than as a first watering. The two
+   * are mutually exclusive today (a never-watered plant has no due date, so
+   * `dueSoon` cannot carry it), but the order makes that assumption harmless
+   * rather than load-bearing.
+   */
+  for (const plant of neverWatered) {
+    if (seen.has(plant.id)) continue;
+    seen.add(plant.id);
+    targets.push(plant);
+    firstWaterCount += 1;
+  }
+
+  return { targets, dueCount, firstWaterCount };
 }
