@@ -12,6 +12,10 @@
     },
     "ios": {
       "bundleIdentifier": "com.rondahan.PlantAI",
+      "icon": {
+        "light": "./assets/icon-light.png",
+        "dark": "./assets/icon-dark.png"
+      },
       "supportsTablet": true,
       "infoPlist": {
         "CFBundleLocalizations": [
