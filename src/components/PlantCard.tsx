@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 import { Theme, useTheme } from '../theme';
 import { copy } from '../services/language';
 import { directionalIconStyle } from '../lib/rtl';
@@ -165,7 +166,19 @@ function PlantCard({ plant, slots = EMPTY_SLOTS, onPress, onEdit }: PlantCardPro
       */}
       <View style={s.thumbWrap}>
         <Image source={LOGO_GLYPH} style={[s.thumbGlyph, { tintColor: t.color.textMuted }]} />
-        <Image source={{ uri: plant.photoUri }} style={s.thumb} />
+        <ExpoImage
+          source={{ uri: plant.photoUri }}
+          style={s.thumb}
+          /* The reason this component switched away from RN's Image: a saved
+           * photo is full resolution, and RN decoded all of it to paint a
+           * 56pt square. expo-image downscales to the view by default. */
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          /* Rows are recycled as the list scrolls; without this a reused row
+           * shows the previous plant's photo until the new one decodes. */
+          recyclingKey={plant.id}
+          transition={120}
+        />
       </View>
 
       <View style={s.body}>

@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -229,7 +230,13 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
 
         <Animated.View style={{ opacity: fadeAnim }}>
           <View style={s.imageWrap}>
-            <Image source={{ uri: imageUri }} style={s.plantImage} />
+            <ExpoImage
+            source={{ uri: imageUri }}
+            style={s.plantImage}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={160}
+          />
             <View style={s.conditionBadge}>
               <Ionicons name={condition.icon} size={16} color={condition.color} />
               <Text style={[s.conditionBadgeText, { color: condition.color }]}>{diagnosis.conditionLabel}</Text>

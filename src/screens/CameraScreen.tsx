@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -240,7 +241,17 @@ export default function CameraScreen({ navigation }: Props) {
   if (analyzing && capturedUri) {
     return (
       <View style={s.analyzeOverlay}>
-        <Image source={{ uri: capturedUri }} style={StyleSheet.absoluteFill as any} blurRadius={4} />
+        <ExpoImage
+            source={{ uri: capturedUri }}
+            style={StyleSheet.absoluteFill as any}
+            /* The freshly captured photo, full resolution, painted across the
+             * whole screen while the diagnosis runs. Downscaling it to the
+             * view is the difference between decoding a 12MP bitmap and a
+             * screen-sized one, for something that is blurred anyway. */
+            contentFit="cover"
+            blurRadius={4}
+            cachePolicy="memory"
+          />
         <View style={[StyleSheet.absoluteFill, s.analyzeScrim]} />
         <SafeAreaView style={s.analyzeContent}>
           <View style={s.analyzeCard}>

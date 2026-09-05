@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Image } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -195,7 +196,16 @@ export default function HomeScreen({ navigation }: Props) {
               />
             </Pressable>
           </View>
-          {heroPhoto !== undefined && <Image source={{ uri: heroPhoto }} style={s.heroPhoto} />}
+          {heroPhoto !== undefined && (
+            <ExpoImage
+              source={{ uri: heroPhoto }}
+              style={s.heroPhoto}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              recyclingKey={heroPhoto}
+              transition={160}
+            />
+          )}
         </View>
 
         {/* --- upcoming tasks --------------------------------------------- */}
@@ -410,7 +420,7 @@ const makeStyles = (t: Theme) =>
      * instead of being a 168pt sliver on a large screen and a letterbox on a
      * small one.
      */
-    heroPhoto: { width: '100%', aspectRatio: 4 / 3, resizeMode: 'cover' as const },
+    heroPhoto: { width: '100%', aspectRatio: 4 / 3 },
 
     sectionHead: {
       flexDirection: 'row',

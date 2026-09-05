@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Alert } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -370,7 +371,14 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
             the cache may be gone, so the mark sits underneath. */}
         <View style={s.imageWrap}>
           <Image source={LOGO_GLYPH} style={[s.heroGlyph, { tintColor: t.color.textMuted }]} />
-          <Image source={{ uri: plant.photoUri }} style={s.image} />
+          <ExpoImage
+              source={{ uri: plant.photoUri }}
+              style={s.image}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              recyclingKey={plant.id}
+              transition={160}
+            />
         </View>
 
         {/* No diagnosis, no badge. An empty coloured pill would read as a
