@@ -385,6 +385,9 @@ export const he: Copy = {
     unsupportedTitle: 'לא הצלחנו לקרוא את התמונה',
     unsupportedBody:
       'הקובץ הזה בפורמט שאנחנו לא יודעים לפתוח. תמונה שצולמה במצלמה, או JPEG או PNG מהגלריה, תעבוד.',
+    tooLargeTitle: 'התמונה הזו גדולה מדי לשליחה',
+    tooLargeBody: (size: string, limit: string) =>
+      `התמונה במשקל ${size} והמגבלה היא ${limit}. צלמו את התמונה במצלמה במקום - התמונות האלה דחוסות ותמיד נכנסות.`,
     unavailableTitle: 'האבחון אינו זמין',
     unavailableBody: 'הגרסה הזו לא מחוברת לשירות זיהוי צמחים. אין שום בעיה בתמונה או בצמח שלכם.',
     failedTitle: 'לא הצלחנו לסיים את האבחון',

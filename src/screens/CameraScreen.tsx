@@ -17,8 +17,10 @@ import {
   diagnosePlant,
   DiagnosisUnavailableError,
   NotAPlantError,
+  PhotoTooLargeError,
   UnsupportedImageError,
 } from '../services/plantDiagnosis';
+import { megabytes, SERVER_MAX_BODY_BYTES } from '../lib/uploadLimit';
 import { Theme, useTheme } from '../theme';
 import { copy } from '../services/language';
 import { APP_LOGO } from '../brand';
@@ -57,6 +59,22 @@ function describeFailure(err: unknown, uri: string): Failure {
       icon: 'image-outline',
       title: copy.camera.unsupportedTitle,
       body: copy.camera.unsupportedBody,
+      retryUri: null,
+    };
+  }
+
+  /*
+   * Before this branch existed a too-large photo fell through to the generic
+   * network copy, so the user was told to check their connection about a file
+   * that would have failed on any connection. It is the only failure here the
+   * user can actually fix, so it names the size and the fix.
+   */
+  if (err instanceof PhotoTooLargeError) {
+    return {
+      icon: 'resize-outline',
+      title: copy.camera.tooLargeTitle,
+      body: copy.camera.tooLargeBody(megabytes(err.bytes), megabytes(SERVER_MAX_BODY_BYTES)),
+      // No retryUri: retrying the identical file reproduces it exactly.
       retryUri: null,
     };
   }
