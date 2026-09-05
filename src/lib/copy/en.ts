@@ -547,8 +547,13 @@ export const en = {
     settingsA11y: 'Account settings',
     title: 'Portfolio',
     filterAll: 'All',
+    filterNeedsCare: 'Needs care',
     filterDiagnosed: 'Diagnosed',
+    /* The count rides inside the chip - "All (12)" - so a user can see the size
+     * of each slice before spending a tap finding out. */
+    filterCount: (label: string, n: number): string => `${label} (${n})`,
     filterAllA11y: 'Show all plants',
+    filterNeedsCareA11y: 'Show only plants that are due or overdue for care',
     filterDiagnosedA11y: 'Show only plants you have diagnosed',
     dueThisWeek: 'Due this week',
     dueMore: (n: number) => `+${n} more in your plants below`,
@@ -557,6 +562,7 @@ export const en = {
      * say so - otherwise the Diagnosed chip on a hand-built portfolio reads as
      * data loss.
      */
+    noneNeedCare: 'Nothing is due right now. Every plant is on schedule.',
     noneDiagnosed: 'None of your plants have been diagnosed yet. Scan one to see what it needs.',
     /*
      * A damaged library must never be reported as an empty one: "you have no
@@ -586,10 +592,53 @@ export const en = {
     howItWorks: 'How it works',
     bottomNote: 'We diagnose 1000+ plant species · fast and accurate',
   },
+  schedule: {
+    today: 'Today',
+    tomorrow: 'Tomorrow',
+    overdue: 'Overdue',
+    inDays: (days: number): string => `In ${days} days`,
+    every: (interval: string): string => `Every ${interval}`,
+    none: 'Not set',
+  },
   tabs: {
+    home: 'Home',
     portfolio: 'Portfolio',
     scan: 'Scan',
     find: 'Find',
+  },
+  home: {
+    /*
+     * The greeting is split from the name so Hebrew can put them in its own
+     * order - and so a user who skipped onboarding gets a clean "Good morning"
+     * with no trailing comma left dangling where a name should be.
+     */
+    greeting: {
+      morning: 'Good morning',
+      afternoon: 'Good afternoon',
+      evening: 'Good evening',
+    },
+    greetingWithName: (greeting: string, name: string) => `${greeting}, ${name}`,
+    heroEyebrow: 'Your garden at a glance',
+    heroTitle: 'Keep your plants\nthriving today.',
+    heroEmptyTitle: 'Start your garden\nwith one photo.',
+    heroCta: 'Diagnose a plant',
+    plantCount: (n: number): string => (n === 1 ? '1 plant' : `${n} plants`),
+    tasksTitle: 'Upcoming tasks',
+    tasksSeeAll: 'See all',
+    tasksEmpty: 'Nothing due this week. Your plants are set.',
+    taskOthers: (n: number): string => (n === 1 ? '+ 1 other' : `+ ${n} others`),
+    taskKind: {
+      water: 'Water plants',
+      fertilizer: 'Fertilize',
+      repot: 'Repot',
+    },
+    plantsTitle: 'My plants',
+    plantsSeeAll: 'View portfolio',
+    needsCare: (n: number): string => (n === 1 ? 'needs a little care' : 'need a little care'),
+    allHealthy: 'all doing well',
+    emptyStrip: 'No plants yet. Diagnose one to get started.',
+    a11yHero: 'Diagnose a plant with the camera',
+    a11yTask: (kind: string, plants: string, when: string) => `${kind}, ${plants}, ${when}`,
   },
   relativeDay: {
     /*
@@ -605,6 +654,7 @@ export const en = {
     yearsAgo: (n: number) => `${n}y ago`,
   },
   plantCard: {
+    needsWatering: 'Needs watering',
     diagnosedBadge: 'Diagnosed',
     /*
      * ONE label rather than four nodes: a screen reader user wants the plant

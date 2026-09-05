@@ -10,12 +10,16 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
-import { Lora_700Bold } from '@expo-google-fonts/lora';
-import {
-  Raleway_400Regular,
-  Raleway_500Medium,
-  Raleway_600SemiBold,
-} from '@expo-google-fonts/raleway';
+/*
+ * Per-weight subpath imports, not the package root. A root import pulls the
+ * whole family into the bundle - every weight and every italic - which was
+ * thirty font files for the handful of cuts the type scale actually names.
+ */
+import { Nunito_400Regular } from '@expo-google-fonts/nunito/400Regular';
+import { Nunito_500Medium } from '@expo-google-fonts/nunito/500Medium';
+import { Nunito_600SemiBold } from '@expo-google-fonts/nunito/600SemiBold';
+import { Nunito_700Bold } from '@expo-google-fonts/nunito/700Bold';
+import { Nunito_800ExtraBold } from '@expo-google-fonts/nunito/800ExtraBold';
 import * as SplashScreen from 'expo-splash-screen';
 
 import { RootStackParamList } from './src/types';
@@ -51,7 +55,7 @@ const linking = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
-// Keep the splash up until brand fonts (Lora / Raleway) are ready, so text
+// Keep the splash up until the brand font (Nunito) is ready, so text
 // doesn't flash in the system font then reflow.
 SplashScreen.preventAutoHideAsync();
 
@@ -62,10 +66,11 @@ export default function App() {
 
   // fontFamily names in the type scale (src/theme) must match these keys.
   const [fontsLoaded, fontError] = useFonts({
-    Lora_700Bold,
-    Raleway_400Regular,
-    Raleway_500Medium,
-    Raleway_600SemiBold,
+    Nunito_400Regular,
+    Nunito_500Medium,
+    Nunito_600SemiBold,
+    Nunito_700Bold,
+    Nunito_800ExtraBold,
   });
 
   useEffect(() => {

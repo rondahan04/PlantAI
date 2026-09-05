@@ -5,6 +5,8 @@ import { SOIL_MEDIUM_IDS } from './soilMedia.ts';
 import {
   dueSoon,
   filterPortfolio,
+  isBehindOnCare,
+  plantSchedule,
   offersGuestImport,
   plantDisplayName,
   plantSecondaryName,
@@ -213,4 +215,89 @@ test('any saved plant gets the library layout', () => {
     showsLibraryLayout({ plantCount: 1, libraryReadable: true, offeringImport: false }),
     true
   );
+});
+
+test('a card shows all three care kinds, in a fixed order, whatever is scheduled', () => {
+  const slots = plantSchedule(scanned('s1', 1), NOW, null);
+  assert.deepEqual(slots.map((s) => s.kind), ['water', 'repot', 'fertilizer']);
+});
+
+test('a kind with a schedule nobody has started shows the interval, not a date', () => {
+  // A diagnosed plant gets house feeding and repotting intervals even though
+  // the diagnosis only spoke about water - so the slot has something true to
+  // say, and says the interval rather than inventing a due date from a care
+  // event that never happened.
+  const slots = plantSchedule(scanned('s1', 1), NOW, null);
+  const byKind = Object.fromEntries(slots.map((s) => [s.kind, s]));
+  assert.equal(byKind.water.label, 'In 6 days');
+  assert.equal(byKind.fertilizer.status, 'never_watered');
+  assert.equal(byKind.fertilizer.label, 'Every 3 weeks');
+});
+
+test('a kind with no schedule anywhere says so rather than disappearing', () => {
+  /*
+   * A hand-added plant with no diagnosis and no genus plan has no watering
+   * interval - nothing in the app knows how often this species drinks. Feeding
+   * and repotting run on house intervals that apply to any potted plant, so
+   * only the water slot is genuinely empty, and it says so rather than
+   * rendering a blank column that reads as a broken card.
+   */
+  const slots = plantSchedule(manual('m1'), NOW, null);
+  const byKind = Object.fromEntries(slots.map((s) => [s.kind, s]));
+  assert.equal(byKind.water.status, 'unscheduled');
+  assert.equal(byKind.water.label, 'Not set');
+  assert.equal(byKind.repot.status, 'never_watered');
+});
+
+test('the genus plan fills the slots the plant itself has no schedule for', () => {
+  const perMedium: SoilCarePlan = {
+    water: 'Weekly',
+    waterEveryDays: 7,
+    fertilizer: 'Feed monthly in growth',
+    fertilizeEveryDays: 21,
+    light: 'Bright indirect',
+    humidity: '60%',
+  };
+  const genus: GenusCarePlan = {
+    genus: 'Monstera',
+    family: 'Aroids',
+    fetchedAt: new Date(NOW).toISOString(),
+    bySoil: Object.fromEntries(SOIL_MEDIUM_IDS.map((id) => [id, perMedium])) as GenusCarePlan['bySoil'],
+  };
+  // The plant has to be in a medium for the genus plan to apply - `bySoil` is
+  // keyed by medium, and a plant with none has nothing to look up.
+  const plant = { ...scanned('s1', 1), soilMedium: 'leca' as const };
+  const slots = plantSchedule(plant, NOW, genus);
+  const byKind = Object.fromEntries(slots.map((s) => [s.kind, s]));
+  assert.notEqual(byKind.fertilizer.status, 'unscheduled');
+  assert.notEqual(byKind.fertilizer.label, 'Not set');
+  assert.notEqual(byKind.repot.label, 'Not set');
+});
+
+test('a slot reads short: today, tomorrow, or a day count', () => {
+  assert.equal(plantSchedule(scanned('due', 7), NOW, null)[0].label, 'Today');
+  assert.equal(plantSchedule(scanned('tomorrow', 6), NOW, null)[0].label, 'Tomorrow');
+  assert.equal(plantSchedule(scanned('later', 2), NOW, null)[0].label, 'In 5 days');
+  assert.equal(plantSchedule(scanned('late', 12), NOW, null)[0].label, 'Overdue');
+});
+
+test('behind on care means due today or late, never merely upcoming', () => {
+  assert.equal(isBehindOnCare(plantSchedule(scanned('late', 12), NOW, null)), true);
+  assert.equal(isBehindOnCare(plantSchedule(scanned('due', 7), NOW, null)), true);
+  assert.equal(isBehindOnCare(plantSchedule(scanned('fine', 1), NOW, null)), false);
+});
+
+test('the Needs care filter keeps the plants the caller says are behind', () => {
+  const late = scanned('late', 12);
+  const fine = scanned('fine', 1);
+  const behind = (p: StoredPlant) => isBehindOnCare(plantSchedule(p, NOW, null));
+  assert.deepEqual(
+    filterPortfolio([late, fine], 'needsCare', behind).map((p) => p.id),
+    ['late']
+  );
+});
+
+test('Needs care with no predicate hides nothing rather than claiming all is well', () => {
+  const plants = [scanned('late', 12), manual('m1')];
+  assert.equal(filterPortfolio(plants, 'needsCare').length, 2);
 });

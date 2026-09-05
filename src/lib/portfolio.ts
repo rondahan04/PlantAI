@@ -4,11 +4,12 @@ import {
   CARE_KINDS,
   EN_CARE_COPY,
   careState,
+  monthsish,
   plantCarePlan,
   soilPlanFor,
   type CareCopy,
 } from './care.ts';
-import { EN_WATERING_COPY, type WateringCopy } from './watering.ts';
+import { EN_WATERING_COPY, type WateringCopy, type WateringState } from './watering.ts';
 
 /*
  * Everything the Portfolio tab decides, decided here.
@@ -29,7 +30,7 @@ import { EN_WATERING_COPY, type WateringCopy } from './watering.ts';
  * renderer over this file, which is what keeps it a renderer.
  */
 
-export type PortfolioFilter = 'all' | 'diagnosed';
+export type PortfolioFilter = 'all' | 'needsCare' | 'diagnosed';
 
 /*
  * 'diagnosed' means HAS A DIAGNOSIS, not "arrived through the camera".
@@ -44,8 +45,23 @@ export type PortfolioFilter = 'all' | 'diagnosed';
  * the store, and a filter that also reordered would make toggling the chip look
  * like the library had been shuffled.
  */
-export function filterPortfolio(plants: StoredPlant[], filter: PortfolioFilter): StoredPlant[] {
+export function filterPortfolio(
+  plants: StoredPlant[],
+  filter: PortfolioFilter,
+  /*
+   * Whether a plant is behind on its care. Injected rather than computed here
+   * because the answer needs a clock and a genus-plan lookup, and this function
+   * is the one place in the module that is allowed to know neither - the caller
+   * already builds the schedule for every card it draws, so it hands the
+   * predicate down instead of making this file build it a second time.
+   *
+   * Absent, the chip filters nothing away: a caller that does not know what is
+   * due must not silently claim nothing is.
+   */
+  isBehind?: (plant: StoredPlant) => boolean
+): StoredPlant[] {
   if (filter === 'all') return plants;
+  if (filter === 'needsCare') return isBehind ? plants.filter(isBehind) : plants;
   return plants.filter((p) => p.diagnosis !== undefined);
 }
 
@@ -186,6 +202,100 @@ const LAST_AT: Record<CareKind, keyof StoredPlant> = {
 function lastCareAt(plant: StoredPlant, kind: CareKind): string | undefined {
   const value = plant[LAST_AT[kind]];
   return typeof value === 'string' ? value : undefined;
+}
+
+/* One slot on a plant card: what the plant needs, when, in three words. */
+export interface CareSlot {
+  kind: CareKind;
+  status: WateringState['status'];
+  /* Whole days until due; 0 is today, negative is late. Null when there is no
+   * schedule, or one that has never been started. */
+  daysUntilDue: number | null;
+  /* The compact line the card prints. Never empty. */
+  label: string;
+}
+
+/* The short forms a card has room for. The long sentences in `CareCopy` -
+ * "Next feed in 5 days" - are right on a detail screen and far too wide for
+ * three columns under a plant name, so this is a separate, smaller vocabulary
+ * rather than a truncation of that one. */
+export interface ScheduleCopy {
+  today: string;
+  tomorrow: string;
+  overdue: string;
+  inDays: (days: number) => string;
+  /* A schedule that exists but has never been started - the interval itself is
+   * the most useful thing to show. */
+  every: (interval: string) => string;
+  /* No schedule at all, from the plant, its genus or its medium. */
+  none: string;
+}
+
+export const EN_SCHEDULE_COPY: ScheduleCopy = {
+  today: 'Today',
+  tomorrow: 'Tomorrow',
+  overdue: 'Overdue',
+  inDays: (days) => `In ${days} days`,
+  every: (interval) => `Every ${interval}`,
+  none: 'Not set',
+};
+
+/*
+ * All three care kinds for one plant, always, in a fixed order.
+ *
+ * Always three, because the row is a rhythm: a card that shows one column for a
+ * plant with only a watering schedule and three for the plant below it reads as
+ * two different card designs. A kind with nothing scheduled says so in the
+ * quietest way the palette allows, which is also the nudge to set one.
+ *
+ * The genus plan is the fallback that makes that rare. A hand-added Monstera
+ * carries no feeding interval of its own, but its genus does, so the slot shows
+ * the real interval rather than a dash - which is the whole reason
+ * `plantCarePlan` takes a genus plan at all.
+ */
+export function plantSchedule(
+  plant: StoredPlant,
+  now: number,
+  genusPlan: GenusCarePlan | null,
+  words: ScheduleCopy = EN_SCHEDULE_COPY,
+  careWords: CareCopy = EN_CARE_COPY,
+  wateringWords: WateringCopy = EN_WATERING_COPY
+): CareSlot[] {
+  const soilPlan = soilPlanFor(genusPlan, plant.soilMedium);
+  const carePlan = plantCarePlan(plant.diagnosis?.carePlan, genusPlan, plant.soilMedium);
+
+  return CARE_KINDS.map((kind) => {
+    const state = careState(kind, carePlan, lastCareAt(plant, kind), now, soilPlan, careWords, wateringWords);
+    return { kind, status: state.status, daysUntilDue: state.daysUntilDue, label: slotLabel(state, words, careWords) };
+  });
+}
+
+function slotLabel(state: WateringState, words: ScheduleCopy, careWords: CareCopy): string {
+  switch (state.status) {
+    case 'unscheduled':
+      return words.none;
+    case 'never_watered':
+      return words.every(monthsish(state.intervalDays, careWords));
+    case 'overdue':
+      return words.overdue;
+    case 'due':
+      return words.today;
+    default:
+      if (state.daysUntilDue === null) return words.none;
+      if (state.daysUntilDue <= 0) return words.today;
+      return state.daysUntilDue === 1 ? words.tomorrow : words.inDays(state.daysUntilDue);
+  }
+}
+
+/*
+ * Behind on care - the Needs care chip, and the same rule the dashboard counts
+ * with: due today or late, nothing further out. A plant due on Friday is not
+ * one the user is behind on, and folding those in would leave the chip
+ * permanently non-empty, which is the fastest way to make it stop meaning
+ * anything.
+ */
+export function isBehindOnCare(slots: CareSlot[]): boolean {
+  return slots.some((slot) => slot.status === 'due' || slot.status === 'overdue');
 }
 
 /*

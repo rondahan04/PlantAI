@@ -24,9 +24,12 @@ import { triageSections } from '../lib/triage';
 import {
   dueSoon,
   filterPortfolio,
+  isBehindOnCare,
+  plantSchedule,
   offersGuestImport,
   plantDisplayName,
   showsLibraryLayout,
+  type CareSlot,
   type DueItem,
   type PortfolioFilter,
 } from '../lib/portfolio';
@@ -40,6 +43,7 @@ import { getSessionHint } from '../services/sessionHint';
 import { copy } from '../services/language';
 import PlantCard from '../components/PlantCard';
 import ImportBanner from '../components/ImportBanner';
+import { TAB_BAR_CLEARANCE } from '../navigation/tabBarMetrics';
 
 /*
  * The Portfolio tab - every plant the user owns, not just the ones they
@@ -197,7 +201,52 @@ export default function PortfolioScreen({ navigation }: Props) {
     // focus effect above re-reads it constantly and this must not run each time.
   }, [session]);
 
-  const visible = useMemo(() => filterPortfolio(library.plants, filter), [library, filter]);
+  /*
+   * Every plant's three care slots, built once per library read and shared by
+   * the cards, the Needs care chip and its count. Building them per card would
+   * run the same genus lookup three times over for the same plant, and building
+   * them twice - once for the chip, once for the card - is how a chip that says
+   * "(2)" ends up next to three highlighted cards.
+   */
+  const schedules = useMemo(() => {
+    const map = new Map<string, CareSlot[]>();
+    for (const plant of library.plants) {
+      const genus = plant.species?.genus ?? plant.diagnosis?.genus;
+      map.set(
+        plant.id,
+        plantSchedule(
+          plant,
+          Date.now(),
+          genus ? genusCarePlans.peek(genus) : null,
+          copy.schedule,
+          copy.care,
+          copy.watering
+        )
+      );
+    }
+    return map;
+    // Same contract as `due` below: the clock is read once per library read, so
+    // the list cannot reshuffle under a scrolling thumb for a day boundary.
+  }, [library]);
+
+  const behind = useCallback(
+    (plant: StoredPlant) => isBehindOnCare(schedules.get(plant.id) ?? []),
+    [schedules]
+  );
+
+  const counts = useMemo(
+    () => ({
+      all: library.plants.length,
+      needsCare: library.plants.filter(behind).length,
+      diagnosed: library.plants.filter((p) => p.diagnosis !== undefined).length,
+    }),
+    [library, behind]
+  );
+
+  const visible = useMemo(
+    () => filterPortfolio(library.plants, filter, behind),
+    [library, filter, behind]
+  );
 
   /*
    * Triage grouping stays exactly where it was, and ONLY on the All view. The
@@ -214,7 +263,7 @@ export default function PortfolioScreen({ navigation }: Props) {
            * second code path for it. `TriageKey` is deliberately not widened to
            * hold a 'diagnosed' bucket - this is a rendering shape, not a triage
            * bucket, and triage.ts should not learn about the filter. */
-          [{ key: 'diagnosed', title: '', data: visible }],
+          [{ key: filter, title: '', data: visible }],
     [visible, filter]
   );
 
@@ -285,8 +334,15 @@ export default function PortfolioScreen({ navigation }: Props) {
     return () => loop?.stop();
   }, []);
 
+  const CHIP_A11Y: Record<PortfolioFilter, string> = {
+    all: copy.portfolio.filterAllA11y,
+    needsCare: copy.portfolio.filterNeedsCareA11y,
+    diagnosed: copy.portfolio.filterDiagnosedA11y,
+  };
+
   const renderChip = (value: PortfolioFilter, label: string) => {
     const active = filter === value;
+    const count = counts[value];
     return (
       <Pressable
         key={value}
@@ -295,11 +351,19 @@ export default function PortfolioScreen({ navigation }: Props) {
         accessibilityRole="button"
         // Selected state announced rather than left to colour alone (a11y).
         accessibilityState={{ selected: active }}
-        accessibilityLabel={
-          value === 'all' ? copy.portfolio.filterAllA11y : copy.portfolio.filterDiagnosedA11y
-        }
+        accessibilityLabel={CHIP_A11Y[value]}
       >
-        <Text style={[s.chipText, active && s.chipTextActive]}>{label}</Text>
+        {/*
+          The dot is only on Needs care, and only when something actually is:
+          it is the one chip that reports a problem, and a dot that is always
+          there is a dot nobody sees.
+        */}
+        {value === 'needsCare' && count > 0 && (
+          <View style={[s.chipDot, { backgroundColor: active ? t.color.onPrimary : t.color.accent }]} />
+        )}
+        <Text style={[s.chipText, active && s.chipTextActive]}>
+          {copy.portfolio.filterCount(label, count)}
+        </Text>
       </Pressable>
     );
   };
@@ -353,24 +417,46 @@ export default function PortfolioScreen({ navigation }: Props) {
           stickySectionHeadersEnabled={false}
           ListHeaderComponent={
             <>
-              <View style={s.header}>
-                <Image source={APP_LOGO} style={s.logoIcon} accessibilityIgnoresInvertColors />
-                <View style={s.headerText}>
-                  <Text style={s.logoText}>{copy.portfolio.brand}</Text>
-                  <Text style={s.logoSub}>
+              {/*
+                The library masthead. The app's own name is not here on purpose:
+                a returning user knows which app they opened, and the one thing
+                worth the widest line on the screen is what they came for - their
+                plants, and how many of them there are.
+              */}
+              <View style={s.libHeader}>
+                <View style={s.libHeaderText}>
+                  <Text style={s.libEyebrow}>
                     {profileName
                       ? copy.portfolio.greetingNamed(profileName)
                       : copy.portfolio.greetingAnonymous}
                   </Text>
+                  <Text style={s.libHeaderTitle}>{copy.portfolio.title}</Text>
+                  <Text style={s.libHeaderCount}>{copy.home.plantCount(library.plants.length)}</Text>
                 </View>
                 <Pressable
                   onPress={() => navigation.navigate('Settings')}
                   accessibilityRole="button"
                   accessibilityLabel={copy.portfolio.settingsA11y}
-                  style={s.settingsBtn}
+                  style={({ pressed }) => [s.iconBtn, pressed && s.chipPressed]}
                   hitSlop={8}
                 >
-                  <Ionicons name="settings-outline" size={22} color={t.color.textSecondary} />
+                  <Ionicons name="settings-outline" size={20} color={t.color.textSecondary} />
+                </Pressable>
+                {/*
+                  Adding a plant you already own was a floating button over the
+                  list. It lives in the header now: a FAB parked over the last
+                  card is a second primary action fighting the camera CTA in the
+                  footer, and this reads as what it is - a way to file a plant,
+                  not the thing the app is for.
+                */}
+                <Pressable
+                  style={({ pressed }) => [s.addBtn, pressed && s.addBtnPressed]}
+                  onPress={() => navigation.navigate('AddPlant')}
+                  accessibilityRole="button"
+                  accessibilityLabel={copy.portfolio.addPlantA11y}
+                >
+                  <Ionicons name="add" size={18} color={t.color.onPrimary} />
+                  <Text style={s.addBtnText}>{copy.portfolio.addPlant}</Text>
                 </Pressable>
               </View>
 
@@ -423,21 +509,24 @@ export default function PortfolioScreen({ navigation }: Props) {
                 </View>
               )}
 
-              <Text style={s.libTitle}>{copy.portfolio.title}</Text>
-
-              <View style={s.chipRow}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={s.chipRow}
+              >
                 {renderChip('all', copy.portfolio.filterAll)}
+                {renderChip('needsCare', copy.portfolio.filterNeedsCare)}
                 {renderChip('diagnosed', copy.portfolio.filterDiagnosed)}
-              </View>
+              </ScrollView>
 
               {/*
                 A filter that matches nothing is not an empty library, and the
                 copy has to say so - otherwise the Diagnosed chip on a
                 hand-built portfolio reads as data loss.
               */}
-              {visible.length === 0 && filter === 'diagnosed' && (
+              {visible.length === 0 && filter !== 'all' && (
                 <Text style={s.emptyFilter}>
-                  {copy.portfolio.noneDiagnosed}
+                  {filter === 'needsCare' ? copy.portfolio.noneNeedCare : copy.portfolio.noneDiagnosed}
                 </Text>
               )}
             </>
@@ -450,6 +539,7 @@ export default function PortfolioScreen({ navigation }: Props) {
           renderItem={({ item }) => (
             <PlantCard
               plant={item}
+              slots={schedules.get(item.id) ?? []}
               onPress={() => navigation.navigate('PlantDetail', { plantId: item.id })}
             />
           )}
@@ -466,22 +556,6 @@ export default function PortfolioScreen({ navigation }: Props) {
           }
         />
 
-        {/*
-          The second way in, floating rather than in the footer: adding a plant
-          you already own has to be reachable from anywhere in a long list, and
-          it is the one action on this tab that the camera CTA cannot cover.
-          Secondary styling on purpose - diagnosing is still the app's job, and
-          two filled accent buttons would leave neither one primary.
-        */}
-        <Pressable
-          style={({ pressed }) => [s.fab, pressed && s.fabPressed]}
-          onPress={() => navigation.navigate('AddPlant')}
-          accessibilityRole="button"
-          accessibilityLabel={copy.portfolio.addPlantA11y}
-        >
-          <Ionicons name="add" size={20} color={t.color.onPrimary} />
-          <Text style={s.fabText}>{copy.portfolio.addPlant}</Text>
-        </Pressable>
       </SafeAreaView>
     );
   }
@@ -579,13 +653,44 @@ export default function PortfolioScreen({ navigation }: Props) {
 function makeStyles(t: Theme) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: t.color.background },
-    scroll: { paddingBottom: t.space['2xl'], paddingHorizontal: t.space.xl },
+    scroll: { paddingBottom: t.space['2xl'] + TAB_BAR_CLEARANCE, paddingHorizontal: t.space.xl },
 
     // ── Returning-user library layout ──────────────────────────────────────
     // The extra bottom padding clears the floating Add plant button, so the
     // last card is scrollable out from under it rather than trapped beneath.
-    libScroll: { paddingBottom: t.space['3xl'] + t.space['2xl'], paddingHorizontal: t.space.xl },
-    libTitle: { ...t.type.title, color: t.color.foreground, marginTop: t.space.lg, marginBottom: t.space.sm },
+    libScroll: { paddingBottom: t.space['3xl'] + TAB_BAR_CLEARANCE, paddingHorizontal: t.space.xl },
+    libHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: t.space.sm,
+      paddingTop: t.space.lg,
+      paddingBottom: t.space.lg,
+    },
+    libHeaderText: { flex: 1, marginEnd: t.space.sm },
+    libEyebrow: { ...t.type.eyebrow, color: t.color.textMuted, writingDirection: 'auto' },
+    libHeaderTitle: { ...t.type.display, color: t.color.foreground, marginTop: t.space.xs, writingDirection: 'auto' },
+    libHeaderCount: { ...t.type.caption, color: t.color.textSecondary, marginTop: 2, writingDirection: 'auto' },
+    iconBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: t.radius.pill,
+      backgroundColor: t.color.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+      ...t.elevation.card,
+    },
+    addBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: t.space.xs,
+      backgroundColor: t.color.primary,
+      borderRadius: t.radius.pill,
+      paddingHorizontal: t.space.lg,
+      height: 40,
+      ...t.elevation.card,
+    },
+    addBtnPressed: { opacity: 0.85 },
+    addBtnText: { ...t.type.label, color: t.color.onPrimary },
     // Sections carry the grouping, so headers stay quiet - the condition
     // colour on each card is what should draw the eye.
     sectionHeader: {
@@ -598,21 +703,28 @@ function makeStyles(t: Theme) {
     },
     libCta: { marginTop: t.space.xl },
 
-    chipRow: { flexDirection: 'row', gap: t.space.sm, marginBottom: t.space.md },
+    // The row scrolls rather than wraps: three chips fit on a phone, but the
+    // Hebrew labels are longer and a wrapped second line pushes the first card
+    // off the screen for a control the user has already read.
+    chipRow: { flexDirection: 'row', gap: t.space.sm, paddingBottom: t.space.md },
     chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
       paddingHorizontal: t.space.lg,
-      paddingVertical: t.space.sm,
       borderRadius: t.radius.pill,
-      borderWidth: 1,
-      borderColor: t.color.border,
       backgroundColor: t.color.surface,
-      minHeight: 36,
-      justifyContent: 'center',
+      minHeight: 40,
+      ...t.elevation.card,
     },
-    chipActive: { backgroundColor: t.color.primaryWash, borderColor: t.color.primary },
+    // Filled, not tinted: the selected chip is the one thing on this row that
+    // has to be readable at a glance, and a wash reads as another unselected
+    // chip in a slightly different colour.
+    chipActive: { backgroundColor: t.color.primary },
     chipPressed: { opacity: 0.7 },
-    chipText: { ...t.type.label, color: t.color.textSecondary },
-    chipTextActive: { color: t.color.primary },
+    chipDot: { width: 7, height: 7, borderRadius: 4 },
+    chipText: { ...t.type.label, color: t.color.foreground },
+    chipTextActive: { color: t.color.onPrimary },
     emptyFilter: {
       ...t.type.body,
       color: t.color.textSecondary,
@@ -659,21 +771,6 @@ function makeStyles(t: Theme) {
     dueLabel: { ...t.type.caption, flexShrink: 0, writingDirection: 'auto' },
     dueMore: { ...t.type.caption, color: t.color.textMuted, marginTop: t.space.xs, marginBottom: t.space.xs },
 
-    fab: {
-      position: 'absolute',
-      end: t.space.xl,
-      bottom: t.space.xl,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: t.space.xs,
-      backgroundColor: t.color.secondary,
-      borderRadius: t.radius.pill,
-      paddingHorizontal: t.space.lg,
-      minHeight: 48,
-      ...t.elevation.raised,
-    },
-    fabPressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
-    fabText: { ...t.type.label, color: t.color.onPrimary },
 
     warnCard: {
       flexDirection: 'row',

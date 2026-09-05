@@ -5,8 +5,7 @@ import { Theme, useTheme } from '../theme';
 import { copy } from '../services/language';
 import { directionalIconStyle } from '../lib/rtl';
 import { LOGO_GLYPH } from '../brand';
-import { needsWater, wateringState } from '../lib/watering';
-import { plantDisplayName, plantSecondaryName } from '../lib/portfolio';
+import { plantDisplayName, plantSecondaryName, type CareSlot } from '../lib/portfolio';
 import type { StoredPlant } from '../services/plantStore';
 
 /*
@@ -26,6 +25,28 @@ const CONDITION_COLOR: Record<string, keyof Theme['color']> = {
   critical: 'conditionCritical',
 };
 
+/*
+ * Each condition also needs a surface to sit on. There are only three tonal
+ * washes in the palette, so the five-step condition scale folds onto them -
+ * calm greens, then amber, then terracotta - which is the same three-step
+ * escalation the user actually reads off the card.
+ */
+/* The same glyph and tint per care kind as the dashboard, the schedule card and
+ * the portfolio strip - a kind is the same colour wherever the user meets it. */
+const KIND_ICON: Record<CareSlot['kind'], { icon: keyof typeof Ionicons.glyphMap; tint: keyof Theme['color'] }> = {
+  water: { icon: 'water-outline', tint: 'water' },
+  fertilizer: { icon: 'nutrition-outline', tint: 'feed' },
+  repot: { icon: 'flower-outline', tint: 'repot' },
+};
+
+const CONDITION_WASH: Record<string, keyof Theme['color']> = {
+  healthy: 'primaryWash',
+  mild: 'primaryWash',
+  moderate: 'warningWash',
+  severe: 'waterWash',
+  critical: 'waterWash',
+};
+
 function relativeDay(iso: string, now: number): string {
   const then = Date.parse(iso);
   if (Number.isNaN(then)) return '';
@@ -39,9 +60,18 @@ function relativeDay(iso: string, now: number): string {
 
 export default function PlantCard({
   plant,
+  slots = [],
   onPress,
 }: {
   plant: StoredPlant;
+  /* All three care kinds, built by `plantSchedule`. Passed in rather than
+   * computed here because the schedule needs a clock and the genus plan the
+   * list has already looked up once for every card it is about to draw.
+   *
+   * Optional, defaulting to none, so a card can never take the whole list down
+   * over a caller that has not passed them - which is exactly what a Fast
+   * Refresh does for a frame when this component reloads ahead of its parent. */
+  slots?: CareSlot[];
   onPress: () => void;
 }) {
   const t = useTheme();
@@ -71,12 +101,30 @@ export default function PlantCard({
   const when = relativeDay(plant.savedAt, Date.now());
 
   /*
-   * Thirst is the one thing on this card the user can act on TODAY, so it gets
-   * its own line rather than being folded into the meta row - condition is why
-   * the plant is in the library, watering is why they opened the app now.
+   * Thirst is the one thing on this card the user can act on TODAY, so it takes
+   * the pill when it applies - condition is why the plant is in the library,
+   * watering is why they opened the app now. It reads the same water slot the
+   * meta row below prints, so the pill and the column can never disagree.
    */
-  const water = wateringState(plant.diagnosis?.carePlan, plant.lastWateredAt, Date.now(), copy.watering);
-  const thirsty = needsWater(water);
+  const water = slots.find((slot) => slot.kind === 'water');
+  const thirsty = water?.status === 'due' || water?.status === 'overdue';
+
+  const pill: { label: string; icon: 'water' | 'leaf'; tint: string; wash: string } | undefined =
+    thirsty && water !== undefined
+      ? {
+          label: copy.plantCard.needsWatering,
+          icon: 'water',
+          tint: water.status === 'overdue' ? t.color.danger : t.color.water,
+          wash: t.color.waterWash,
+        }
+      : conditionLabel !== undefined && diagnosis !== undefined
+        ? {
+            label: conditionLabel,
+            icon: 'leaf',
+            tint: color,
+            wash: t.color[CONDITION_WASH[diagnosis.condition] ?? 'warningWash'],
+          }
+        : undefined;
 
   return (
     <Pressable
@@ -90,7 +138,7 @@ export default function PlantCard({
         secondary: secondary ?? '',
         conditionLabel: conditionLabel ?? '',
         when,
-        watering: thirsty ? water.label : '',
+        watering: water?.label ?? '',
       })}
     >
       {/*
@@ -108,6 +156,22 @@ export default function PlantCard({
       </View>
 
       <View style={s.body}>
+        {/*
+          One pill, not two. The card has room for a single status line and the
+          thing the user can act on TODAY outranks the standing condition, so
+          thirst takes the slot when the plant is thirsty and the diagnosis
+          takes it otherwise. Both are drawn as a tonal wash pill rather than a
+          dot + text: at a glance down the list the pill's colour is the signal.
+        */}
+        {pill !== undefined && (
+          <View style={[s.pill, { backgroundColor: pill.wash }]} importantForAccessibility="no">
+            <Ionicons name={pill.icon} size={11} color={pill.tint} />
+            <Text style={[s.pillText, { color: pill.tint }]} numberOfLines={1}>
+              {pill.label}
+            </Text>
+          </View>
+        )}
+
         <Text style={s.name} numberOfLines={1}>
           {name}
         </Text>
@@ -117,52 +181,34 @@ export default function PlantCard({
             {secondary}
           </Text>
         )}
-        <View style={s.metaRow}>
-          {conditionLabel !== undefined && (
-            <>
-              <View style={[s.dot, { backgroundColor: color }]} />
-              <Text style={[s.condition, { color }]} numberOfLines={1}>
-                {conditionLabel}
-              </Text>
-              <Text style={s.when}> · </Text>
-            </>
-          )}
-          <Text style={s.when}>{when}</Text>
-        </View>
 
-        {thirsty && (
-          <View style={s.waterRow}>
-            <Ionicons
-              name="water"
-              size={12}
-              color={water.status === 'overdue' ? t.color.danger : t.color.warning}
-            />
-            <Text
-              style={[
-                s.waterText,
-                { color: water.status === 'overdue' ? t.color.danger : t.color.warning },
-              ]}
-            >
-              {water.label}
-            </Text>
-          </View>
-        )}
+        {/*
+          The three schedules, always all three, in a fixed order. This is the
+          row the card exists for: a user scanning the library is asking "what
+          needs doing", and a due date per kind answers that without opening
+          anything. A kind with nothing scheduled prints "Not set" in the muted
+          colour rather than vanishing - three columns on one card and one on
+          the next reads as two different card designs.
+        */}
+        <View style={s.metaRow} importantForAccessibility="no">
+          {slots.map((slot) => {
+            const { icon, tint } = KIND_ICON[slot.kind];
+            const active = slot.status === 'due' || slot.status === 'overdue';
+            const glyph = slot.status === 'unscheduled' ? t.color.textMuted : t.color[tint];
+            return (
+              <View key={slot.kind} style={s.metaItem}>
+                <Ionicons name={icon} size={13} color={active ? t.color[tint] : glyph} />
+                <Text
+                  style={[s.meta, active && { color: t.color[tint] }]}
+                  numberOfLines={2}
+                >
+                  {slot.label}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
       </View>
-
-      {/*
-        The badge is quiet on purpose: it is a fact about the record, not a
-        health warning, so it borrows the muted surface rather than any of the
-        condition colours the row already spends its colour budget on.
-        `importantForAccessibility="no"` because the row's own label already
-        says whether the plant is diagnosed - a screen reader must not hear it
-        twice.
-      */}
-      {plant.diagnosis !== undefined && (
-        <View style={s.badge} importantForAccessibility="no">
-          <Ionicons name="medkit-outline" size={11} color={t.color.textSecondary} />
-          <Text style={s.badgeText}>{copy.plantCard.diagnosedBadge}</Text>
-        </View>
-      )}
 
       <Ionicons name="chevron-forward" size={18} color={t.color.textMuted} style={directionalIconStyle} />
     </Pressable>
@@ -175,17 +221,17 @@ const makeStyles = (t: Theme) =>
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: t.color.surface,
-      borderRadius: t.radius.lg,
+      borderRadius: t.radius.xl,
       padding: t.space.md,
-      marginBottom: t.space.sm,
-      minHeight: 72, // comfortably past the 44pt minimum target (H6)
+      marginBottom: t.space.md,
+      minHeight: 96, // comfortably past the 44pt minimum target (H6)
       ...t.elevation.card,
     },
     cardPressed: { opacity: 0.7 },
     thumbWrap: {
-      width: 52,
-      height: 52,
-      borderRadius: t.radius.md,
+      width: 76,
+      height: 76,
+      borderRadius: t.radius.lg,
       backgroundColor: t.color.surfaceMuted,
       alignItems: 'center',
       justifyContent: 'center',
@@ -194,26 +240,32 @@ const makeStyles = (t: Theme) =>
     },
     // Larger than the 22pt icon it replaced: the mark is drawn inside the
     // adaptive-icon safe zone, so the visible leaf is ~60% of the box.
-    thumbGlyph: { width: 40, height: 40, resizeMode: 'contain' as const },
+    thumbGlyph: { width: 52, height: 52, resizeMode: 'contain' as const },
     thumb: { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0 },
     body: { flex: 1, marginEnd: t.space.sm },
-    name: { ...t.type.bodyStrong, color: t.color.foreground, writingDirection: 'auto' },
-    secondary: { ...t.type.caption, color: t.color.textSecondary, writingDirection: 'auto', marginTop: 1 },
-    metaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-    dot: { width: 8, height: 8, borderRadius: 4, marginEnd: 6 },
-    condition: { ...t.type.caption, flexShrink: 1, writingDirection: 'auto' },
-    when: { ...t.type.caption, color: t.color.textMuted },
-    waterRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 3 },
-    waterText: { ...t.type.caption, flexShrink: 1 },
-    badge: {
+    pill: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 3,
-      backgroundColor: t.color.surfaceMuted,
+      alignSelf: 'flex-start',
+      gap: 4,
       borderRadius: t.radius.pill,
       paddingHorizontal: t.space.sm,
       paddingVertical: 3,
-      marginEnd: t.space.xs,
+      marginBottom: t.space.xs,
+      maxWidth: '100%',
     },
-    badgeText: { ...t.type.caption, fontSize: 10, color: t.color.textSecondary },
+    pillText: { ...t.type.caption, flexShrink: 1, writingDirection: 'auto' },
+    name: { ...t.type.heading, color: t.color.foreground, writingDirection: 'auto' },
+    secondary: {
+      ...t.type.caption,
+      color: t.color.textSecondary,
+      fontStyle: 'italic',
+      writingDirection: 'auto',
+      marginTop: 1,
+    },
+    metaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: t.space.sm, marginTop: t.space.sm },
+    // Each column takes an equal third and wraps its own label, so a long
+    // "Every 18 months" cannot push the column beside it off the card.
+    metaItem: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
+    meta: { ...t.type.caption, color: t.color.textMuted, flexShrink: 1, writingDirection: 'auto' },
   });

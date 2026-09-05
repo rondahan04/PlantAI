@@ -1,9 +1,10 @@
 /**
- * PlantAI design system - Organic Biophilic.
+ * PlantAI design system - Warm Editorial.
  *
- * Single source of design tokens for the whole app. Style: nature green +
- * sun accent, rounded organic corners, calm. Light + dark are designed
- * together (dark uses desaturated tonal variants, not inverted colors).
+ * Single source of design tokens for the whole app. Style: cream paper canvas,
+ * deep forest green as the brand voice, terracotta as the one hot accent, an
+ * single warm humanist sans - Nunito - at every size. Light + dark
+ * are designed together (dark is a warm near-black paper, not an inversion).
  *
  * Usage:
  *   import { useTheme } from '../theme';
@@ -18,111 +19,111 @@ import { useColorScheme } from 'react-native';
 // --- palettes (light + dark designed together) -----------------------------
 
 const light = {
-  primary: '#15803D', // nature green
-  primaryPressed: '#116932',
-  onPrimary: '#FFFFFF',
-  primaryWash: '#E7F6EC', // tonal primary surface (active toggles, price tags)
-  secondary: '#059669',
-  accent: '#D97706', // sun - reserve for the single primary CTA / highlights
+  primary: '#1E4034', // deep forest - headings, filled brand buttons, active tab
+  primaryPressed: '#163027',
+  onPrimary: '#FDFBF7',
+  primaryWash: '#E4EFE4', // tonal primary surface (healthy pills, active chips)
+  secondary: '#3C6B54',
+
+  /*
+   * Terracotta is the single hot colour in a green system. It marks the one
+   * action a screen wants you to take and nothing else - one terracotta thing
+   * per screen, or it stops meaning "this one".
+   */
+  accent: '#D2653A',
   onAccent: '#FFFFFF',
 
-  background: '#F0FDF4', // soft green-tinted canvas
-  surface: '#FFFFFF', // cards / sheets
-  surfaceMuted: '#F0F7F3',
+  background: '#F7F1E7', // warm cream paper
+  surface: '#FFFDF9', // cards / sheets - paper white, still warm
+  surfaceMuted: '#F0E8DA',
 
-  foreground: '#0F172A', // primary text (15.8:1 on background)
-  textSecondary: '#475569', // secondary text (>=4.5:1)
-  textMuted: '#64748B',
+  foreground: '#1B2B22', // primary text (13.4:1 on background)
+  textSecondary: '#55655B', // secondary text (>=4.5:1 on background)
+  textMuted: '#8A8073', // warm grey - metadata only, never body copy
 
-  border: '#E2EFE7',
-  ring: '#15803D',
+  border: '#E8DECE',
+  ring: '#1E4034',
 
-  success: '#15803D',
-  warning: '#D97706',
-  warningWash: '#FEF3E7', // tonal warning surface (pickup-only pill)
-  danger: '#DC2626',
+  success: '#2F6B4F',
+  warning: '#B4741F',
+  warningWash: '#FBEEDA', // tonal warning surface
+  danger: '#B23A20',
   onDanger: '#FFFFFF',
 
   /*
-   * Water - the ONE blue in a green system, and the exception is earned: a
-   * watering action reads as water, and running it in the nature green would
-   * make it the second primary CTA on a screen that already has one. Sky-700
-   * rather than a brighter blue so white text clears 4.5:1 on the filled
-   * button. Reserve it for the watering schedule; nothing else is water.
+   * The three care kinds. One calendar shows watering, repotting and feeding on
+   * the same grid, so each needs to be told apart at a glance. In this palette
+   * there is no blue to spend - water takes the terracotta family (it is the
+   * care action the app nags about most, so it earns the hot colour), repot
+   * takes clay brown, feed takes olive. All three clear 4.5:1 against their
+   * `on*` text.
    */
-  water: '#0369A1',
-  waterPressed: '#075985',
+  water: '#C4552F',
+  waterPressed: '#A94526',
   onWater: '#FFFFFF',
-  waterWash: '#E0F2FE',
+  waterWash: '#F8E4D9',
 
-  /*
-   * The other two care kinds. They exist because one calendar now shows
-   * watering, repotting and feeding on the same grid, and three kinds sharing
-   * one blue would make the grid unreadable. Repot is soil amber, feed is a
-   * growth green distinct from `primary` so a filled day is never mistaken for
-   * a primary action. Both clear 4.5:1 against their `on*` text.
-   */
-  repot: '#B45309',
+  repot: '#8C5A2B',
   onRepot: '#FFFFFF',
-  feed: '#4D7C0F',
+  feed: '#5F7A33',
   onFeed: '#FFFFFF',
 
   // Plant condition scale - badge/dot/bar accents (>=3:1 on light surfaces).
-  conditionHealthy: '#15803D',
-  conditionMild: '#0F766E',
-  conditionModerate: '#B45309',
-  conditionSevere: '#C2410C',
-  conditionCritical: '#DC2626',
+  conditionHealthy: '#2F6B4F',
+  conditionMild: '#4A7C59',
+  conditionModerate: '#B4741F',
+  conditionSevere: '#C4552F',
+  conditionCritical: '#B23A20',
 
-  scrim: 'rgba(15, 23, 42, 0.5)',
+  scrim: 'rgba(27, 43, 34, 0.5)',
 } as const;
 
 const dark = {
-  primary: '#34D399', // lighter tonal variant for dark surfaces
-  primaryPressed: '#2BBA86',
-  onPrimary: '#04231A',
-  primaryWash: '#16382A', // deep green tint - primary text reads on it
-  secondary: '#6EE7B7',
-  accent: '#FBBF24',
-  onAccent: '#231603',
+  primary: '#7FB894', // lighter tonal forest so it reads on warm near-black
+  primaryPressed: '#6BA381',
+  onPrimary: '#0E211A',
+  primaryWash: '#1D3128',
+  secondary: '#A3CFB3',
 
-  background: '#0B1410', // deep green-black
-  surface: '#13211B',
-  surfaceMuted: '#1B2C24',
+  accent: '#E88458',
+  onAccent: '#2A1006',
 
-  foreground: '#ECFDF5',
-  textSecondary: '#A7C4B5',
-  textMuted: '#7C9888',
+  background: '#14120E', // warm near-black paper
+  surface: '#1E1B15',
+  surfaceMuted: '#2A251D',
 
-  border: '#24382E',
-  ring: '#34D399',
+  foreground: '#F4EDE0',
+  textSecondary: '#BFB6A5',
+  textMuted: '#8F8676',
 
-  success: '#34D399',
-  warning: '#FBBF24',
-  warningWash: '#3A2C12', // deep amber tint
-  danger: '#F87171',
-  onDanger: '#1A0606',
+  border: '#332D24',
+  ring: '#7FB894',
 
-  // Water - lighter tonal variant, dark text on the fill (see the light note).
-  water: '#38BDF8',
-  waterPressed: '#22A3DC',
-  onWater: '#04212E',
-  waterWash: '#0F2E3E',
+  success: '#7FB894',
+  warning: '#E0A244',
+  warningWash: '#38290F',
+  danger: '#E9765A',
+  onDanger: '#2A0B05',
 
-  // Repot / feed - lighter tonal variants with dark text on the fill.
-  repot: '#FBBF24',
-  onRepot: '#231603',
-  feed: '#A3E635',
-  onFeed: '#16230A',
+  // Care kinds - lighter tonal variants with dark text on the fill.
+  water: '#E88458',
+  waterPressed: '#D3714A',
+  onWater: '#2A1006',
+  waterWash: '#3A1F13',
+
+  repot: '#C99257',
+  onRepot: '#2A1B08',
+  feed: '#A3C16A',
+  onFeed: '#1B2409',
 
   // Plant condition scale - lighter tonal variants for dark surfaces.
-  conditionHealthy: '#34D399',
-  conditionMild: '#2DD4BF',
-  conditionModerate: '#FBBF24',
-  conditionSevere: '#FB923C',
-  conditionCritical: '#F87171',
+  conditionHealthy: '#7FB894',
+  conditionMild: '#9CCBAA',
+  conditionModerate: '#E0A244',
+  conditionSevere: '#E88458',
+  conditionCritical: '#E9765A',
 
-  scrim: 'rgba(0, 0, 0, 0.6)',
+  scrim: 'rgba(0, 0, 0, 0.62)',
 } as const;
 
 // --- shared scales ---------------------------------------------------------
@@ -138,46 +139,76 @@ export const space = {
   '3xl': 48,
 } as const;
 
-/* Organic rounded corners (16-24 is the house range). */
+/* Soft editorial corners - cards live at 20-28, controls are pills. */
 export const radius = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
-  '2xl': 24,
+  sm: 10,
+  md: 14,
+  lg: 18,
+  xl: 24,
+  '2xl': 28,
   pill: 999,
 } as const;
 
-/* Type scale - Lora (display/headings) + Raleway (text). fontFamily names must
- * match the keys registered in useFonts() in App.tsx. Note: with static custom
- * fonts iOS binds weight to the family, so an inline fontWeight override does
- * not change weight - switch fontFamily for a heavier/lighter cut. */
+/* Type scale - Nunito throughout, in four weights. One family for the whole
+ * app: display type is separated from body by size and weight, not by a second
+ * typeface. fontFamily names must match the keys registered in useFonts() in
+ * App.tsx. Note: with static custom fonts iOS binds weight to the family, so an
+ * inline fontWeight override does not change weight - switch fontFamily for a
+ * heavier/lighter cut. */
 export const type = {
-  display: { fontFamily: 'Lora_700Bold', fontSize: 32, lineHeight: 38, fontWeight: '700' as const, letterSpacing: -0.8 },
-  title: { fontFamily: 'Lora_700Bold', fontSize: 22, lineHeight: 28, fontWeight: '700' as const, letterSpacing: -0.4 },
-  heading: { fontFamily: 'Lora_700Bold', fontSize: 18, lineHeight: 24, fontWeight: '700' as const, letterSpacing: -0.3 },
-  body: { fontFamily: 'Raleway_400Regular', fontSize: 16, lineHeight: 24, fontWeight: '400' as const },
-  bodyStrong: { fontFamily: 'Raleway_600SemiBold', fontSize: 16, lineHeight: 24, fontWeight: '600' as const },
-  label: { fontFamily: 'Raleway_500Medium', fontSize: 14, lineHeight: 20, fontWeight: '500' as const },
-  caption: { fontFamily: 'Raleway_500Medium', fontSize: 12, lineHeight: 16, fontWeight: '500' as const },
+  display: {
+    fontFamily: 'Nunito_800ExtraBold',
+    fontSize: 32,
+    lineHeight: 40,
+    fontWeight: '800' as const,
+    letterSpacing: -0.8,
+  },
+  title: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 23,
+    lineHeight: 30,
+    fontWeight: '700' as const,
+    letterSpacing: -0.4,
+  },
+  heading: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 18,
+    lineHeight: 25,
+    fontWeight: '700' as const,
+    letterSpacing: -0.2,
+  },
+  body: { fontFamily: 'Nunito_400Regular', fontSize: 16, lineHeight: 24, fontWeight: '400' as const },
+  bodyStrong: { fontFamily: 'Nunito_600SemiBold', fontSize: 16, lineHeight: 24, fontWeight: '600' as const },
+  label: { fontFamily: 'Nunito_500Medium', fontSize: 14, lineHeight: 20, fontWeight: '500' as const },
+  caption: { fontFamily: 'Nunito_500Medium', fontSize: 12, lineHeight: 16, fontWeight: '500' as const },
+  /* Small all-caps eyebrow above a display heading ("MONDAY, JUNE 24"). */
+  eyebrow: {
+    fontFamily: 'Nunito_700Bold',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '700' as const,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase' as const,
+  },
 } as const;
 
-/* Elevation scale - consistent shadow tokens for cards/sheets/CTAs. */
+/* Elevation scale - warm, diffuse shadows so cards float off the cream paper
+ * without a grey halo. */
 export const elevation = {
   none: {},
   card: {
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
+    shadowColor: '#4A3B26',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
     elevation: 2,
   },
   raised: {
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 6,
+    shadowColor: '#4A3B26',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 22,
+    elevation: 8,
   },
 } as const;
 
