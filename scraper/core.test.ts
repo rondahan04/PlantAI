@@ -29,8 +29,23 @@ import {
   hasHebrew,
   sanityCheckPrices,
   callOpenAIJson,
+  searchWaitFor,
+  loadHostPlatforms,
+  RENDER_WAIT_MS,
+  HOMEPAGE_MAX_AGE_MS,
+  SEARCH_MAX_AGE_MS,
+  HOST_PLATFORM_TTL_MS,
+  UNKNOWN_TTL_MS,
+  PROBE_CONFIDENT_SCORE,
+  createRateLimiter,
+  rateLimitWaitMs,
+  tavilyLeads,
+  FIRECRAWL_RESCUE_BUDGET_MS,
 } from './core.ts';
 import type { ScrapeFn, ClassifyFn, Plant, VerificationReport } from './core.ts';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 test('detectPlatform: Shopify markers', () => {
   assert.equal(detectPlatform('![x](https://rootine.co.il/cdn/shop/files/a.png)'), 'shopify');
@@ -264,7 +279,7 @@ test('resolveScrape: primary returns markdown → Tavily not called', async () =
     tavilyCalls++;
     return 'TAVILY';
   };
-  const md = await resolveScrape({ url: 'x', tavilyKey: 'k', primary: okPrimary('FIRECRAWL'), fallback });
+  const md = await resolveScrape({ url: 'x', fallbackKey: 'k', primary: okPrimary('FIRECRAWL'), fallback });
   assert.equal(md, 'FIRECRAWL');
   assert.equal(tavilyCalls, 0);
 });
@@ -272,7 +287,7 @@ test('resolveScrape: primary returns markdown → Tavily not called', async () =
 test('resolveScrape: primary throws → Tavily rescues', async () => {
   const md = await resolveScrape({
     url: 'x',
-    tavilyKey: 'k',
+    fallbackKey: 'k',
     primary: throwPrimary('Firecrawl 500'),
     fallback: async () => 'TAVILY',
   });
@@ -282,14 +297,14 @@ test('resolveScrape: primary throws → Tavily rescues', async () => {
 test('resolveScrape: primary empty → Tavily rescues', async () => {
   const md = await resolveScrape({
     url: 'x',
-    tavilyKey: 'k',
+    fallbackKey: 'k',
     primary: okPrimary(''),
     fallback: async () => 'TAVILY',
   });
   assert.equal(md, 'TAVILY');
 });
 
-test('resolveScrape: no tavilyKey → empty stays empty, throw rethrows', async () => {
+test('resolveScrape: no fallbackKey → empty stays empty, throw rethrows', async () => {
   let tavilyCalls = 0;
   const fallback = async () => {
     tavilyCalls++;
@@ -307,7 +322,7 @@ test('resolveScrape: no tavilyKey → empty stays empty, throw rethrows', async 
 test('resolveScrape: both fail → empty+empty is "", throw+throw surfaces primary error', async () => {
   const bothEmpty = await resolveScrape({
     url: 'x',
-    tavilyKey: 'k',
+    fallbackKey: 'k',
     primary: okPrimary(''),
     fallback: async () => '',
   });
@@ -316,7 +331,7 @@ test('resolveScrape: both fail → empty+empty is "", throw+throw surfaces prima
     () =>
       resolveScrape({
         url: 'x',
-        tavilyKey: 'k',
+        fallbackKey: 'k',
         primary: throwPrimary('FIRECRAWL_ERR'),
         fallback: throwPrimary('TAVILY_ERR'),
       }),
@@ -882,4 +897,376 @@ test('callOpenAIJson: a good first answer costs no second call', async () => {
   } finally {
     globalThis.fetch = original;
   }
+});
+
+// --- scrape speed: cached reads, quick-then-careful search, host memory -----
+
+/* A ScrapeFn that records every call and answers from a URL-substring map. */
+function recordingScrape(map: Record<string, string>) {
+  const calls: Array<{ url: string; opts: any }> = [];
+  const fn: ScrapeFn = async (url, _key, opts) => {
+    calls.push({ url, opts: opts ?? {} });
+    for (const [needle, body] of Object.entries(map)) {
+      if (url.includes(needle)) return body;
+    }
+    return '';
+  };
+  return { fn, calls };
+}
+
+const SHOPIFY_HOME = '[all](https://shop.co.il/collections/all)';
+const RESULTS = '[מרווה](https://shop.co.il/products/salvia) ₪49';
+
+test('searchWaitFor: server-rendered platforms skip the render wait, others keep it', () => {
+  assert.equal(searchWaitFor('shopify'), 0);
+  assert.equal(searchWaitFor('woo'), 0);
+  assert.equal(searchWaitFor('WooCommerce'), 0); // alias-normalized
+  assert.equal(searchWaitFor('wix'), RENDER_WAIT_MS);
+  assert.equal(searchWaitFor('unknown'), RENDER_WAIT_MS);
+  assert.equal(searchWaitFor('some-llm-taught-platform'), RENDER_WAIT_MS);
+});
+
+test('identification reads accept a week-old Firecrawl copy', async () => {
+  const { fn, calls } = recordingScrape({ 'shop.co.il': SHOPIFY_HOME });
+  await identifyPlatform('https://shop.co.il', 'k', { scrape: fn });
+  assert.ok(calls.length >= 1);
+  for (const c of calls) assert.equal(c.opts.maxAge, HOMEPAGE_MAX_AGE_MS, c.url);
+});
+
+test('fetchSearchMarkdown: known platform reads quick first - no wait, hour-old copy OK', async () => {
+  const { fn, calls } = recordingScrape({ 'search?q=': RESULTS, 'shop.co.il': SHOPIFY_HOME });
+  const searcher = createSearcher('k', { scrape: fn, tavilyKey: 't' });
+  const r = await searcher.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
+  assert.equal(r.platform, 'shopify');
+  assert.equal(r.md, RESULTS);
+  const search = calls.filter((c) => c.url.includes('search?q='));
+  assert.equal(search.length, 1); // the quick read was enough
+  assert.equal(search[0].opts.waitFor, 0);
+  assert.equal(search[0].opts.maxAge, SEARCH_MAX_AGE_MS);
+  assert.equal(search[0].opts.tavilyKey, 't'); // unrendered read: Tavily leads
+});
+
+test('fetchSearchMarkdown: an empty quick read is followed by a careful one', async () => {
+  let searchReads = 0;
+  const fn: ScrapeFn = async (url, _key, opts) => {
+    if (url.includes('collections') || url === 'https://shop.co.il') return SHOPIFY_HOME;
+    if (url.includes('search?q=')) {
+      searchReads++;
+      // Quick read: the grid had not painted. Careful read: results.
+      return opts?.waitFor === RENDER_WAIT_MS ? RESULTS : '';
+    }
+    return '';
+  };
+  const calls: any[] = [];
+  const spy: ScrapeFn = (u, k, o) => (calls.push({ u, o }), fn(u, k, o));
+  const searcher = createSearcher('k', { scrape: spy, tavilyKey: 't' });
+  const r = await searcher.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
+  assert.equal(r.md, RESULTS);
+  assert.equal(searchReads, 2);
+  const careful = calls.filter((c) => c.u.includes('search?q=')).at(-1);
+  assert.equal(careful.o.waitFor, RENDER_WAIT_MS);
+  assert.equal(careful.o.maxAge, 0); // fresh, never a cached miss
+  assert.equal(careful.o.tavilyKey, 't');
+});
+
+test('fetchSearchMarkdown: a quick read that throws is not fatal - the careful read runs', async () => {
+  let first = true;
+  const fn: ScrapeFn = async (url) => {
+    if (!url.includes('search?q=')) return SHOPIFY_HOME;
+    if (first) {
+      first = false;
+      throw new Error('timeout');
+    }
+    return RESULTS;
+  };
+  const searcher = createSearcher('k', { scrape: fn });
+  const r = await searcher.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
+  assert.equal(r.md, RESULTS);
+});
+
+test('createSearcher: remembers a host platform on disk, and a new process skips identification', async () => {
+  const file = path.join(os.tmpdir(), `known-hosts-${process.pid}-${Date.now()}.json`);
+  try {
+    const a = recordingScrape({ 'search?q=': RESULTS, 'shop.co.il': SHOPIFY_HOME });
+    const s1 = createSearcher('k', { scrape: a.fn, hostsFile: file });
+    await s1.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
+    assert.ok(a.calls.some((c) => !c.url.includes('search?q=')), 'cold host was identified');
+    assert.equal(loadHostPlatforms(file)['shop.co.il']?.platform, 'shopify');
+
+    const b = recordingScrape({ 'search?q=': RESULTS });
+    const s2 = createSearcher('k', { scrape: b.fn, hostsFile: file });
+    const r = await s2.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
+    assert.equal(r.platform, 'shopify');
+    assert.ok(b.calls.every((c) => c.url.includes('search?q=')), 'warm host: search only');
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+});
+
+test('createSearcher: an expired host memory is re-identified, unknown is never written', async () => {
+  const file = path.join(os.tmpdir(), `known-hosts-${process.pid}-${Date.now()}-ttl.json`);
+  try {
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ 'shop.co.il': { platform: 'woo', at: 0 } }) // ancient
+    );
+    const a = recordingScrape({ 'search?q=': RESULTS, 'shop.co.il': SHOPIFY_HOME });
+    const s = createSearcher('k', { scrape: a.fn, hostsFile: file, now: () => HOST_PLATFORM_TTL_MS + 1 });
+    const r = await s.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
+    assert.equal(r.platform, 'shopify'); // not the stale 'woo'
+
+    const u = recordingScrape({});
+    const s3 = createSearcher('k', { scrape: u.fn, hostsFile: file });
+    await s3.fetchSearchMarkdown('https://nothing.co.il', 'x', 'nothing.co.il');
+    assert.equal(loadHostPlatforms(file)['nothing.co.il'], undefined);
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+});
+
+test('createSearcher: a remembered host that reads nothing is forgotten, so the next search re-identifies', async () => {
+  const file = path.join(os.tmpdir(), `known-hosts-${process.pid}-${Date.now()}-forget.json`);
+  try {
+    fs.writeFileSync(file, JSON.stringify({ 'shop.co.il': { platform: 'shopify', at: Date.now() } }));
+    const a = recordingScrape({}); // every read empty
+    const s = createSearcher('k', { scrape: a.fn, hostsFile: file });
+    const r = await s.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
+    assert.equal(r.md, '');
+    assert.equal(loadHostPlatforms(file)['shop.co.il'], undefined);
+    const before = a.calls.length;
+    await s.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
+    assert.ok(a.calls.length - before > 1, 'second search identified again');
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+});
+
+// --- the plan's minute window --------------------------------------------
+
+test('rateLimitWaitMs: Retry-After header wins, else the wait named in the body, else null', () => {
+  assert.equal(rateLimitWaitMs('7', 'ignored'), 7000);
+  assert.equal(
+    rateLimitWaitMs(null, 'Rate limit exceeded. Consumed (req/min): 15, Remaining (req/min): 0. ... please retry after 51s, resets at Wed'),
+    51000
+  );
+  assert.equal(rateLimitWaitMs(undefined, 'Rate limit exceeded'), null);
+  assert.equal(rateLimitWaitMs('', ''), null);
+});
+
+/* A fake clock + wait: `wait` advances the clock instead of sleeping. */
+function fakeClock() {
+  let t = 0;
+  const waits: number[] = [];
+  return {
+    now: () => t,
+    wait: async (ms: number) => {
+      waits.push(ms);
+      t += ms;
+    },
+    waits,
+    tick: (ms: number) => {
+      t += ms;
+    },
+  };
+}
+
+test('createRateLimiter: the N+1th request in a minute waits for the window to slide', async () => {
+  const c = fakeClock();
+  const rl = createRateLimiter(3, c);
+  await rl.take();
+  c.tick(1000);
+  await rl.take();
+  await rl.take();
+  assert.deepEqual(c.waits, []); // three fit
+  await rl.take(); // fourth: must wait until the first one is a minute old
+  assert.deepEqual(c.waits, [61000]); // until the first send is a minute (plus slack) old
+  assert.equal(c.now(), 62000);
+});
+
+test('createRateLimiter: holdUntil freezes every waiter until the server-named reset', async () => {
+  const c = fakeClock();
+  const rl = createRateLimiter(10, c);
+  rl.holdUntil(51000);
+  assert.equal(rl.waitEstimateMs(), 51000);
+  await rl.take();
+  assert.deepEqual(c.waits, [51000]);
+  assert.equal(rl.waitEstimateMs(), 0);
+  await rl.take(); // hold is over, no further wait
+  assert.deepEqual(c.waits, [51000]);
+});
+
+test('fetchSearchMarkdown: unknown platform probes one at a time and stops at a confident hit', async () => {
+  const calls: string[] = [];
+  const fn: ScrapeFn = async (url) => {
+    calls.push(url);
+    if (url.includes('post_type=product')) return 'results for מרווה: [a](https://x.co.il/products/a) ₪49';
+    return '';
+  };
+  const s = createSearcher('k', { scrape: fn });
+  const r = await s.fetchSearchMarkdown('https://x.co.il', 'מרווה', 'x.co.il');
+  assert.equal(r.platform, 'unknown');
+  assert.ok(scoreMarkdown(r.md, 'מרווה') >= PROBE_CONFIDENT_SCORE);
+  const probes = calls.filter((u) => u.includes('%D7%9E')); // encoded query
+  assert.equal(probes.length, 1, `probed: ${probes.join(' ')}`); // first probe hit, the other two never ran
+});
+
+test('fetchSearchMarkdown: an unconfident probe does not end the search - all probes run, best kept', async () => {
+  const calls: string[] = [];
+  const fn: ScrapeFn = async (url) => {
+    calls.push(url);
+    if (url.includes('post_type=product')) return 'homepage-ish, one price ₪49';
+    if (url.includes('/search?q=')) return 'results for מרווה [a](https://x.co.il/products/a) ₪49 ₪59';
+    return '';
+  };
+  const s = createSearcher('k', { scrape: fn });
+  const r = await s.fetchSearchMarkdown('https://x.co.il', 'מרווה', 'x.co.il');
+  assert.match(r.picked ?? '', /search\?q=/);
+  assert.ok(calls.filter((u) => u.includes('%D7%9E')).length >= 2);
+});
+
+test('createSearcher: an unknown verdict expires after an hour and the host is re-identified', async () => {
+  const c = fakeClock();
+  let home = '';
+  const fn: ScrapeFn = async (url) => (url.includes('%D7%9E') ? '' : home);
+  const s = createSearcher('k', { scrape: fn, now: c.now });
+  assert.equal((await s.fetchSearchMarkdown('https://x.co.il', 'מרווה', 'x.co.il')).platform, 'unknown');
+  home = SHOPIFY_HOME; // the site was readable all along; the first read was refused
+  c.tick(UNKNOWN_TTL_MS - 1);
+  assert.equal((await s.fetchSearchMarkdown('https://x.co.il', 'מרווה', 'x.co.il')).platform, 'unknown');
+  c.tick(2);
+  assert.equal((await s.fetchSearchMarkdown('https://x.co.il', 'מרווה', 'x.co.il')).platform, 'shopify');
+});
+
+test('fetchSearchMarkdown: a readable page that scores zero is the answer - no careful re-read', async () => {
+  const { fn, calls } = recordingScrape({
+    'search?q=': 'תוצאות חיפוש\nלא נמצאו מוצרים התואמים את הבחירה שלך.\nעמוד הבית | אודות | צור קשר',
+    'shop.co.il': SHOPIFY_HOME,
+  });
+  const searcher = createSearcher('k', { scrape: fn, tavilyKey: 't' });
+  const r = await searcher.fetchSearchMarkdown('https://shop.co.il', 'לבנדר', 'shop.co.il');
+  assert.equal(scoreMarkdown(r.md, 'לבנדר'), 0);
+  assert.equal(calls.filter((c) => c.url.includes('search?q=')).length, 1);
+});
+
+test('fetchSearchMarkdown: a bot wall on the quick read triggers the careful one', async () => {
+  const calls: any[] = [];
+  const fn: ScrapeFn = async (url, _k, opts) => {
+    calls.push({ url, opts });
+    if (!url.includes('search?q=')) return SHOPIFY_HOME;
+    return opts?.waitFor === RENDER_WAIT_MS ? RESULTS : 'Checking your browser before accessing the site. Please enable JavaScript.';
+  };
+  const searcher = createSearcher('k', { scrape: fn, tavilyKey: 't' });
+  const r = await searcher.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
+  assert.equal(r.md, RESULTS);
+  assert.equal(calls.filter((c) => c.url.includes('search?q=')).length, 2);
+});
+
+test('createSearcher: a confident probe hit teaches a per-host template - one request next time', async () => {
+  const file = path.join(os.tmpdir(), `known-hosts-${process.pid}-${Date.now()}-tpl.json`);
+  try {
+    const calls: string[] = [];
+    const fn: ScrapeFn = async (url) => {
+      calls.push(url);
+      if (url.includes('/search?q=')) return 'results for מרווה [a](https://x.co.il/products/a) ₪49';
+      return '';
+    };
+    const s1 = createSearcher('k', { scrape: fn, hostsFile: file });
+    await s1.fetchSearchMarkdown('https://x.co.il', 'מרווה', 'x.co.il');
+    assert.equal(loadHostPlatforms(file)['x.co.il']?.template, '{origin}/search?q={query}');
+
+    const calls2: string[] = [];
+    const fn2: ScrapeFn = async (url) => {
+      calls2.push(url);
+      return url.includes('/search?q=') ? 'results [b](https://x.co.il/products/b) ₪59' : '';
+    };
+    const s2 = createSearcher('k', { scrape: fn2, hostsFile: file });
+    const r = await s2.fetchSearchMarkdown('https://x.co.il', 'לבנדר', 'x.co.il');
+    assert.equal(r.platform, 'unknown');
+    assert.deepEqual(calls2, ['https://x.co.il/search?q=%D7%9C%D7%91%D7%A0%D7%93%D7%A8']); // no identification, no probes
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+});
+
+
+// --- which provider leads -------------------------------------------------
+
+test('tavilyLeads: only an unrendered read with a Tavily key goes to Tavily first', () => {
+  assert.equal(tavilyLeads({ waitFor: 0, tavilyKey: 't' }), true);
+  assert.equal(tavilyLeads({ waitFor: 3500, tavilyKey: 't' }), false); // rendering is Firecrawl's job
+  assert.equal(tavilyLeads({ waitFor: 0 }), false); // no key configured
+  assert.equal(tavilyLeads({ tavilyKey: 't' }), false); // waitFor defaults to a render
+});
+
+test('resolveScrape: a bot wall from the primary is treated as a failed read', async () => {
+  const wall = 'Checking your Browser… Verify you are human';
+  const md = await resolveScrape({
+    url: 'x',
+    fallbackKey: 'k',
+    primary: async () => wall,
+    fallback: async () => 'REAL PAGE',
+  });
+  assert.equal(md, 'REAL PAGE');
+});
+
+test('resolveScrape: when the fallback fails too, the primary content is kept', async () => {
+  const wall = 'Please enable JavaScript to continue';
+  assert.equal(
+    await resolveScrape({ url: 'x', fallbackKey: 'k', primary: async () => wall, fallback: async () => { throw new Error('down'); } }),
+    wall
+  );
+  assert.equal(
+    await resolveScrape({ url: 'x', fallbackKey: 'k', primary: async () => wall, fallback: async () => '' }),
+    wall
+  );
+});
+
+test('identifyPlatform: unrendered layers carry the Tavily key, the rendered one does not', async () => {
+  const seen: Array<{ url: string; waitFor?: number; tavilyKey?: string }> = [];
+  const scrape: ScrapeFn = async (url, _k, o) => {
+    seen.push({ url, waitFor: o?.waitFor, tavilyKey: o?.tavilyKey });
+    return '';
+  };
+  await identifyPlatform('https://x.co.il', 'k', { scrape, tavilyKey: 't' });
+  const rendered = seen.filter((c) => (c.waitFor ?? 0) > 0);
+  const asServed = seen.filter((c) => (c.waitFor ?? 0) === 0);
+  assert.ok(rendered.length >= 1);
+  assert.ok(asServed.length >= 2);
+  for (const c of rendered) assert.equal(c.tavilyKey, undefined, `rendered read must stay on Firecrawl: ${c.url}`);
+  for (const c of asServed) assert.equal(c.tavilyKey, 't', `as-served read should offer Tavily: ${c.url}`);
+});
+
+test('fetchSearchMarkdown: the quick read offers Tavily, the careful re-read renders', async () => {
+  const seen: Array<{ url: string; waitFor?: number; tavilyKey?: string }> = [];
+  const scrape: ScrapeFn = async (url, _k, o) => {
+    seen.push({ url, waitFor: o?.waitFor, tavilyKey: o?.tavilyKey });
+    if (!url.includes('search?q=')) return SHOPIFY_HOME;
+    return o?.waitFor === RENDER_WAIT_MS ? RESULTS : '';
+  };
+  const s = createSearcher('k', { scrape, tavilyKey: 't' });
+  const r = await s.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
+  assert.equal(r.md, RESULTS);
+  const searches = seen.filter((c) => c.url.includes('search?q='));
+  assert.equal(searches.length, 2);
+  assert.deepEqual({ waitFor: searches[0].waitFor, tavilyKey: searches[0].tavilyKey }, { waitFor: 0, tavilyKey: 't' });
+  assert.equal(searches[1].waitFor, RENDER_WAIT_MS);
+});
+
+test('fetchSearchMarkdown: probes read as served, then one rendered attempt when none scored', async () => {
+  const seen: Array<{ url: string; waitFor?: number; tavilyKey?: string }> = [];
+  const scrape: ScrapeFn = async (url, _k, o) => {
+    seen.push({ url, waitFor: o?.waitFor, tavilyKey: o?.tavilyKey });
+    // Only a rendered read of the first candidate reveals the grid.
+    if (url.includes('post_type=product') && o?.waitFor === RENDER_WAIT_MS) return RESULTS;
+    return '';
+  };
+  const s = createSearcher('k', { scrape, tavilyKey: 't' });
+  const r = await s.fetchSearchMarkdown('https://x.co.il', 'מרווה', 'x.co.il');
+  assert.equal(r.md, RESULTS);
+  const probes = seen.filter((c) => c.url.includes('%D7%9E') && c.waitFor === 0);
+  assert.equal(probes.length, 3);
+  for (const p of probes) assert.equal(p.tavilyKey, 't');
+  const renderedRescue = seen.filter((c) => c.url.includes('%D7%9E') && c.waitFor === RENDER_WAIT_MS);
+  assert.equal(renderedRescue.length, 1);
+  assert.equal(renderedRescue[0].tavilyKey, undefined); // rendering is the point; Tavily cannot
 });
