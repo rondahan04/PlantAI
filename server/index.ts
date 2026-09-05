@@ -357,6 +357,9 @@ const server = http.createServer(async (req, res) => {
       gate: gate.stats(),
       jobs: jobs.stats(),
       lastSuccess,
+      // `cache.enabled: false` means every search is a live paid scrape. It is
+      // the only failure here that costs money while looking perfectly healthy.
+      cache: nurseryCache.stats(),
     };
     if (u.searchParams.get('errors') === '1') {
       body.errors = gate.checkSecret(ip, secret).allow ? recentErrors : 'secret required';
