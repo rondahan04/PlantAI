@@ -246,9 +246,12 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
     deletion. `plantRepo` is the facade, `plantCloud` the tested network layer,
     `supabasePlantCloud` the only file that talks to Supabase. New route `POST /api/care-plan`.
     All four migrations applied to the live project and verified.
-    ⚠️ **Two things still open** - the 12-step device script (Trello #80), and whether Render
-    actually has `SUPABASE_SERVICE_ROLE_KEY`, without which the shared scrape cache is silently
-    off and every search is a live paid scrape (Trello #81).
+    ⚠️ **One thing still open** - the 12-step device script (Trello #80).
+    Trello #81 is now answerable rather than open: `/health` reports
+    `cache: {enabled, hits, misses, stores, errors}` as of 2026-09-05, so
+    "is the shared cache actually on in production" is one curl and one boolean
+    instead of an inference from the provider bill. Production still predates
+    the field - read it after this deploys.
 
 22. ✅ **[M3] E4. Hebrew, all three layers - done 2026-09-01 (`df348d1`, Trello #6).**
     The app's own ~320 strings, the model's diagnosis and care plans, and the species
@@ -266,6 +269,26 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
     ⚠️ **The scan flow has NOT been verified on a device** (Trello #82) - a real Hebrew
     diagnosis with its condition colour and buy button intact.
 
+23. ✅ **[ops] Silent failures made visible - done 2026-09-05.** Five items that needed no
+    OpenAI credits and no device check, so all five are verified by tests, a local server and
+    CI rather than by eye.
+    - **Scrape cache visibility (Trello #81).** A missing `SUPABASE_SERVICE_ROLE_KEY` breaks
+      nothing and costs money on every search: the cache answers "miss" forever, the scrape
+      runs, the logs look normal. `/health` now carries `cache: {enabled, hits, misses,
+      stores, errors}`. A disabled cache counts nothing - counting its lookups as misses
+      would report a 0% hit rate on a server with no cache, the exact reading being ruled out.
+    - **CI.** See BACKLOG. Uncovered that `npm run typecheck` was already red on main.
+    - **`payload_too_large` client mapping.** The 2026-08-22 live bug: an oversized photo was
+      reported as "the network connection was lost". RN tears the request down mid-body so the
+      413 was never read, and nothing mapped the code even when it arrived. Now refused before
+      the upload starts (`src/lib/uploadLimit.ts`), which also stops spending a tethered
+      hotspot's data to earn an error. Mapping moved to `src/lib/diagnosisFailure.ts` because
+      `plantDiagnosis.ts` imports expo-file-system and so was untestable under `node --test`.
+    - **E11 scrape freshness.** See BACKLOG.
+    - **Stock unknown.** See BACKLOG.
+    ⚠️ **Nothing here was verified on a device, by design** - these were chosen as the items
+    that do not need one. The camera's too-large copy has never been seen rendered.
+
 ---
 
 ## BACKLOG (unordered)
@@ -275,15 +298,15 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
 | P2 | In-app live nursery discovery | M | GPS → `scraper/places.ts` `discoverNurseries()` server-side. The real product goal. Gated on scrape speed. |
 | - | Scrape speed | S | Quality problem now, not correctness. Best observed 47s (2026-08-17, 7 nurseries); worst seen 480s. **Four serial round trips removed 2026-08-25**, all on the slow path: `identifyPlatform` L2+L3 now fire as one parallel stage instead of three serial scrapes; the homepage read during identification is cached per host and reused by the availability estimate instead of being re-scraped; the auditor pass is skipped when extraction returned 0 rows (the common case in a fan-out). Still open: cheaper model, precomputed index. Needs a fresh timed run to re-measure. |
 | - | **Scrape success rate** | M | The real quality metric, now measurable: `PipelineResult.funnel.stage` splits every 0-item site into `no_markdown` / `no_excerpt` / `no_match` / `rejected`, logged per site by the dashboard. Fixed 2026-08-25: Wix `/product-page/` links and Hebrew/Latin ILS forms (`ש"ח`, `שח`, `NIS`, `ILS`) were invisible to `priceFocusedExcerpt` + `scoreMarkdown`, so Wix stores and word-priced sites returned an empty excerpt and the model never saw the page. **Next: run the dashboard, tally stages across ~20 sites, and fix whichever bucket dominates.** Candidates if `no_excerpt` leads: more platform link shapes. If `no_match`: the site's own search is failing (try a sitemap/collection crawl instead of `?s=`). If `rejected`: the auditor is too strict about stock wording. |
-| - | Show "stock unknown" instead of dropping the row | S | The auditor rejects extractor rows whose page never states stock - e.g. `[decogarden.co.il] verification REJECTED (conf 92): the source text does not explicitly state stock status`. Correct call by the verifier, but the user loses a nursery that does stock the plant. Product decision: surface as `unknown` rather than drop. |
+| ✅ | ~~Show "stock unknown" instead of dropping the row~~ | S | **Done 2026-09-05.** Auditor prompt now keeps a row whose product and price are supported but whose stock is unstated, as `availability: "unknown"`; it still drops unsupported/invented rows. Pipeline keeps `inStockKnown: false` for those (the flag means "exact listing" and the badge reads it as certainty), carries a `stock_unknown` availability, and the badge reads "Listed · stock not stated", tone `maybe`. Out-of-stock untouched - sold out is knowledge, not absence of it. The auditor half needs OpenAI credits to exercise live; the decision half is tested from injected verdicts. |
 | E2 | Photo timeline per plant | M | Nearly free after PlantStore (5). |
 | E3 | Shareable diagnosis card | M | Virality after retention. |
 | E6 | Light meter | M | Novelty, unclear retention. |
 | E7 | Cache nursery results per plant | M | Nothing cached across jobs today. |
 | E8 | Inventory index as dataset | L | Platform play, premature. |
-| E11 | Scrape freshness monitoring | M | Live silent-failure gap. **Promote the day PlantStore (5) lands.** |
+| ✅ | ~~E11 Scrape freshness monitoring~~ | M | **Done 2026-09-05.** `server/scrapeHealth.ts` retains per-host `ExtractFunnel.stage` (plus timeout/error), which the pipeline computed and threw away. Draws the one distinction that matters: `no_match`/`rejected` mean we READ the catalogue and the plant was absent (normal), everything else means we never read it (our fault). Stale after 3 consecutive unreadable reads - one timeout is weather - cleared by a single good read. Wired as an optional `onSiteRead` observer on `PipelineDeps`, wrapped so a broken counter cannot fail a paid scrape. `/health` gets counts; per-host detail sits behind `?errors=1` + the secret. |
 | - | Firecrawl weekly cron | S | `scripts/scrape-nurseries.ts` as a GitHub Action. |
-| - | CI/CD for the container | M | No `.github/workflows/`; deploys are manual builds from the laptop. |
+| ✅ | ~~CI/CD for the container~~ | M | **Done 2026-09-05.** `.github/workflows/ci.yml`: `npm ci` + both tsconfig projects + full suite, and a second job that builds the Dockerfile, runs the container and requires `/health` to answer. No secrets - the smoke test passes four obviously fake provider keys to clear the server's fail-fast guard, so a fork's PR runs it in full. Found and fixed on the way: `npm run typecheck` was red on main (plantRepo tests never typechecked), so CI could never have gone green. |
 | - | `jest-expo` + RN testing library | L | 17 untested flows, second test stack. After M2. |
 | - | Streaming partial nursery results | M | - |
 | - | Per-device quota / App Attest | M/L | Real protection vs a bundled secret. |
