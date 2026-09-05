@@ -50,6 +50,9 @@ export interface AvailabilityCopy {
   inStock: (shipsToHome: boolean) => string;
   notFound: string;
   estimate: (band: string, confidence: number) => string;
+  /* Found the product and its price; the page never says whether it is in
+   * stock. Distinct from both 'in stock' and 'did not find it'. */
+  stockUnknown: string;
   unknown: string;
   unknownCallToConfirm: string;
 }
@@ -62,6 +65,7 @@ export const EN_AVAILABILITY_COPY: AvailabilityCopy = {
   inStock: (shipsToHome) => `In stock now · ${shipsToHome ? 'ships to home' : 'local pickup'}`,
   notFound: "Didn't find the product",
   estimate: (bandLabel, confidence) => `${bandLabel} · ${confidence}%`,
+  stockUnknown: 'Listed · stock not stated',
   unknown: 'Availability unknown',
   unknownCallToConfirm: 'Availability unknown - call to confirm',
 };
@@ -118,6 +122,22 @@ export function availabilityBadge(
   }
 
   const a = n.availability;
+
+  /*
+   * We have a real listing with a real price; what we lack is a stock
+   * statement. Before this branch the auditor dropped these rows outright and
+   * the shop vanished from the results entirely - so a nursery that does stock
+   * the plant was hidden, on the grounds that we could not prove it did. Tone
+   * is 'maybe', never 'good': the price is evidence, the stock is not.
+   */
+  if (a?.kind === 'stock_unknown') {
+    return {
+      text: words.stockUnknown,
+      tone: 'maybe',
+      detail: a.detail,
+      hasDetail: Boolean(a.detail),
+    };
+  }
 
   if (a?.kind === 'estimate' && typeof a.confidence === 'number') {
     return {

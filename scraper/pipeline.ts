@@ -87,7 +87,7 @@ export interface Availability {
    *                likelihood: there is no number to honestly report.
    * `error`      - the scrape itself failed.
    */
-  kind: 'estimate' | 'unreadable' | 'error';
+  kind: 'estimate' | 'unreadable' | 'error' | 'stock_unknown';
   confidence?: number; // `estimate` only
   detail: string; // full reasoning / error text, shown on demand
 }
@@ -287,11 +287,31 @@ async function scrapeOne(
     noteSite(host, funnel?.stage ?? 'no_markdown');
     if (plants.length > 0) {
       const best = cheapestMatch(plants);
+      /*
+       * A listing whose page never states stock. The auditor used to throw
+       * these rows out - correctly, by its own rules, since nothing in the
+       * source supported an in-stock claim - and the user lost a nursery that
+       * does sell the plant. Keeping the row and saying we do not know is the
+       * honest version of both facts: we found the product and its price, we
+       * did not find a stock statement.
+       *
+       * `inStockKnown` stays FALSE here. It means "we have an exact listing",
+       * and the badge reads it as certainty - claiming it for a page that never
+       * mentioned stock would be inventing the one thing the auditor refused to
+       * invent.
+       */
+      const stockKnown = best.availability !== 'unknown';
       return {
         ...base,
         plantPrice: best.price,
         hasPlant: best.availability !== 'out_of_stock',
-        inStockKnown: true,
+        inStockKnown: stockKnown,
+        availability: stockKnown
+          ? undefined
+          : {
+              kind: 'stock_unknown',
+              detail: 'We found this plant listed with a price, but the page does not say whether it is currently in stock.',
+            },
         outcome: 'found',
         productUrl: best.url,
         productName: best.name,

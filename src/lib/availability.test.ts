@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   availabilityBadge,
+  EN_AVAILABILITY_COPY,
   isWorthShowing,
   LIKELY_AT_OR_ABOVE,
   MAYBE_AT_OR_ABOVE,
@@ -116,4 +117,28 @@ test('nothing at all falls back to the original copy', () => {
   const b = availabilityBadge(base());
   assert.equal(b.text, 'Availability unknown - call to confirm');
   assert.equal(b.hasDetail, false);
+});
+
+test('a listed plant with no stock statement reads as listed, not as in stock', () => {
+  // The row the auditor used to drop. It must not borrow the confident
+  // "In stock now" badge - the price is evidence, the stock is not - and it
+  // must not read as "didn't find the product", because we did find it.
+  const badge = availabilityBadge({
+    inStockKnown: false,
+    hasPlant: true,
+    shipsToHome: false,
+    outcome: 'found',
+    availability: { kind: 'stock_unknown', detail: 'The page does not say.' },
+  });
+
+  assert.equal(badge.text, EN_AVAILABILITY_COPY.stockUnknown);
+  assert.equal(badge.tone, 'maybe');
+  assert.notEqual(badge.text, EN_AVAILABILITY_COPY.inStock(false));
+  assert.notEqual(badge.text, EN_AVAILABILITY_COPY.notFound);
+  assert.equal(badge.hasDetail, true);
+});
+
+test('a stock-unknown shop is still worth showing', () => {
+  // It was being removed from the results entirely. That was the bug.
+  assert.equal(isWorthShowing({ outcome: 'found' }), true);
 });

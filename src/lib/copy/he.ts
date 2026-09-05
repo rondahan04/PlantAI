@@ -54,6 +54,7 @@ export const he: Copy = {
       `במלאי עכשיו · ${shipsToHome ? 'משלוח עד הבית' : 'איסוף עצמי'}`,
     notFound: 'לא מצאנו את המוצר',
     estimate: (bandLabel: string, confidence: number) => `${bandLabel} · ${confidence}%`,
+    stockUnknown: 'מופיע בקטלוג · המלאי לא צוין',
     unknown: 'זמינות לא ידועה',
     unknownCallToConfirm: 'זמינות לא ידועה - התקשרו לוודא',
   },

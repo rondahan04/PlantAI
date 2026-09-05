@@ -1096,6 +1096,7 @@ Rules:
 - is_valid = true only if every returned item is faithful to the source.
 - corrected_output: the verified, clean list. Fix minor errors (wrong price, bad availability), DROP hallucinated/unsupported items. If everything was already correct, return the same items.
 - Never invent products that are not in the source text.
+- A MISSING STOCK STATEMENT IS NOT A REASON TO DROP A ROW. If the product and its price are supported by the source but the source never says whether it is in stock, KEEP the row and set availability to "unknown". Dropping it removes a shop that does sell the plant, on the grounds that we could not prove it - "unknown" states exactly what the source supports. Drop a row only when the product or its price is unsupported or invented.
 
 EXTRACTED JSON TO AUDIT:
 ${JSON.stringify({ plants }, null, 2)}
