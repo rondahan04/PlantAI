@@ -1,6 +1,7 @@
 import { File } from 'expo-file-system';
 import { supabase } from './supabase';
 import { createCloudPlantLibrary, type CloudDeps, type CloudRow } from './plantCloud';
+import { createSignedUrlCache } from './signedUrlCache';
 
 /*
  * The one place `plantCloud.ts` is bound to the real Supabase client and
@@ -17,17 +18,51 @@ import { createCloudPlantLibrary, type CloudDeps, type CloudRow } from './plantC
  */
 const SIGNED_URL_TTL_SECONDS = 60 * 60;
 
-async function resolvePhotoUrl(path: string | null): Promise<string | null> {
-  if (!path) return null;
-  try {
-    const { data, error } = await supabase.storage
-      .from('plant-photos')
-      .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
-    if (error || !data) return null;
-    return data.signedUrl;
-  } catch {
-    return null;
+/*
+ * Signed URLs for a whole page of rows, in ONE request.
+ *
+ * This used to be `createSignedUrl` per row inside a Promise.all - thirty
+ * plants meant thirty HTTPS round trips before the first photo could paint,
+ * repeated on every Portfolio mount because nothing remembered the answers.
+ * `createSignedUrls` (plural) signs the batch in a single call, and the cache
+ * means a second read inside the hour asks for nothing at all.
+ *
+ * Failure stays per-path, not per-batch: the API reports an error against each
+ * path, and one unreadable photo must not blank out the other twenty-nine.
+ */
+const urlCache = createSignedUrlCache({ ttlMs: SIGNED_URL_TTL_SECONDS * 1000 });
+
+export function clearSignedUrlCache(): void {
+  urlCache.clear();
+}
+
+async function resolvePhotoUrls(paths: (string | null)[]): Promise<Map<string, string>> {
+  const wanted = paths.filter((p): p is string => Boolean(p));
+  const needed = urlCache.missing(wanted);
+
+  if (needed.length > 0) {
+    try {
+      const { data, error } = await supabase.storage
+        .from('plant-photos')
+        .createSignedUrls(needed, SIGNED_URL_TTL_SECONDS);
+      if (!error && data) {
+        for (const row of data) {
+          // `path` comes back on each entry; skip the ones the API failed.
+          if (row.signedUrl && row.path) urlCache.put(row.path, row.signedUrl);
+        }
+      }
+    } catch {
+      /* Same rule as before: an unsigned photo renders as no photo, and must
+       * never fail the library read that carries everything else. */
+    }
   }
+
+  const out = new Map<string, string>();
+  for (const path of wanted) {
+    const url = urlCache.get(path);
+    if (url) out.set(path, url);
+  }
+  return out;
 }
 
 const deps: CloudDeps = {
@@ -50,9 +85,11 @@ const deps: CloudDeps = {
     if (error || !data) return [];
 
     const rows = data as CloudRow[];
-    return Promise.all(
-      rows.map(async (row) => ({ ...row, photo_path: await resolvePhotoUrl(row.photo_path) }))
-    );
+    const urls = await resolvePhotoUrls(rows.map((row) => row.photo_path));
+    return rows.map((row) => ({
+      ...row,
+      photo_path: row.photo_path ? (urls.get(row.photo_path) ?? null) : null,
+    }));
   },
 
   /*

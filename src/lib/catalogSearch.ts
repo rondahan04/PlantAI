@@ -106,9 +106,28 @@ function flatten(): IndexedEntry[] {
   return out;
 }
 
-const INDEX: IndexedEntry[] = flatten();
+/*
+ * Built on FIRST USE, not at import.
+ *
+ * `flatten()` walks the whole catalog and folds a search haystack for every
+ * entry - measured at ~13ms on a development Mac, so meaningfully more than
+ * that under Hermes on a mid-range phone. It used to run at module scope,
+ * which meant it ran during every cold start: `App.tsx` imports the species
+ * picker statically, so importing the screen was enough to pay for the index,
+ * whether or not the user ever opened it. Most sessions never do.
+ *
+ * Memoised after the first call, so a user who does open the picker pays once
+ * and typing stays instant (a search over the built index is ~0.08ms).
+ */
+let indexCache: IndexedEntry[] | null = null;
+function index(): IndexedEntry[] {
+  return (indexCache ??= flatten());
+}
 
-export const CATALOG_ENTRIES: CatalogEntry[] = INDEX.map((i) => i.entry);
+let entriesCache: CatalogEntry[] | null = null;
+export function catalogEntries(): CatalogEntry[] {
+  return (entriesCache ??= index().map((i) => i.entry));
+}
 
 function sectionTitle(e: CatalogEntry, lang: 'en' | 'he'): string {
   return [e.family, e.genus, e.group].map((n) => taxonDisplayName(n, lang)).join(' - ');
@@ -147,7 +166,7 @@ function toSections(entries: CatalogEntry[], lang: 'en' | 'he'): CatalogSection[
 /* The whole tree, sectioned. What the picker shows before anything is typed -
  * an empty search field should be a menu, not a void. */
 export function browseSections(lang: 'en' | 'he' = 'en'): CatalogSection[] {
-  return toSections(CATALOG_ENTRIES, lang);
+  return toSections(catalogEntries(), lang);
 }
 
 /*
@@ -160,7 +179,7 @@ export function searchCatalog(query: string, lang: 'en' | 'he' = 'en'): CatalogS
   const terms = fold(query).split(' ').filter(Boolean);
   if (terms.length === 0) return browseSections(lang);
 
-  const hits = INDEX.filter((i) => terms.every((term) => i.haystack.includes(term))).map(
+  const hits = index().filter((i) => terms.every((term) => i.haystack.includes(term))).map(
     (i) => i.entry
   );
   return toSections(hits, lang);
@@ -173,5 +192,5 @@ export function searchCatalog(query: string, lang: 'en' | 'he' = 'en'): CatalogS
  */
 export function catalogEntryById(id: string | undefined): CatalogEntry | undefined {
   if (!id) return undefined;
-  return CATALOG_ENTRIES.find((e) => e.id === id);
+  return catalogEntries().find((e) => e.id === id);
 }

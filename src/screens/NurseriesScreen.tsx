@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Animated, Linking, Alert, ActivityIndicator } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import MapView, { Marker } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -163,7 +164,16 @@ function NurseryCard({
              than cropping the wordmark to fill the frame. */
           <Image source={nurseryLogo(nursery.id)} style={[s.cardImage, s.cardLogo]} resizeMode="contain" />
         ) : nursery.image ? (
-          <Image source={{ uri: nursery.image }} style={s.cardImage} />
+          <ExpoImage
+          source={{ uri: nursery.image }}
+          style={s.cardImage}
+          contentFit="cover"
+          /* Remote Places photos, so the disk cache is what stops a second
+           * search re-downloading every shop's picture. */
+          cachePolicy="memory-disk"
+          recyclingKey={nursery.id}
+          transition={120}
+        />
         ) : (
           <View style={[s.cardImage, s.imagePlaceholder]}>
             <Ionicons name="leaf-outline" size={36} color={t.color.primary} />

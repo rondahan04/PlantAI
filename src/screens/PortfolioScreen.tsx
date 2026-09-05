@@ -734,7 +734,7 @@ export default function PortfolioScreen({ navigation }: Props) {
           renderItem={({ item }) => (
             <PlantCard
               plant={item}
-              slots={schedules.get(item.id) ?? []}
+              slots={schedules.get(item.id)}
               onPress={() => navigation.navigate('PlantDetail', { plantId: item.id })}
               onEdit={() => navigation.navigate('EditPlant', { plantId: item.id })}
             />

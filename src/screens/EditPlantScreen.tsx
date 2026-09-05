@@ -31,6 +31,7 @@ import {
   Image,
   Alert,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -205,7 +206,13 @@ export default function EditPlantScreen({ navigation, route }: Props) {
         <View style={s.card}>
           <Text style={s.cardTitle}>{copy.editPlant.photo}</Text>
           {shownPhoto ? (
-            <Image source={{ uri: shownPhoto }} style={s.preview} accessibilityIgnoresInvertColors />
+            <ExpoImage
+              source={{ uri: shownPhoto }}
+              style={s.preview}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              accessibilityIgnoresInvertColors
+            />
           ) : (
             <View style={[s.preview, s.previewEmpty]}>
               <Ionicons name="leaf-outline" size={28} color={t.color.textMuted} />
