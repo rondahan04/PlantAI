@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  CATALOG_ENTRIES,
+  catalogEntries,
   browseSections,
   catalogDisplayName,
   catalogEntryById,
@@ -11,8 +11,8 @@ import {
 } from './catalogSearch.ts';
 
 test('every entry id is unique', () => {
-  const ids = new Set(CATALOG_ENTRIES.map((e) => e.id));
-  assert.equal(ids.size, CATALOG_ENTRIES.length);
+  const ids = new Set(catalogEntries().map((e) => e.id));
+  assert.equal(ids.size, catalogEntries().length);
 });
 
 test('an empty query returns the whole tree, grouped', () => {
@@ -119,7 +119,7 @@ test('the English name still finds the same entry, because growers type both', (
 });
 
 test('an entry with no Hebrew name shows its English one rather than nothing', () => {
-  const entry = CATALOG_ENTRIES.find((e) => !e.nameHe)!;
+  const entry = catalogEntries().find((e) => !e.nameHe)!;
   assert.equal(catalogDisplayName(entry, 'he'), entry.name);
   assert.equal(catalogDisplayName(entry, 'en'), entry.name);
 });
