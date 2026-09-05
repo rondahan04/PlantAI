@@ -10,7 +10,6 @@
  */
 
 import type { StoredPlant } from '../services/plantStore';
-import type { DueItem } from './portfolio';
 
 /*
  * Plants a bulk diagnosis can actually run on, and how many it has to leave
@@ -42,71 +41,33 @@ export function diagnoseTargets(plants: StoredPlant[]): DiagnoseTargets {
 }
 
 /*
- * Plants "water all" may mark, which is NOT every plant.
+ * Plants "water all" marks: all of them.
  *
- * Watering is recorded, not just displayed: the stamp resets the plant's clock
- * and appends to a log the history screen shows. Marking a plant that was
- * watered yesterday therefore records water it never got AND pushes its next
- * reminder a full interval late - and overwatering is the most common way a
- * houseplant dies, so the failure is not cosmetic.
+ * This was previously restricted to what was due, overdue, or never watered,
+ * on the reasoning that marking a plant watered yesterday records water it
+ * never got and pushes its next reminder a full interval late. That reasoning
+ * is still true, and the button no longer honours it - by explicit product
+ * decision (2026-09-05), because the label says "Water all" and a user who has
+ * just walked round the flat with a can has in fact watered all of them.
  *
- * Two groups qualify, for different reasons:
+ * The honesty moved into the confirmation instead: it now says plainly that
+ * plants which were not due are included, so the user is agreeing to the
+ * schedule reset rather than discovering it later.
  *
- *   due / overdue  what the user just walked around with a can and did. This
- *                  is the errand the button exists for.
- *   never watered  a plant with a schedule that has no first watering logged.
- *                  It has no due date - that is precisely why `dueSoon` leaves
- *                  it out - but "no anchor yet" is not "recently watered", and
- *                  treating the two the same meant the button skipped every
- *                  plant the user had just added. Marking it is what starts the
- *                  schedule the plant is already waiting on.
+ * Everything, including plants with no schedule at all: for those, the stamp
+ * is simply a log entry with nothing to reschedule.
  *
- * A plant merely APPROACHING its due date is still excluded: `dueSoon` carries
- * the whole week, and watering something three days early is the overwatering
- * case above wearing a different hat.
- *
- * Deduplicated by plant across both groups: `due` carries one row per care
- * KIND, so a plant due for both water and fertilizer appears twice and would
- * otherwise be marked (and counted) twice.
+ * Deduplicated by id defensively. The list comes from one store read so it
+ * should not repeat, but watering a plant twice in one batch would write two
+ * entries into the history for a single errand.
  */
-export interface WaterTargets {
-  targets: StoredPlant[];
-  /* The two reasons, counted separately so the confirmation can say which is
-   * which. They sum to targets.length. */
-  dueCount: number;
-  firstWaterCount: number;
-}
-
-export function waterTargets(due: DueItem[], neverWatered: StoredPlant[] = []): WaterTargets {
+export function waterTargets(plants: StoredPlant[]): StoredPlant[] {
   const seen = new Set<string>();
-  const targets: StoredPlant[] = [];
-  let dueCount = 0;
-  let firstWaterCount = 0;
-
-  for (const item of due) {
-    if (item.kind !== 'water') continue;
-    // `dueSoon` also carries plants that are merely approaching. Only what is
-    // actually due (today) or already late gets marked.
-    if (item.daysUntilDue > 0) continue;
-    if (seen.has(item.plant.id)) continue;
-    seen.add(item.plant.id);
-    targets.push(item.plant);
-    dueCount += 1;
-  }
-
-  /*
-   * Second, so a plant that somehow appears in both is counted as due - the
-   * stronger, date-backed reason - rather than as a first watering. The two
-   * are mutually exclusive today (a never-watered plant has no due date, so
-   * `dueSoon` cannot carry it), but the order makes that assumption harmless
-   * rather than load-bearing.
-   */
-  for (const plant of neverWatered) {
+  const out: StoredPlant[] = [];
+  for (const plant of plants) {
     if (seen.has(plant.id)) continue;
     seen.add(plant.id);
-    targets.push(plant);
-    firstWaterCount += 1;
+    out.push(plant);
   }
-
-  return { targets, dueCount, firstWaterCount };
+  return out;
 }
