@@ -162,6 +162,10 @@ export type RootStackParamList = {
     diagnosis: PlantDiagnosis;
   };
   PlantDetail: { plantId: string };
+  /* Rename a plant and replace its picture. Takes only the id for the same
+   * reason PlantDetail does: params are persisted and restored, so the screen
+   * re-reads the plant rather than carrying a stale copy of it. */
+  EditPlant: { plantId: string };
   /* `kind` is optional so the existing navigate({ plantId }) call sites keep
    * working and default to watering. */
   WateringHistory: { plantId: string; kind?: 'water' | 'repot' | 'fertilizer' };

@@ -4,6 +4,7 @@ import { cloudMirror } from './cloudMirror';
 import { supabasePlantCloud } from './supabasePlantCloud';
 import { getSessionHint } from './sessionHint';
 import { supabase } from './supabase';
+import { plantPhotos } from './photos';
 
 /*
  * `getUserId` reads the last user id this module observed from Supabase -
@@ -29,6 +30,7 @@ export const plantRepo = createPlantRepo({
   guest: plantLibrary,
   mirror: cloudMirror,
   cloud: supabasePlantCloud,
+  photos: plantPhotos,
   getSessionHint,
   getUserId: () => cachedUserId,
 });

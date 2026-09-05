@@ -53,6 +53,12 @@ export interface RepoDeps {
   guest: PlantStore;
   mirror: PlantStore;
   cloud: CloudPlantLibrary;
+  /*
+   * The guest half of a photo swap: copies a picker's cache URI into storage
+   * this app owns. Only `adopt` is needed here, so only `adopt` is asked for -
+   * the tests hand over a two-line fake instead of a whole photo store.
+   */
+  photos: { adopt(id: string, sourceUri: string): Promise<string | null> };
   getSessionHint(): boolean;
   getUserId(): string | null;
 }
@@ -65,7 +71,7 @@ export interface RepoDeps {
  * mirror ahead of the account it is supposed to be a cache of.
  */
 export function createPlantRepo(deps: RepoDeps) {
-  const { guest, mirror, cloud, getSessionHint, getUserId } = deps;
+  const { guest, mirror, cloud, photos, getSessionHint, getUserId } = deps;
 
   /*
    * `getSessionHint()` and `getUserId()` are two independently-updated sync
@@ -231,6 +237,53 @@ export function createPlantRepo(deps: RepoDeps) {
     return { ok: true, plant: updated };
   }
 
+  /*
+   * Replace a plant's photograph.
+   *
+   * Kept out of `update` because a photo is not a field: guest photos live as
+   * files this device owns, cloud photos as objects in a private bucket whose
+   * paths only `refreshFromCloud` can turn into renderable signed URLs. One
+   * method, two genuinely different stories, rather than an `update` that
+   * silently means something different depending on who is signed in.
+   *
+   * `adopt` is the guest half - it copies the picker's cache URI into the app's
+   * own directory, because a cache URI is deleted by the OS whenever it likes
+   * and a plant whose photo vanished next week is worse than one with none.
+   */
+  async function setPhoto(id: string, sourceUri: string): Promise<RepoResult<{ plant: StoredPlant }>> {
+    if (!isLoggedIn()) {
+      const adopted = await photos.adopt(id, sourceUri);
+      // A failed copy is not fatal: the picker URI still renders this session,
+      // and the repair pass on Home re-adopts it later.
+      const result = guest.update(id, { photoUri: adopted ?? sourceUri });
+      return result.ok ? { ok: true, plant: result.plant } : { ok: false, reason: result.reason };
+    }
+
+    const userId = getUserId();
+    if (!userId) return { ok: false, reason: 'network' };
+    const current = mirror.load().plants.find((p) => p.id === id);
+    if (!current) return { ok: false, reason: 'not_found' };
+
+    const uploaded = await cloud.replacePhoto(userId, id, sourceUri);
+    if (!uploaded.ok) return { ok: false, reason: uploaded.reason };
+
+    /*
+     * Re-read rather than mirroring the object path: the bucket is private, so
+     * the path is not something <Image> can render, and only fetchAll signs it.
+     * Same reasoning as `save`. A failed refresh still reports success - the
+     * new photo IS stored - and shows the old picture until the next load,
+     * which beats telling the user their edit failed when it did not.
+     */
+    try {
+      const refreshed = await refreshFromCloud();
+      const resolved = refreshed.plants.find((p) => p.id === id);
+      if (resolved) return { ok: true, plant: resolved };
+    } catch {
+      /* fall through */
+    }
+    return { ok: true, plant: current };
+  }
+
   async function update(
     id: string,
     patch: Partial<Pick<StoredPlant, 'reminderId' | 'soilMedium' | 'nickname'>>
@@ -337,6 +390,7 @@ export function createPlantRepo(deps: RepoDeps) {
     loadLocal,
     refreshFromCloud,
     save,
+    setPhoto,
     saveManual,
     markWatered,
     markCare,

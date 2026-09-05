@@ -284,6 +284,37 @@ export const en = {
     saveFailedNetwork: "We couldn't reach your account. Check your connection and try again.",
     saveFailedStorage: 'Your device is out of storage space. Free some space and try again.',
   },
+  editPlant: {
+    close: 'Close',
+    title: 'Edit plant',
+    /* The plant's own name under the title, so the sheet is unambiguous when it
+     * is reached from a list of twelve. */
+    subtitle: (name: string) => `Editing ${name}`,
+    photo: 'Photo',
+    photoHint: 'Replace the picture, or leave it as it is.',
+    camera: 'Camera',
+    library: 'Library',
+    takePhoto: 'Take a new photo',
+    choosePhoto: 'Choose a photo from your library',
+    noPhotoYet: 'No photo yet',
+    photoDenied:
+      'PlantAI cannot open your photos yet. Allow photo access in Settings, or keep the current picture.',
+    cameraDenied:
+      'PlantAI cannot use the camera yet. Allow camera access in Settings, or pick a photo you already took.',
+    nickname: 'Nickname',
+    nicknameHint: 'Leave it empty to go back to the species name.',
+    nicknamePlaceholder: 'Big Bertha',
+    nicknameA11y: 'Plant nickname',
+    save: 'Save changes',
+    saving: 'Saving...',
+    /* Said out loud rather than shown as a greyed button with no explanation. */
+    saveHintUnchanged: 'Nothing to save yet',
+    saveFailedTitle: "Couldn't save",
+    saveFailedNetwork: "We couldn't reach your account. Check your connection and try again.",
+    saveFailedStorage: 'Your device is out of storage space. Free some space and try again.',
+    saveFailedMissing: 'That plant is no longer in your library.',
+    editA11y: (name: string) => `Edit ${name}`,
+  },
   speciesPicker: {
     title: 'Choose a species',
     close: 'Close species picker',

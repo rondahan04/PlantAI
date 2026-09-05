@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DAY_MS } from './watering.ts';
-import { greetingFor, needsCareCount, stripFaces, taskGroups, taskSubtitle } from './home.ts';
+import { greetingFor, needsCareCount, pickHeroPhoto, stripFaces, taskGroups, taskSubtitle } from './home.ts';
 import type { DueItem } from './portfolio.ts';
 import type { CareKind, StoredPlant } from '../services/plantStore.ts';
 
@@ -104,4 +104,39 @@ test('a plant with no photo is skipped on the strip but still counted', () => {
   const { shown, overflow } = stripFaces(plants);
   assert.deepEqual(shown.map((p) => p.id), ['b']);
   assert.equal(overflow, 0);
+});
+
+// --- pickHeroPhoto: the hero card's face, re-rolled each visit -------------
+
+test('pickHeroPhoto: no photographed plant means no photo, not a placeholder', () => {
+  assert.equal(pickHeroPhoto([], 0.5), undefined);
+  assert.equal(pickHeroPhoto([plant('a', 'A', 1, false)], 0.5), undefined);
+});
+
+test('pickHeroPhoto: the roll selects across the whole library, not just the newest', () => {
+  const plants = [plant('a', 'A'), plant('b', 'B'), plant('c', 'C'), plant('d', 'D')];
+  assert.equal(pickHeroPhoto(plants, 0), 'file://a.jpg');
+  assert.equal(pickHeroPhoto(plants, 0.5), 'file://c.jpg');
+  // A roll of exactly 1 must not index past the end.
+  assert.equal(pickHeroPhoto(plants, 1), 'file://d.jpg');
+});
+
+test('pickHeroPhoto: never repeats the previous photo when another one exists', () => {
+  const plants = [plant('a', 'A'), plant('b', 'B'), plant('c', 'C')];
+  for (const roll of [0, 0.2, 0.5, 0.75, 0.99, 1]) {
+    assert.notEqual(pickHeroPhoto(plants, roll, 'file://b.jpg'), 'file://b.jpg', `roll ${roll}`);
+  }
+});
+
+test('pickHeroPhoto: a single photographed plant still shows, even as a repeat', () => {
+  // The alternative is a card that empties itself on the second visit.
+  const only = [plant('a', 'A'), plant('b', 'B', 1, false)];
+  assert.equal(pickHeroPhoto(only, 0.4, 'file://a.jpg'), 'file://a.jpg');
+});
+
+test('pickHeroPhoto: plants with no picture are never chosen', () => {
+  const mixed = [plant('a', 'A', 1, false), plant('b', 'B'), plant('c', 'C', 1, false)];
+  for (const roll of [0, 0.33, 0.66, 1]) {
+    assert.equal(pickHeroPhoto(mixed, roll), 'file://b.jpg');
+  }
 });
