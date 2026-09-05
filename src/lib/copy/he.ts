@@ -300,10 +300,28 @@ export const he: Copy = {
     cancel: 'עצירה',
     dismiss: 'סגירה',
     waterConfirmTitle: 'להשקות את הצמחים שצריכים?',
-    waterConfirmBody: (n: number, total: number) =>
-      n === total
-        ? `כל ${n} הצמחים יסומנו כמושקים עכשיו.`
-        : `${n} מתוך ${total} צמחים צריכים השקיה או מאחרים. רק הם יסומנו, כך שהשאר שומרים על הלוח האמיתי שלהם.`,
+    /* Hebrew agrees in number, so a bare count with a plural verb ("1 צריכים")
+     * is wrong in a way English hides. Each part carries its own singular. */
+    waterConfirmBody: (n: number, total: number, firstWater: number) => {
+      const due = n - firstWater;
+      const parts: string[] = [];
+      if (due > 0) parts.push(due === 1 ? 'צמח אחד צריך השקיה או מאחר' : `${due} צמחים צריכים השקיה או מאחרים`);
+      if (firstWater > 0)
+        parts.push(firstWater === 1 ? 'צמח אחד עוד לא הושקה מעולם' : `${firstWater} צמחים עוד לא הושקו מעולם`);
+      /* "ו-2" before a numeral, "וצמח" before a word - the hyphen is required
+       * for the first and wrong for the second. */
+      const reason = parts.reduce((acc, part, i) =>
+        i === 0 ? part : `${acc}, ${/^\d/.test(part) ? 'ו-' : 'ו'}${part}`
+      , '');
+      if (n === total) {
+        return total === 1
+          ? `הצמח שלכם יסומן כמושקה עכשיו - ${firstWater === 1 ? 'הוא עוד לא הושקה מעולם' : 'הוא צריך השקיה'}.`
+          : `כל ${n} הצמחים יסומנו כמושקים עכשיו - ${reason}.`;
+      }
+      return n === 1
+        ? `${reason}. רק הוא יסומן, מתוך ${total} הצמחים שלכם, כך שהשאר שומרים על הלוח האמיתי שלהם.`
+        : `${reason}. רק ${n} מתוך ${total} הצמחים יסומנו, כך שהשאר שומרים על הלוח האמיתי שלהם.`;
+    },
     waterNothingTitle: 'אין מה להשקות',
     waterNothingBody: 'אף צמח לא צריך השקיה היום. סימון מוקדם היה מאפס את הלוח ורושם השקיה שלא קרתה.',
     waterDone: (n: number) => `הושקו ${n} צמחים`,
