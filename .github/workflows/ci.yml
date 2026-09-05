@@ -1,0 +1,92 @@
+# Gate on the two things that have actually broken this project.
+#
+# 1. A wrong-arity call reached production once, which is why tsconfig.node.json
+#    exists and why BOTH projects are typechecked here, not just the app one.
+# 2. The shipped image has always been whatever the laptop's working tree held
+#    at deploy time. Render builds from the Dockerfile on main, so a Dockerfile
+#    that cannot build is a broken deploy discovered in production.
+#
+# No secrets, deliberately. Every test is hermetic and the server image installs
+# nothing (node:26-alpine, zero runtime deps), so this workflow never needs a
+# provider key - which also means a fork's PR runs it in full.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A second push to the same branch makes the first run's answer irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: typecheck + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches the Dockerfile's node:26-alpine. The server and scraper run
+          # .ts directly under node's type stripping, so the major version is
+          # not a preference here.
+          node-version: '26'
+          cache: npm
+
+      # ci, not install: the lockfile is the point. An install that silently
+      # resolves a different tree tests something other than what ships.
+      - run: npm ci
+
+      - name: Typecheck (app + server/scraper)
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+  image:
+    name: docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Build only - nothing is pushed anywhere. The question this answers is
+      # "would Render's build succeed", and the answer is worth having before
+      # main moves, not after.
+      - name: Build the server image
+        run: docker build -t plantai-api:ci .
+
+      # A built image that exits on boot is still a broken deploy, so the build
+      # alone is not the whole answer - start it and make it respond.
+      #
+      # The keys below are deliberately fake. server/index.ts fails fast when
+      # any provider key is absent (correct: a server that boots without them
+      # only discovers it is useless on a user's first request), so the
+      # container needs four non-empty strings to get past that guard. Nothing
+      # here calls a provider - /health is gate-exempt and hits no network - so
+      # a fake value is enough and a real one would be a secret this workflow
+      # has no reason to hold.
+      - name: Boot it and require /health to answer
+        run: |
+          docker run -d --name plantai-ci -p 8080:8080 -e PORT=8080 \
+            -e FIRECRAWL_API_KEY=ci-not-a-real-key \
+            -e OPENAI_API_KEY=ci-not-a-real-key \
+            -e GOOGLE_MAPS_API_KEY=ci-not-a-real-key \
+            -e PLANTNET_API_KEY=ci-not-a-real-key \
+            plantai-api:ci
+          for i in $(seq 1 30); do
+            if curl -fsS localhost:8080/health > /tmp/health.json; then
+              echo "healthy after ${i}s"; cat /tmp/health.json; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::/health never answered"; docker logs plantai-ci; exit 1
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs plantai-ci || true

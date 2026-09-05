@@ -81,6 +81,10 @@ export const en = {
       `In stock now · ${shipsToHome ? 'ships to home' : 'local pickup'}`,
     notFound: "Didn't find the product",
     estimate: (bandLabel: string, confidence: number) => `${bandLabel} · ${confidence}%`,
+    /* We found the product and its price; the page never stated stock. Says
+     * what we know first - "Listed" is the evidence - and is honest about the
+     * half we do not. */
+    stockUnknown: 'Listed · stock not stated',
     unknown: 'Availability unknown',
     unknownCallToConfirm: 'Availability unknown - call to confirm',
   },
@@ -438,6 +442,12 @@ export const en = {
     unsupportedTitle: "We can't read that image",
     unsupportedBody:
       'That file is in a format we cannot open. A photo taken with the camera, or a JPEG or PNG from your library, will work.',
+    /* Names the size AND the limit: "too large" alone invites the same photo
+     * again. The action is concrete - the camera's own capture is compressed
+     * and always fits, so it is the fix, not a workaround. */
+    tooLargeTitle: 'That photo is too large to send',
+    tooLargeBody: (size: string, limit: string) =>
+      `That image is ${size} and the limit is ${limit}. Take the photo with the camera instead - those are compressed and always fit.`,
     unavailableTitle: 'Diagnosis is unavailable',
     unavailableBody:
       'This build is not pointed at a plant identification service. Nothing is wrong with your photo or your plant.',

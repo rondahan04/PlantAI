@@ -112,3 +112,66 @@ test('a write upserts the normalised row so a re-scrape replaces the stale one',
   assert.equal(row.result_count, 1);
   assert.equal(row.scraped_at, new Date(1_000_000).toISOString());
 });
+
+/*
+ * The stats block exists for one live question (Trello #81): is the shared
+ * cache actually on in production, or is every search a live paid scrape? A
+ * disabled cache is indistinguishable from a healthy one in the logs, so these
+ * assertions are the contract /health depends on.
+ */
+test('a disabled cache reports enabled:false and counts nothing', async () => {
+  const off = createNurseryCache<unknown[]>({
+    url: 'https://p.supabase.co',
+    fetchImpl: (async () => json([])) as unknown as typeof fetch,
+  });
+  await off.get(PARTS);
+  await off.put(PARTS, []);
+  // Not a miss: there is no cache to miss. Counting it would report a 0% hit
+  // rate on a server with no cache at all - the exact reading being ruled out.
+  assert.deepEqual(off.stats(), { enabled: false, hits: 0, misses: 0, stores: 0, errors: 0 });
+});
+
+test('hits, misses and stores are counted separately', async () => {
+  let fresh = true;
+  const c = cache({
+    respond: (url) => {
+      if (!url.includes('select=')) return new Response(null, { status: 201 });
+      return fresh
+        ? json([{ results: [{ id: 'a' }], scraped_at: new Date(900_000).toISOString() }])
+        : json([]);
+    },
+  });
+
+  await c.get(PARTS);
+  fresh = false;
+  await c.get(PARTS);
+  await c.put(PARTS, [{ id: 'a' }]);
+
+  assert.deepEqual(c.stats(), { enabled: true, hits: 1, misses: 1, stores: 1, errors: 0 });
+});
+
+test('a stale row counts as a miss, not a hit', async () => {
+  const c = cache({
+    ttlMs: 1_000,
+    respond: () => json([{ results: [{ id: 'a' }], scraped_at: new Date(0).toISOString() }]),
+  });
+  assert.equal(await c.get(PARTS), null);
+  assert.equal(c.stats().hits, 0);
+  assert.equal(c.stats().misses, 1);
+  // A row we chose not to serve is not a cache fault - nothing is broken.
+  assert.equal(c.stats().errors, 0);
+});
+
+test('a cache outage counts as both an error and a miss', async () => {
+  const c = cache({ respond: () => new Response('nope', { status: 500 }) });
+  assert.equal(await c.get(PARTS), null);
+  // Both, deliberately: the miss is what the scrape costs, the error is why.
+  assert.deepEqual(c.stats(), { enabled: true, hits: 0, misses: 1, stores: 0, errors: 1 });
+});
+
+test('a failed write is an error and never counts as a store', async () => {
+  const c = cache({ respond: () => new Response('nope', { status: 500 }) });
+  await c.put(PARTS, [{ id: 'a' }]);
+  assert.equal(c.stats().stores, 0);
+  assert.equal(c.stats().errors, 1);
+});

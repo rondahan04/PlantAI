@@ -439,3 +439,113 @@ test('scrapeOne: a site answering inside its budget is unaffected', async () => 
   assert.equal(rows[0].outcome, 'found');
   assert.equal(rows[0].plantPrice, '₪49');
 });
+
+/*
+ * E11: the pipeline knows where each site's read stopped and used to throw
+ * that away, which is why a nursery that quietly stops parsing has been
+ * invisible - the search still succeeds, it just silently contains fewer shops.
+ */
+test('onSiteRead reports the stage the site actually reached', async () => {
+  const seen: Array<[string, string]> = [];
+  await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      extract: async () => ({
+        plants: [],
+        report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
+        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        // The distinction that matters: we never read this shop's catalogue.
+        funnel: funnel({ stage: 'no_excerpt' }),
+      }),
+      onSiteRead: (host, stage) => seen.push([host, stage]),
+    })
+  );
+  assert.deepEqual(seen, [['gh.example', 'no_excerpt']]);
+});
+
+test('a site that throws is reported as unreadable, not as a plant that is absent', async () => {
+  const seen: Array<[string, string]> = [];
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      search: async () => {
+        throw new Error('ECONNRESET');
+      },
+      onSiteRead: (host, stage) => seen.push([host, stage]),
+    })
+  );
+  assert.deepEqual(seen, [['gh.example', 'error']]);
+  // And the user-facing story is unchanged: we did not manage to look.
+  assert.equal(out[0].outcome, 'not_found');
+});
+
+test('a throwing observer cannot fail a scrape that has already been paid for', async () => {
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      onSiteRead: () => {
+        throw new Error('monitoring is down');
+      },
+    })
+  );
+  // The observer is a diagnostic bolted onto a scrape the user has waited for
+  // and we have spent money on. Losing that to a broken counter is absurd.
+  assert.equal(out.length, 1);
+  assert.equal(out[0].plantPrice, '₪175');
+});
+
+/*
+ * "Stock unknown" instead of dropping the row.
+ *
+ * The auditor was right to refuse an in-stock claim the page never made -
+ * `verification REJECTED (conf 92): the source text does not explicitly state
+ * stock status` - but dropping the row deleted a nursery that does sell the
+ * plant. These cover the half that decides what to DO with such a row, which
+ * is testable with an injected verdict and needs no model call.
+ */
+test('a listing with no stock statement keeps the shop, and does not claim it is in stock', async () => {
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      extract: async () => ({
+        plants: [{ name: 'Monstera deliciosa', price: '₪175', availability: 'unknown' }],
+        report: { is_valid: true, confidence_score: 92, feedback: '', corrected_output: [] },
+        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        funnel: funnel({ stage: 'ok', extracted: 1, kept: 1 }),
+      }),
+    })
+  );
+
+  assert.equal(out.length, 1, 'the shop survives - it was being deleted before');
+  assert.equal(out[0].outcome, 'found');
+  assert.equal(out[0].plantPrice, '₪175', 'the price is real and is kept');
+  // The whole point: we do NOT claim certainty the source never gave us.
+  assert.equal(out[0].inStockKnown, false);
+  assert.equal(out[0].availability?.kind, 'stock_unknown');
+});
+
+test('an explicit in-stock listing still reports certainty', async () => {
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps()
+  );
+  assert.equal(out[0].inStockKnown, true);
+  assert.equal(out[0].availability, undefined, 'nothing to caveat');
+});
+
+test('an out-of-stock listing is not laundered into "unknown"', async () => {
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      extract: async () => ({
+        plants: [{ name: 'Monstera', price: '₪175', availability: 'out_of_stock' }],
+        report: { is_valid: true, confidence_score: 90, feedback: '', corrected_output: [] },
+        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        funnel: funnel({ stage: 'ok', extracted: 1, kept: 1 }),
+      }),
+    })
+  );
+  // Sold out is knowledge, not absence of it.
+  assert.equal(out[0].hasPlant, false);
+  assert.equal(out[0].inStockKnown, true);
+});

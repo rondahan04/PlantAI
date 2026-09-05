@@ -49,7 +49,11 @@ interface NurseryResultJSON {
   hasPlant: boolean;
   inStockKnown: boolean;
   availabilityNote?: string;
-  availability?: { kind: 'estimate' | 'unreadable' | 'error'; confidence?: number; detail: string };
+  availability?: {
+    kind: 'estimate' | 'unreadable' | 'error' | 'stock_unknown';
+    confidence?: number;
+    detail: string;
+  };
   outcome?: 'found' | 'not_sold' | 'not_found';
   productUrl?: string;
   productName?: string;
