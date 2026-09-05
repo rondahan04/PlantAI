@@ -113,7 +113,7 @@ footer{color:var(--ink-soft);font-size:0.82rem;border-top:1px solid var(--line);
   <section>
     <h2>Diagram</h2>
     <figure>
-      <svg viewBox="0 0 760 310" role="img" aria-label="Phone app talks to one Node server, which calls PlantNet and OpenAI for diagnosis, and Google Places, Firecrawl/Tavily, and OpenAI again for nursery search. Both the app and the server also talk to Supabase: the app for the account and the plant library, the server for the shared scrape cache.">
+      <svg viewBox="0 0 760 310" role="img" aria-label="Phone app talks to one Node server, which calls PlantNet and OpenAI for diagnosis, and Google Places, Tavily or Firecrawl, and OpenAI again for nursery search. Both the app and the server also talk to Supabase: the app for the account and the plant library, the server for the shared scrape cache.">
         <defs>
           <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
             <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
@@ -144,8 +144,8 @@ footer{color:var(--ink-soft);font-size:0.82rem;border-top:1px solid var(--line);
 
           <line x1="560" y1="110" x2="600" y2="110" stroke="currentColor" marker-end="url(#a)"/>
           <rect x="600" y="84" width="150" height="52" rx="8" fill="none" stroke="currentColor"/>
-          <text x="675" y="107" text-anchor="middle" class="sub">Firecrawl</text>
-          <text x="675" y="124" text-anchor="middle" class="sub">(Tavily fallback)</text>
+          <text x="675" y="107" text-anchor="middle" class="sub">Tavily reads</text>
+          <text x="675" y="124" text-anchor="middle" class="sub">Firecrawl renders</text>
 
           <!-- Supabase is the one box BOTH sides reach, and the two arrows into
                it mean different things: the app holds the user's session and
@@ -174,8 +174,8 @@ footer{color:var(--ink-soft);font-size:0.82rem;border-top:1px solid var(--line);
       <li><b>PlantNet API</b><span>identifies the plant species from a photo</span></li>
       <li><b>OpenAI (gpt-5.6-luna, vision)</b><span>diagnoses health from the photo; writes the per-genus care plans; also extracts product info from scraped text</span></li>
       <li><b>Google Places API</b><span>finds nearby nurseries + their websites</span></li>
-      <li><b>Firecrawl</b><span>scrapes a nursery's site to markdown</span></li>
-      <li><b>Tavily</b><span>backup scraper if Firecrawl fails</span></li>
+      <li><b>Tavily</b><span>reads a nursery's page as the server sends it - the common case, and the fast one</span></li>
+      <li><b>Firecrawl</b><span>renders a page's JavaScript when reading it plainly is not enough; rescues a failed Tavily read</span></li>
       <li><b>Supabase Auth</b><span>optional account - email sign-in. Nothing is behind a login wall</span></li>
       <li><b>Supabase Postgres</b><span><code>plants</code> (the library, once you have an account), <code>profiles</code>, and <code>nursery_searches</code> (scrape cache shared across users)</span></li>
       <li><b>Supabase Storage</b><span>plant photos for logged-in users - a private bucket, read through short-lived signed URLs</span></li>
@@ -192,16 +192,16 @@ footer{color:var(--ink-soft);font-size:0.82rem;border-top:1px solid var(--line);
       <li>App sends it to <code>POST /api/diagnose</code>.</li>
       <li>Server calls <b>PlantNet</b> → gets the species.</li>
       <li>Server calls <b>OpenAI</b> with the same photo + species → gets health, issues, care plan.</li>
-      <li>App saves the result locally and schedules a watering reminder.</li>
+      <li>The user decides whether to keep it. Saving adds the plant to the portfolio and starts its watering schedule; where the record goes - this device, or the account - is flow 4.</li>
     </ol>
   </section>
 
   <section>
     <h2>Flow 2 - find a nursery</h2>
     <ol class="flow">
-      <li>App sends location + plant name to <code>POST /api/nurseries</code> → gets a job id back right away (search can take minutes).</li>
+      <li>App sends location + plant name to <code>POST /api/nurseries</code> → gets a job id back right away, because reading a dozen shops takes far longer than a request should be held open for.</li>
       <li>Server calls <b>Google Places</b> → nearby nurseries with websites.</li>
-      <li>For each one, server calls <b>Firecrawl</b> (or <b>Tavily</b> if that fails) to read the site, then <b>OpenAI</b> to pull out product + price.</li>
+      <li>For each one, the server reads the shop's search page - <b>Tavily</b> when the page is usable as served, <b>Firecrawl</b> when it has to be rendered first - then <b>OpenAI</b> to pull out product + price.</li>
       <li>App polls <code>GET /api/nurseries/job/:id</code> until it's done, then shows the results on a map.</li>
     </ol>
     <p>A shop whose page lists the plant and its price but never says whether it is in stock is shown as <em>listed, stock not stated</em> rather than dropped. Removing it would hide a nursery that does sell the plant, on the grounds that the page did not prove it - saying what the page actually supports keeps the shop and keeps us honest.</p>
@@ -241,6 +241,8 @@ footer{color:var(--ink-soft);font-size:0.82rem;border-top:1px solid var(--line);
       <li><b>Retry with the rendered page.</b> Some storefronts build their markup client-side, so a static fetch shows nothing recognizable. If the first pass comes back <code>unknown</code>, the scraper re-fetches with JS rendering turned on.</li>
       <li><b>Ask OpenAI as a last resort.</b> If the platform is still unrecognized, the page's scripts/CDN hints are handed to OpenAI to classify and to guess a search URL. That answer is saved to disk, so the same unfamiliar platform is never paid to classify twice.</li>
     </ol>
+    <p>Knowing the platform also decides <em>who reads the page</em>. Shopify and WooCommerce send a finished page, so Tavily fetches it as-is in well under a second. A storefront that builds itself in the browser has to be rendered, and only Firecrawl does that - so it leads there, with Tavily as the rescue if it fails.</p>
+    <p>That split is most of a recent speed win: a search went from 81s to 36.5s, and healthy shops from 26-41s each to about a second. The cause was never how many sites were read at once - it was that the renderer allows ten requests a minute, and a refused read looks exactly like an unrecognized platform, which is the path that spends three more requests on the same shop. The limit was feeding itself.</p>
   </section>
 
   <section>
