@@ -315,6 +315,44 @@ export const en = {
     saveFailedMissing: 'That plant is no longer in your library.',
     editA11y: (name: string) => `Edit ${name}`,
   },
+  bulkCare: {
+    diagnoseAll: 'Diagnose all',
+    waterAll: 'Water all',
+    /* Said before anything is spent, because both buttons act on many plants
+     * at once and the count is the thing the user is agreeing to. */
+    diagnoseConfirmTitle: 'Diagnose all plants?',
+    diagnoseConfirmBody: (n: number, skipped: number) =>
+      skipped === 0
+        ? `This checks ${n} ${n === 1 ? 'plant' : 'plants'} that have never been diagnosed. It runs in the background and takes about a minute per five plants.`
+        : `This checks ${n} ${n === 1 ? 'plant' : 'plants'} that have never been diagnosed. ${skipped} more ${skipped === 1 ? 'has' : 'have'} no photo, so ${skipped === 1 ? 'it' : 'they'} cannot be checked. It runs in the background and takes about a minute per five plants.`,
+    diagnoseNothingTitle: 'Nothing to diagnose',
+    diagnoseNothingBody: 'Every plant with a photo has already been checked.',
+    diagnoseNoPhotos: (n: number) =>
+      `${n} ${n === 1 ? 'plant has' : 'plants have'} no photo yet, so there is nothing to send. Add a photo from the plant's edit screen.`,
+    diagnoseRunning: (done: number, total: number) => `Diagnosing ${done} of ${total}`,
+    diagnoseDone: (done: number) => `Diagnosed ${done} ${done === 1 ? 'plant' : 'plants'}`,
+    diagnoseDoneWithFailures: (done: number, failed: number) =>
+      `Diagnosed ${done}, ${failed} could not be checked`,
+    diagnoseDoneSkipped: (skipped: number) =>
+      `${skipped} skipped, no photo`,
+    cancel: 'Stop',
+    dismiss: 'Dismiss',
+    /* Water-all names the plants it will NOT touch, because the surprise is
+     * always that it did less than "all". */
+    waterConfirmTitle: 'Water the plants that need it?',
+    waterConfirmBody: (n: number, total: number) =>
+      n === total
+        ? `This marks all ${n} ${n === 1 ? 'plant' : 'plants'} as watered now.`
+        : `${n} of your ${total} plants are due or overdue. Only those are marked, so the rest keep their real schedule.`,
+    waterNothingTitle: 'Nothing is due',
+    waterNothingBody: 'No plant needs watering today. Marking one early would reset its schedule and record water it did not get.',
+    waterDone: (n: number) => `Watered ${n} ${n === 1 ? 'plant' : 'plants'}`,
+    waterFailed: 'Some plants could not be updated. Check your connection and try again.',
+    confirm: 'Do it',
+    cancelAction: 'Cancel',
+    a11yDiagnoseAll: 'Diagnose all undiagnosed plants',
+    a11yWaterAll: 'Water all plants that are due',
+  },
   speciesPicker: {
     title: 'Choose a species',
     close: 'Close species picker',

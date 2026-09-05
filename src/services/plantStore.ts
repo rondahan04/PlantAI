@@ -622,6 +622,10 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
         | 'nickname'
         | 'catalogId'
         | 'species'
+        /* Set long after the plant was saved: a hand-added plant has no
+         * diagnosis until someone points the camera at it, or until the
+         * portfolio's bulk diagnose reaches it. */
+        | 'diagnosis'
       >
     >
   ): UpdateResult {

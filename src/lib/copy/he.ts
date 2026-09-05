@@ -279,6 +279,39 @@ export const he: Copy = {
     saveFailedMissing: 'הצמח הזה כבר לא נמצא בספרייה שלכם.',
     editA11y: (name: string) => `עריכת ${name}`,
   },
+  bulkCare: {
+    diagnoseAll: 'אבחון הכול',
+    waterAll: 'השקיית הכול',
+    diagnoseConfirmTitle: 'לאבחן את כל הצמחים?',
+    diagnoseConfirmBody: (n: number, skipped: number) =>
+      skipped === 0
+        ? `נבדקים ${n} צמחים שמעולם לא אובחנו. הפעולה רצה ברקע ולוקחת בערך דקה לכל חמישה צמחים.`
+        : `נבדקים ${n} צמחים שמעולם לא אובחנו. ל-${skipped} נוספים אין תמונה, ולכן אי אפשר לבדוק אותם. הפעולה רצה ברקע ולוקחת בערך דקה לכל חמישה צמחים.`,
+    diagnoseNothingTitle: 'אין מה לאבחן',
+    diagnoseNothingBody: 'כל צמח שיש לו תמונה כבר נבדק.',
+    diagnoseNoPhotos: (n: number) =>
+      `ל-${n} צמחים אין עדיין תמונה, ולכן אין מה לשלוח. אפשר להוסיף תמונה במסך העריכה של הצמח.`,
+    diagnoseRunning: (done: number, total: number) => `מאבחן ${done} מתוך ${total}`,
+    diagnoseDone: (done: number) => `אובחנו ${done} צמחים`,
+    diagnoseDoneWithFailures: (done: number, failed: number) =>
+      `אובחנו ${done}, ${failed} לא נבדקו`,
+    diagnoseDoneSkipped: (skipped: number) => `${skipped} דולגו, אין תמונה`,
+    cancel: 'עצירה',
+    dismiss: 'סגירה',
+    waterConfirmTitle: 'להשקות את הצמחים שצריכים?',
+    waterConfirmBody: (n: number, total: number) =>
+      n === total
+        ? `כל ${n} הצמחים יסומנו כמושקים עכשיו.`
+        : `${n} מתוך ${total} צמחים צריכים השקיה או מאחרים. רק הם יסומנו, כך שהשאר שומרים על הלוח האמיתי שלהם.`,
+    waterNothingTitle: 'אין מה להשקות',
+    waterNothingBody: 'אף צמח לא צריך השקיה היום. סימון מוקדם היה מאפס את הלוח ורושם השקיה שלא קרתה.',
+    waterDone: (n: number) => `הושקו ${n} צמחים`,
+    waterFailed: 'חלק מהצמחים לא עודכנו. בדקו את החיבור ונסו שוב.',
+    confirm: 'בצע',
+    cancelAction: 'ביטול',
+    a11yDiagnoseAll: 'אבחון כל הצמחים שלא אובחנו',
+    a11yWaterAll: 'השקיית כל הצמחים שצריכים',
+  },
   speciesPicker: {
     title: 'בחירת מין',
     close: 'סגירת בוחר המינים',
