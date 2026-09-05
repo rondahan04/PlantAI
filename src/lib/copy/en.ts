@@ -345,35 +345,26 @@ export const en = {
      * always that it did less than "all". */
     waterConfirmTitle: 'Water the plants that need it?',
     /*
-     * The two groups are named separately because they are true for different
-     * reasons: one is late, the other has simply never been started. Collapsing
-     * them into one number would tell a user with a brand new library that six
-     * plants are "overdue" when none of them are.
+     * Names the consequence, because the button no longer protects against it.
+     * "Water all" now means all - including plants that were not due - so the
+     * schedule reset is something the user agrees to here rather than
+     * discovers a week later when nothing is due when it should be.
      */
-    waterConfirmBody: (n: number, total: number, firstWater: number) => {
-      const due = n - firstWater;
-      const parts: string[] = [];
-      if (due > 0) parts.push(`${due} ${due === 1 ? 'is' : 'are'} due or overdue`);
-      if (firstWater > 0)
-        parts.push(`${firstWater} ${firstWater === 1 ? 'has' : 'have'} never been watered`);
-      const reason = parts.join(', and ');
-      if (n === total) {
-        return total === 1
-          ? `Your plant will be marked as watered now - it has ${firstWater === 1 ? 'never been watered' : 'water due'}.`
-          : `All ${n} of your plants will be marked as watered now - ${reason}.`;
-      }
-      return n === 1
-        ? `${reason}. Only that one of your ${total} plants is marked, so the rest keep their real schedule.`
-        : `${reason}. Only those ${n} of your ${total} plants are marked, so the rest keep their real schedule.`;
-    },
-    waterNothingTitle: 'Nothing is due',
-    waterNothingBody: 'No plant needs watering today. Marking one early would reset its schedule and record water it did not get.',
+    waterConfirmBody: (n: number) =>
+      n === 1
+        ? 'This marks your plant as watered now and restarts its schedule.'
+        : `This marks all ${n} plants as watered now, including any that were not due yet, and restarts their schedules.`,
+    /* Reachable only with an empty portfolio now that the button waters
+     * everything - "nothing is due" would be a puzzling thing to say to
+     * someone who has no plants. */
+    waterNothingTitle: 'No plants yet',
+    waterNothingBody: 'Add a plant and this will mark it as watered.',
     waterDone: (n: number) => `Watered ${n} ${n === 1 ? 'plant' : 'plants'}`,
     waterFailed: 'Some plants could not be updated. Check your connection and try again.',
     confirm: 'Do it',
     cancelAction: 'Cancel',
     a11yDiagnoseAll: 'Diagnose all undiagnosed plants',
-    a11yWaterAll: 'Water all plants that are due or have never been watered',
+    a11yWaterAll: 'Mark every plant as watered',
   },
   speciesPicker: {
     title: 'Choose a species',

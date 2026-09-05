@@ -78,46 +78,33 @@ test('the English identity copy matches the default inside lib/confidence', () =
 });
 
 /*
- * The water-all confirmation is the one sentence that tells a user what a bulk
- * action is about to do to their whole library, and it now assembles itself
- * from two counts. Both grammar bugs below were real and were caught by
- * printing the sentences rather than by reading the code.
+ * The water-all confirmation is the one sentence standing between a tap and
+ * every plant's schedule being reset. Since the button stopped protecting
+ * against an early mark, this sentence IS the protection.
  */
-test('the water-all confirmation never uses a plural verb for one plant', () => {
-  for (const lang of ['en', 'he'] as const) {
-    const body = TREES[lang].bulkCare.waterConfirmBody;
-    // "Only those 1 of your 9 plants are marked" / "1 צריכים"
-    assert.doesNotMatch(body(1, 9, 1), /those 1|1 צריכים|1 עוד לא הושקו/);
-    assert.doesNotMatch(body(1, 9, 0), /those 1|1 צריכים|1 עוד לא הושקו/);
-  }
-});
+test('the water-all confirmation warns that not-yet-due plants are included', () => {
+  const en = TREES.en.bulkCare.waterConfirmBody(9);
+  assert.match(en, /9/);
+  assert.match(en, /not due yet/i, 'the consequence must be stated, not implied');
+  assert.match(en, /restarts their schedules/i);
 
-test('the water-all confirmation names both reasons when the batch has both', () => {
-  const en = TREES.en.bulkCare.waterConfirmBody(6, 9, 2);
-  // 4 due + 2 first-water: the user is agreeing to 6, and to why.
-  assert.match(en, /4 are due or overdue/);
-  assert.match(en, /2 have never been watered/);
-  assert.match(en, /6 of your 9/);
-
-  const he = TREES.he.bulkCare.waterConfirmBody(6, 9, 2);
-  assert.match(he, /4/);
-  assert.match(he, /2/);
+  const he = TREES.he.bulkCare.waterConfirmBody(9);
+  assert.match(he, /9/);
   assert.match(he, /[א-ת]/);
 });
 
-test('the water-all confirmation says nothing about due dates when nothing is due', () => {
-  // A library of brand new plants: calling them "overdue" would be a lie, and
-  // it is the first thing a new user would see.
-  const en = TREES.en.bulkCare.waterConfirmBody(3, 3, 3);
-  assert.doesNotMatch(en, /due|overdue/);
-  assert.match(en, /never been watered/);
-
-  const he = TREES.he.bulkCare.waterConfirmBody(3, 3, 3);
-  assert.doesNotMatch(he, /מאחר|צריכים השקיה/);
+test('the water-all confirmation reads naturally for a single plant', () => {
+  for (const lang of ['en', 'he'] as const) {
+    const body = TREES[lang].bulkCare.waterConfirmBody(1);
+    // No "all 1 plants", and no plural agreement with one.
+    assert.doesNotMatch(body, /all 1|1 plants|1 הצמחים/);
+  }
 });
 
-test('the water-all confirmation joins Hebrew clauses with the right conjunction', () => {
-  // "ו-2" before a numeral, "וצמח" before a word.
-  assert.match(TREES.he.bulkCare.waterConfirmBody(6, 9, 2), /ו-2/);
-  assert.doesNotMatch(TREES.he.bulkCare.waterConfirmBody(3, 3, 1), /ו-צמח/);
+test('the empty-state copy does not claim nothing is due', () => {
+  // It is only reachable with an empty portfolio now, and telling someone with
+  // no plants that "nothing is due" is a puzzle rather than an answer.
+  for (const lang of ['en', 'he'] as const) {
+    assert.doesNotMatch(TREES[lang].bulkCare.waterNothingTitle, /due|מה להשקות/i);
+  }
 });
