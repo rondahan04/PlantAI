@@ -403,3 +403,39 @@ test('the price check is one call for the whole search, over priced rows only', 
   assert.equal(calls, 1, 'two nurseries, one call');
   assert.equal(batch.length, 2, 'both priced rows go in the same comparison');
 });
+
+// --- one slow shop must not set the length of the whole search -------------
+
+test('scrapeOne: a site that exceeds its budget reports as unread, not as absent', async () => {
+  const never = new Promise<never>(() => {}); // a shop that answers neither provider
+  const deps = {
+    ...makeDeps(),
+    siteBudgetMs: 30,
+    discover: async () => [{ name: 'Dead Shop', website: 'https://dead.co.il/', lat: 0, lng: 0, address: '' }],
+    search: () => never,
+  };
+  const t0 = Date.now();
+  const rows = await runNurserySearch({ plantName: 'sage', lat: 32, lng: 34 }, deps as any);
+  const elapsed = Date.now() - t0;
+  const dead = rows.find((r) => r.id === 'dead.co.il')!;
+  assert.equal(dead.outcome, 'not_found'); // never 'not_sold' - we did not read a catalogue
+  assert.equal(dead.availability?.kind, 'error');
+  assert.match(dead.availability!.detail, /did not respond/);
+  assert.ok(elapsed < 2000, `search should not wait on a dead shop, took ${elapsed}ms`);
+});
+
+test('scrapeOne: a site answering inside its budget is unaffected', async () => {
+  const deps = {
+    ...makeDeps(),
+    siteBudgetMs: 2000,
+    discover: async () => [{ name: 'Live Shop', website: 'https://live.co.il/', lat: 0, lng: 0, address: '' }],
+    search: async () => ({ md: 'page', platform: 'woo', picked: 'u' }),
+    extract: async () => ({
+      plants: [{ name: 'Sage', price: '₪49', availability: 'in_stock' as const, url: 'u' }],
+      funnel: { stage: 'ok' as const, mdChars: 4, excerptChars: 4, extracted: 1 },
+    }),
+  };
+  const rows = await runNurserySearch({ plantName: 'sage', lat: 32, lng: 34 }, deps as any);
+  assert.equal(rows[0].outcome, 'found');
+  assert.equal(rows[0].plantPrice, '₪49');
+});

@@ -4,7 +4,7 @@
  * hermetic unit tests: real network functions are the defaults wired in by
  * callers (see server/index.ts).
  */
-import { hostOf, type PipelineResult, type Plant } from './core.ts';
+import { env, hostOf, type PipelineResult, type Plant } from './core.ts';
 import { type DiscoveredNursery } from './places.ts';
 
 export interface NurseryResult {
@@ -97,7 +97,24 @@ export interface SearchInput {
   radiusM?: number;
 }
 
+/*
+ * How long one nursery may take before the search stops waiting for it.
+ *
+ * Sites are scraped in parallel, so the slowest one sets the length of the
+ * whole search. A dead shop is not rare and not quick: vcactus.co.il answered
+ * neither provider and burned five minutes on its own while eleven other
+ * nurseries sat finished, waiting for it. A healthy shop now answers in about
+ * a second, so this ceiling is generous by a wide margin and only ever fires
+ * on a site that was not going to answer.
+ *
+ * The raced-out work is not cancellable - it keeps running until its own
+ * deadlines fire - but it no longer holds up the result the user is waiting on.
+ */
+export const SITE_BUDGET_MS = Number(env('NURSERY_SITE_BUDGET_MS')) || 45_000;
+
 export interface PipelineDeps {
+  /* Override the per-site ceiling; tests set it small. */
+  siteBudgetMs?: number;
   discover: (lat: number, lng: number, radiusM: number) => Promise<DiscoveredNursery[]>;
   search: (
     website: string,
@@ -204,6 +221,38 @@ async function scrapeOne(
     shipsToHome,
   };
 
+  /*
+   * Everything past this point is network work on someone else's server, so it
+   * runs against a deadline (SITE_BUDGET_MS). Losing the race reads to the user
+   * exactly like a shop we could not open, because that is what it is.
+   */
+  const budgetMs = deps.siteBudgetMs ?? SITE_BUDGET_MS;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const overBudget = new Promise<typeof BUDGET_EXPIRED>((resolve) => {
+    timer = setTimeout(() => resolve(BUDGET_EXPIRED), budgetMs);
+    // Never let a pending budget timer be the reason the process stays alive.
+    (timer as { unref?: () => void }).unref?.();
+  });
+
+  try {
+    const outcome = await Promise.race([readOneSite(), overBudget]);
+    if (outcome === BUDGET_EXPIRED) {
+      return {
+        ...base,
+        outcome: 'not_found',
+        availabilityNote: 'unavailable (timed out)',
+        availability: {
+          kind: 'error',
+          detail: `The shop did not respond within ${Math.round(budgetMs / 1000)}s, so we could not read what it stocks.`,
+        },
+      };
+    }
+    return outcome;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  async function readOneSite(): Promise<NurseryResult> {
   try {
     const { md } = await deps.search(n.website, searchTerm, host);
     const { plants, funnel } = await deps.extract({ markdown: md, query: input.plantName, site: host });
@@ -253,7 +302,11 @@ async function scrapeOne(
       availability: { kind: 'error', detail: err.message },
     };
   }
+  }
 }
+
+/* Sentinel for the per-site deadline; a unique object cannot collide with a result. */
+const BUDGET_EXPIRED = Symbol('site-budget-expired');
 
 export async function runNurserySearch(
   input: SearchInput,

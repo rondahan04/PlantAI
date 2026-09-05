@@ -42,5 +42,27 @@
   "rootine.co.il": {
     "platform": "shopify",
     "at": 1788359214764
+  },
+  "perahvagan.co.il": {
+    "platform": "woo",
+    "at": 1788596748943
+  },
+  "azurflowers.co.il": {
+    "platform": "woo",
+    "at": 1788596749034
+  },
+  "h-shtilshop.co.il": {
+    "platform": "woo",
+    "at": 1788596760947
+  },
+  "vcactus.co.il": {
+    "platform": "unknown",
+    "at": 1788596941475,
+    "template": "{origin}/?s={query}&post_type=product"
+  },
+  "yifrach.co.il": {
+    "platform": "unknown",
+    "at": 1788597078470,
+    "template": "{origin}/?s={query}"
   }
 }

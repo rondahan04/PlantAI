@@ -245,6 +245,23 @@ export function rateLimitWaitMs(retryAfter: string | null | undefined, body: str
 const MAX_SCRAPE_ATTEMPTS = 4;
 
 /*
+ * Whether a thrown fetch error is our own deadline firing rather than a blip.
+ *
+ * This distinction is worth real money and minutes. The retry ladder exists for
+ * transient network failures, which resolve in a second; a timeout says the
+ * page did not answer in 25 seconds, and asking again buys another 25 seconds
+ * of the same. Traced on vcactus.co.il: four attempts, four timeouts, 100s
+ * spent per URL and three URLs probed - one dead shop held a whole search for
+ * five minutes. So a timeout is thrown straight to the caller, where
+ * resolveScrape hands the URL to the other provider, which is the only thing
+ * that can actually differ.
+ */
+export function isTimeout(err: unknown): boolean {
+  const name = (err as { name?: string } | null)?.name ?? '';
+  return name === 'TimeoutError' || name === 'AbortError';
+}
+
+/*
  * How long to wait before retrying a throttled/failed Firecrawl call.
  *
  * The old code retried IMMEDIATELY, three times. Against a rate limiter that is
@@ -274,11 +291,11 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  *
  * Without it a hung render held one of the five concurrency slots for as long
  * as Firecrawl's own 30s default (or the socket's, if the API never answered),
- * and every other site in the fan-out queued behind it. The abort throws, which
- * the existing retry path already treats as a network blip - so a stall costs
- * one bounded wait and a retry instead of stalling the whole search. Sent to
- * Firecrawl as `timeout` too, so the render gives up at the same moment rather
- * than burning a credit on a page nobody is waiting for any more.
+ * and every other site in the fan-out queued behind it. Sent to Firecrawl as
+ * `timeout` too, so the render gives up at the same moment rather than burning
+ * a credit on a page nobody is waiting for any more.
+ *
+ * A timed-out request is NOT retried - see isTimeout.
  */
 export const FIRECRAWL_TIMEOUT_MS = Number(env('FIRECRAWL_TIMEOUT_MS')) || 25000;
 
@@ -347,8 +364,8 @@ async function firecrawlScrape(
       })
     );
   } catch (err) {
-    if (attempt < MAX_SCRAPE_ATTEMPTS) return retry();
-    throw err;
+    if (!isTimeout(err) && attempt < MAX_SCRAPE_ATTEMPTS) return retry();
+    throw err; // a deadline that already fired will fire again; let the caller switch providers
   }
   if (res.status === 429 && attempt < MAX_SCRAPE_ATTEMPTS) {
     /*

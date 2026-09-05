@@ -41,6 +41,7 @@ import {
   rateLimitWaitMs,
   tavilyLeads,
   FIRECRAWL_RESCUE_BUDGET_MS,
+  isTimeout,
 } from './core.ts';
 import type { ScrapeFn, ClassifyFn, Plant, VerificationReport } from './core.ts';
 import * as fs from 'node:fs';
@@ -1269,4 +1270,16 @@ test('fetchSearchMarkdown: probes read as served, then one rendered attempt when
   const renderedRescue = seen.filter((c) => c.url.includes('%D7%9E') && c.waitFor === RENDER_WAIT_MS);
   assert.equal(renderedRescue.length, 1);
   assert.equal(renderedRescue[0].tavilyKey, undefined); // rendering is the point; Tavily cannot
+});
+
+test('isTimeout: our own deadline is told apart from an ordinary network failure', () => {
+  const abort = new Error('aborted');
+  abort.name = 'AbortError';
+  const timeout = new Error('timed out');
+  timeout.name = 'TimeoutError';
+  assert.equal(isTimeout(timeout), true);
+  assert.equal(isTimeout(abort), true);
+  assert.equal(isTimeout(new TypeError('fetch failed')), false);
+  assert.equal(isTimeout(null), false);
+  assert.equal(isTimeout('TimeoutError'), false); // a string is not an error
 });
