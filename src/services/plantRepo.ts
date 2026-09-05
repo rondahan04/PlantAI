@@ -284,6 +284,37 @@ export function createPlantRepo(deps: RepoDeps) {
     return { ok: true, plant: current };
   }
 
+  /*
+   * Attach a finding to a plant that already exists.
+   *
+   * Its own method rather than a field on `update` for the same reason
+   * `setPhoto` is: a diagnosis is the one piece of a plant record produced by
+   * a paid network call, and a caller reaching for it should see that in the
+   * name. Used by the portfolio's bulk diagnose, which walks plants that were
+   * added by hand and so have never been through the camera.
+   */
+  async function setDiagnosis(
+    id: string,
+    diagnosis: PlantDiagnosis
+  ): Promise<RepoResult<{ plant: StoredPlant }>> {
+    if (!isLoggedIn()) {
+      const result = guest.update(id, { diagnosis });
+      return result.ok ? { ok: true, plant: result.plant } : { ok: false, reason: result.reason };
+    }
+
+    const current = mirror.load().plants.find((p) => p.id === id);
+    if (!current) return { ok: false, reason: 'not_found' };
+
+    const cloudResult = await cloud.updatePlant(id, { diagnosis });
+    if (!cloudResult.ok) return { ok: false, reason: cloudResult.reason };
+
+    const fresh = mirror.load().plants;
+    const latest = fresh.find((p) => p.id === id) ?? current;
+    const updated: StoredPlant = { ...latest, diagnosis };
+    mirror.replace(fresh.map((p) => (p.id === id ? updated : p)));
+    return { ok: true, plant: updated };
+  }
+
   async function update(
     id: string,
     patch: Partial<Pick<StoredPlant, 'reminderId' | 'soilMedium' | 'nickname'>>
@@ -391,6 +422,7 @@ export function createPlantRepo(deps: RepoDeps) {
     refreshFromCloud,
     save,
     setPhoto,
+    setDiagnosis,
     saveManual,
     markWatered,
     markCare,

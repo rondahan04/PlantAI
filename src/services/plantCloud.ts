@@ -128,6 +128,9 @@ export type CloudPatch = Partial<{
   nickname: string | null;
   /* Storage OBJECT PATH, never a URL - see CloudRow.photo_path. */
   photoPath: string | null;
+  /* Attaching a finding to a plant that was added by hand, long after it was
+   * saved. Null clears it, which nothing does today but the column allows. */
+  diagnosis: PlantDiagnosis | null;
 }>;
 
 export interface ImportBatchResult {
@@ -271,6 +274,7 @@ export function createCloudPlantLibrary(deps: CloudDeps, opts: CloudOptions = {}
     if ('soilMedium' in patch) rowPatch.soil_medium = patch.soilMedium ?? null;
     if ('nickname' in patch) rowPatch.nickname = patch.nickname ?? null;
     if ('photoPath' in patch) rowPatch.photo_path = patch.photoPath ?? null;
+    if ('diagnosis' in patch) rowPatch.diagnosis = patch.diagnosis ?? null;
 
     return (await deps.updatePlant(id, rowPatch)) ? { ok: true } : { ok: false, reason: 'network' };
   }

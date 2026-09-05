@@ -9,6 +9,8 @@ import {
   SectionList,
   AccessibilityInfo,
   Image,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -41,6 +43,9 @@ import { onboarding } from '../services/onboarding';
 import { useSession } from '../hooks/useSession';
 import { getSessionHint } from '../services/sessionHint';
 import { copy } from '../services/language';
+import { diagnoseTargets, waterTargets } from '../lib/bulkCare';
+import { bulkDiagnose } from '../services/bulkDiagnoseInstance';
+import type { BulkProgress } from '../services/bulkDiagnose';
 import PlantCard from '../components/PlantCard';
 import ImportBanner from '../components/ImportBanner';
 import { TAB_BAR_CLEARANCE } from '../navigation/tabBarMetrics';
@@ -125,6 +130,23 @@ export default function PortfolioScreen({ navigation }: Props) {
    * for a moment, and a filter that survived a relaunch would look like plants
    * had gone missing. */
   const [filter, setFilter] = useState<PortfolioFilter>('all');
+
+  /*
+   * The bulk job lives in a module-level service, not here: it keeps running
+   * while the user browses other tabs, so this screen only mirrors its
+   * progress. Subscribing hands the current state immediately, which is what
+   * lets a returning user see a job that started before they left.
+   */
+  const [bulk, setBulk] = useState<BulkProgress>(() => bulkDiagnose.get());
+  useEffect(() => bulkDiagnose.subscribe(setBulk), []);
+
+  /* Refresh the cards as findings land, so a diagnosed plant stops looking
+   * untouched while the job is still working through the rest. */
+  useEffect(() => {
+    if (bulk.state === 'running' || bulk.state === 'done') setLibrary(plantRepo.loadLocal());
+  }, [bulk.done, bulk.state]);
+
+  const [watering, setWatering] = useState(false);
 
   // A plant saved on the Diagnosis screen - or on the add-plant form - has to
   // appear on the way back.
@@ -295,6 +317,74 @@ export default function PortfolioScreen({ navigation }: Props) {
     // purpose - re-running this on a timer would reshuffle the strip under a
     // user mid-scroll for a day boundary they cannot see.
   }, [library]);
+
+  /* Both bulk actions act on many plants at once, so both state the count
+   * before spending anything - see lib/bulkCare.ts for who they act on. */
+  const onDiagnoseAll = useCallback(() => {
+    const { targets, skippedNoPhoto } = diagnoseTargets(library.plants);
+    if (targets.length === 0) {
+      /* Two different "nothing to do" stories: everything is already checked,
+       * or there are plants we cannot check because they have no picture. The
+       * second is actionable, so it names the fix. */
+      Alert.alert(
+        copy.bulkCare.diagnoseNothingTitle,
+        skippedNoPhoto > 0
+          ? copy.bulkCare.diagnoseNoPhotos(skippedNoPhoto)
+          : copy.bulkCare.diagnoseNothingBody
+      );
+      return;
+    }
+    Alert.alert(
+      copy.bulkCare.diagnoseConfirmTitle,
+      copy.bulkCare.diagnoseConfirmBody(targets.length, skippedNoPhoto),
+      [
+        { text: copy.bulkCare.cancelAction, style: 'cancel' },
+        {
+          text: copy.bulkCare.confirm,
+          onPress: () => {
+            // Not awaited: the whole point is that it runs while the user
+            // carries on. Progress arrives through the subscription above.
+            void bulkDiagnose.run(targets, skippedNoPhoto);
+          },
+        },
+      ]
+    );
+  }, [library]);
+
+  const onWaterAll = useCallback(() => {
+    const targets = waterTargets(due);
+    if (targets.length === 0) {
+      Alert.alert(copy.bulkCare.waterNothingTitle, copy.bulkCare.waterNothingBody);
+      return;
+    }
+    Alert.alert(
+      copy.bulkCare.waterConfirmTitle,
+      copy.bulkCare.waterConfirmBody(targets.length, library.plants.length),
+      [
+        { text: copy.bulkCare.cancelAction, style: 'cancel' },
+        {
+          text: copy.bulkCare.confirm,
+          onPress: async () => {
+            setWatering(true);
+            /*
+             * One stamp for the whole batch rather than Date.now() per plant:
+             * the user watered them in one pass, and a spread of timestamps
+             * would put the same errand on several minutes of the history.
+             */
+            const at = Date.now();
+            const results = await Promise.all(targets.map((p) => plantRepo.markWatered(p.id, at)));
+            setLibrary(plantRepo.loadLocal());
+            setWatering(false);
+            const failed = results.filter((r) => !r.ok).length;
+            Alert.alert(
+              copy.bulkCare.waterDone(results.length - failed),
+              failed > 0 ? copy.bulkCare.waterFailed : undefined
+            );
+          },
+        },
+      ]
+    );
+  }, [due, library]);
 
   /*
    * NOT just "does the library have plants". When logged in, `library` is the cloud mirror, and a
@@ -509,6 +599,85 @@ export default function PortfolioScreen({ navigation }: Props) {
                 </View>
               )}
 
+              {/*
+                Two bulk actions, above the filter chips: they act on the whole
+                library, so they belong with the library-wide controls rather
+                than inside a filtered view whose contents they ignore.
+              */}
+              <View style={s.bulkRow}>
+                <Pressable
+                  style={({ pressed }) => [s.bulkBtn, pressed && s.bulkBtnPressed]}
+                  onPress={onDiagnoseAll}
+                  accessibilityRole="button"
+                  accessibilityLabel={copy.bulkCare.a11yDiagnoseAll}
+                >
+                  <Ionicons name="scan-outline" size={18} color={t.color.primary} />
+                  <Text style={s.bulkBtnText} numberOfLines={1}>
+                    {copy.bulkCare.diagnoseAll}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [s.bulkBtn, pressed && s.bulkBtnPressed]}
+                  onPress={onWaterAll}
+                  disabled={watering}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: watering }}
+                  accessibilityLabel={copy.bulkCare.a11yWaterAll}
+                >
+                  {watering ? (
+                    <ActivityIndicator size="small" color={t.color.water} />
+                  ) : (
+                    <Ionicons name="water-outline" size={18} color={t.color.water} />
+                  )}
+                  <Text style={s.bulkBtnText} numberOfLines={1}>
+                    {copy.bulkCare.waterAll}
+                  </Text>
+                </Pressable>
+              </View>
+
+              {/*
+                The job outlives this screen, so the row reports it wherever the
+                user left it - and stays after it finishes until dismissed, so
+                a run that completed in another tab is still reported.
+              */}
+              {bulk.state !== 'idle' && (
+                <View style={s.bulkProgress}>
+                  {bulk.state === 'running' ? (
+                    <ActivityIndicator size="small" color={t.color.primary} />
+                  ) : (
+                    <Ionicons name="checkmark-circle" size={18} color={t.color.primary} />
+                  )}
+                  <View style={s.bulkProgressText}>
+                    <Text style={s.bulkProgressTitle} numberOfLines={1}>
+                      {bulk.state === 'running'
+                        ? copy.bulkCare.diagnoseRunning(bulk.done, bulk.total)
+                        : bulk.failed > 0
+                          ? copy.bulkCare.diagnoseDoneWithFailures(bulk.done, bulk.failed)
+                          : copy.bulkCare.diagnoseDone(bulk.done)}
+                    </Text>
+                    {bulk.state === 'running' && bulk.currentName !== undefined && (
+                      <Text style={s.bulkProgressSub} numberOfLines={1}>
+                        {bulk.currentName}
+                      </Text>
+                    )}
+                    {bulk.state === 'done' && bulk.skippedNoPhoto > 0 && (
+                      <Text style={s.bulkProgressSub} numberOfLines={1}>
+                        {copy.bulkCare.diagnoseDoneSkipped(bulk.skippedNoPhoto)}
+                      </Text>
+                    )}
+                  </View>
+                  <Pressable
+                    onPress={() => (bulk.state === 'running' ? bulkDiagnose.cancel() : bulkDiagnose.dismiss())}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                  >
+                    <Text style={s.bulkProgressAction}>
+                      {bulk.state === 'running' ? copy.bulkCare.cancel : copy.bulkCare.dismiss}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -703,6 +872,35 @@ function makeStyles(t: Theme) {
       marginBottom: t.space.sm,
     },
     libCta: { marginTop: t.space.xl },
+    bulkRow: { flexDirection: 'row', gap: t.space.md, marginTop: t.space.lg },
+    bulkBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: t.space.sm,
+      minHeight: 44,
+      paddingHorizontal: t.space.md,
+      borderRadius: t.radius.pill,
+      borderWidth: 1,
+      borderColor: t.color.border,
+      backgroundColor: t.color.surface,
+    },
+    bulkBtnPressed: { opacity: 0.7 },
+    bulkBtnText: { ...t.type.bodyStrong, color: t.color.foreground, flexShrink: 1 },
+    bulkProgress: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: t.space.md,
+      marginTop: t.space.md,
+      padding: t.space.md,
+      borderRadius: t.radius.lg,
+      backgroundColor: t.color.surfaceMuted,
+    },
+    bulkProgressText: { flex: 1, gap: 2 },
+    bulkProgressTitle: { ...t.type.bodyStrong, color: t.color.foreground, writingDirection: 'auto' },
+    bulkProgressSub: { ...t.type.caption, color: t.color.textSecondary, writingDirection: 'auto' },
+    bulkProgressAction: { ...t.type.bodyStrong, color: t.color.primary },
 
     // The row scrolls rather than wraps: three chips fit on a phone, but the
     // Hebrew labels are longer and a wrapped second line pushes the first card
