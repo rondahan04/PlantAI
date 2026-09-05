@@ -7,6 +7,8 @@
 import { env, hostOf, type PipelineResult, type Plant } from './core.ts';
 import { type DiscoveredNursery } from './places.ts';
 
+import type { SiteStage } from '../server/scrapeHealth.ts';
+
 export interface NurseryResult {
   id: string;
   name: string;
@@ -146,6 +148,16 @@ export interface PipelineDeps {
   ) => Promise<{ plausible: boolean; reason: string }[]>;
   readFallbackUrls: () => string[]; // nurseries-fallback.txt
   nationalUrls: string[]; // ship-to-home shippers
+  /*
+   * Optional observer: called once per site with where that site's read
+   * actually stopped (E11). The pipeline has this fact already and threw it
+   * away, which is why a nursery that quietly stops parsing has been invisible
+   * - the search still succeeds, it just silently contains fewer shops.
+   *
+   * Purely an observer. It must never influence the result, and a throw here
+   * must never fail a search, so every call is wrapped.
+   */
+  onSiteRead?: (host: string, stage: SiteStage) => void;
 }
 
 const R_KM = 6371;
@@ -202,6 +214,21 @@ async function scrapeOne(
   searchTerm: string = input.plantName
 ): Promise<NurseryResult> {
   const host = hostOf(n.website);
+
+  /*
+   * Reporting a site's outcome must never be able to change it. The observer is
+   * a diagnostic on a paid scrape that is already half-finished - a throw here
+   * would discard work the user has waited for and money already spent - so it
+   * is wrapped and swallowed rather than trusted.
+   */
+  const noteSite = (site: string, stage: SiteStage): void => {
+    try {
+      deps.onSiteRead?.(site, stage);
+    } catch {
+      /* a broken observer is not a broken scrape */
+    }
+  };
+
   const base: NurseryResult = {
     id: host,
     name: n.name || host,
@@ -237,6 +264,7 @@ async function scrapeOne(
   try {
     const outcome = await Promise.race([readOneSite(), overBudget]);
     if (outcome === BUDGET_EXPIRED) {
+      noteSite(host, 'timeout');
       return {
         ...base,
         outcome: 'not_found',
@@ -256,6 +284,7 @@ async function scrapeOne(
   try {
     const { md } = await deps.search(n.website, searchTerm, host);
     const { plants, funnel } = await deps.extract({ markdown: md, query: input.plantName, site: host });
+    noteSite(host, funnel?.stage ?? 'no_markdown');
     if (plants.length > 0) {
       const best = cheapestMatch(plants);
       return {
@@ -295,6 +324,7 @@ async function scrapeOne(
   } catch (err: any) {
     // A thrown scrape is the same story to the user as an unreadable one: we
     // did not manage to look, so we cannot say the plant is absent.
+    noteSite(host, 'error');
     return {
       ...base,
       outcome: 'not_found',

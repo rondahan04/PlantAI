@@ -38,6 +38,7 @@ import { runNurserySearch, type PipelineDeps, type NurseryResult } from '../scra
 import { clientIp, createGate, readGateConfig } from './gate.ts';
 import { createJobStore } from './jobs.ts';
 import { createNurseryCache, searchKey } from './nurseryCache.ts';
+import { createScrapeHealth } from './scrapeHealth.ts';
 import {
   DiagnosisServiceError,
   NotAPlantError,
@@ -79,6 +80,14 @@ const jobs = createJobStore<NurseryResult[]>();
  * Supabase. The anon key is deliberately NOT accepted as a fallback - RLS
  * denies that role every row in the table, so it would silently cache nothing.
  */
+/*
+ * Per-nursery scrape freshness (E11). A shop whose markup changed returns zero
+ * rows forever while the search as a whole still succeeds, so the global
+ * `nursery_scrape` flag stays green through it. This is what makes that
+ * visible.
+ */
+const scrapeHealth = createScrapeHealth();
+
 const nurseryCache = createNurseryCache<NurseryResult[]>({
   url: env('SUPABASE_URL') ?? env('EXPO_PUBLIC_SUPABASE_URL'),
   serviceKey: env('SUPABASE_SERVICE_ROLE_KEY'),
@@ -141,6 +150,7 @@ const deps: PipelineDeps = {
       .map((l) => l.trim())
       .filter((l) => l.startsWith('http')),
   nationalUrls: NATIONAL_NURSERIES,
+  onSiteRead: (host, stage) => scrapeHealth.record(host, stage),
 };
 
 // Temporary: the lecturer's shared OpenAI key has no credits (2026-08-22).
@@ -360,9 +370,17 @@ const server = http.createServer(async (req, res) => {
       // `cache.enabled: false` means every search is a live paid scrape. It is
       // the only failure here that costs money while looking perfectly healthy.
       cache: nurseryCache.stats(),
+      /*
+       * Summary only. The per-host detail is behind ?errors=1 with the rest of
+       * the diagnostics: which shops we scrape is not something an
+       * unauthenticated endpoint should enumerate.
+       */
+      scrape: scrapeHealth.summary(),
     };
     if (u.searchParams.get('errors') === '1') {
-      body.errors = gate.checkSecret(ip, secret).allow ? recentErrors : 'secret required';
+      const allowed = gate.checkSecret(ip, secret).allow;
+      body.errors = allowed ? recentErrors : 'secret required';
+      body.scrapeHosts = allowed ? scrapeHealth.report() : 'secret required';
     }
     json(res, 200, body);
     return;
