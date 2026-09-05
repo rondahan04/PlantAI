@@ -13,6 +13,11 @@
 > **Ops pass shipped 2026-09-05** (PRs #13, #15). The failures that were invisible now report
 > themselves, `main` is gated on CI, and "water all" reaches plants that have never been
 > watered. 687 tests green.
+> **Perf pass + Inter shipped 2026-09-05** (PRs #12, #18, #19). Photos downscale on entry and
+> render through expo-image, photo URLs are signed in one batched request, Portfolio rows stop
+> redrawing, "water all" waters everything, and the Home hero is 21% shorter. 712 tests green.
+> ⚠️ Built to Ron's iPhone the same day, but that build predates the Inter merge and none of
+> the new UI has been looked at.
 > 🔴 **The shared scrape cache is OFF in production** - `/health` says `cache.enabled: false`,
 > so every nursery search is a live paid scrape. Needs two env vars in the Render dashboard;
 > see step 21.
@@ -370,6 +375,68 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
     ⚠️ **Nobody can push directly to `main` any more, including from the laptop.** Every change
     goes through a PR with green checks. Escape hatch if CI ever breaks and blocks an urgent fix:
     `gh api -X DELETE repos/rondahan04/PlantAI/branches/main/protection`.
+
+26. ✅ **[M3] App performance pass - done 2026-09-05 (PR #18, `62737c7`, Trello #89).**
+    Measured before changing anything, and the numbers killed most of the candidates:
+    `plantStore.load()` is **0.18ms at 200 plants**, `dueSoon()` 0.14ms, `searchCatalog()`
+    0.08ms. **The "one JSON blob re-parsed on every focus" pattern is fine** - no SQLite
+    migration, no incremental storage, no memoised schedule maths. Do not spend a day there.
+    The real costs were images, round trips and re-renders:
+    - **Signed URLs: N requests → 1.** `createSignedUrl` per row meant thirty round trips
+      before a photo could paint, on every Portfolio mount, with nothing reusing the hour-long
+      URLs. Batched + cached, re-signed 5 min before expiry, cleared on sign-out (a signed URL
+      is a live read capability on a private bucket).
+    - **expo-image** everywhere a photo renders. A 12MP photo is ~48MB of bitmap and the
+      Portfolio was decoding all of it to paint a 56pt thumbnail. `recyclingKey` so a recycled
+      row never flashes the previous plant's photo.
+    - **Downscale on entry**, 1600px long edge, at the one point camera and gallery both
+      funnel through - the August deferral, and the root fix for `payload_too_large`.
+    - **Rows stop redrawing.** `React.memo` alone would have done nothing: storage reads go
+      through JSON.parse, so every plant object is a new reference and reference equality can
+      never hold. Comparator is a pure module, 13 tests.
+    - **Catalog index on first use.** 🔵 Honest correction: only **1.45ms** of the ~13ms
+      import was the index; the rest is data-literal evaluation, which this does not touch.
+    ⚠️ **No speed claim here is measured on a device** - all reasoned from code and bitmap
+    arithmetic.
+
+27. ✅ **[M3] Water all waters everything - done 2026-09-05 (PR #19, `5c2c44e`, Trello #90).**
+    Twice in one day. First it was widened to reach never-watered plants (Trello #88); then,
+    by request, the guard came off entirely and it now marks **every plant in the portfolio**.
+    Marking a plant watered yesterday still records water it never got and still pushes its
+    reminder a full interval late - that reasoning did not stop being true, it lost to the
+    label. The honesty moved into the confirmation: *"including any that were not due yet, and
+    restarts their schedules"*, so the reset is agreed to at the tap.
+    Acts on the whole library, not the filtered view - the All/Diagnosed chips are a way of
+    looking at the portfolio, not a selection. `neverWatered()` stays, tested and unused.
+
+28. ✅ **[design] Home hero is smaller - done 2026-09-05 (PR #18, `82e4620`).**
+    184pt → 146pt, the whole block rather than the type alone: padding 24→16, title
+    `display`→`title` (32/40 → 23/30), gaps tightened, CTA 48→**44** (the accessibility floor,
+    not lower). Touches Home, which the design review marked "do not touch" - that rule was
+    about not degrading the first-run screen, and this was a requested change to it.
+    ⚠️ Never seen rendered; the 23pt choice is a taste call awaiting Ron's eye.
+
+29. ⏳ **[ops] Clean iOS builds need RN compiled from source (Trello #91).**
+    `expo run:ios` fails at link with missing RN core C++ symbols
+    (`facebook::react::Sealable`, `ShadowNode::getDebugName`) referenced from
+    **RNGestureHandler** and **RNScreens** - not from anything this app wrote, and not from
+    the new image dependencies. `Podfile` defaults `RCT_USE_PREBUILT_RNCORE=1`, so a prebuilt
+    core meets pods compiled from source against a different ABI. Clearing DerivedData does
+    not help.
+    **Workaround, used for the 2026-09-05 device build:** `cd ios && RCT_USE_PREBUILT_RNCORE=0
+    pod install`, then build. ~1,600 compile steps, but it links and installs.
+    🔵 **Red herring worth remembering:** the log also warns `cannot link directly with
+    'SwiftUICore'`. That is a WARNING, not the failure, and chasing it wastes time - the real
+    error only appears under `Undefined symbols`.
+    **Proper fix:** `expo-build-properties` with `ios.buildReactNativeFromSource: true`, which
+    the Podfile already reads and which survives prebuild (`ios/` is gitignored, so a hand-
+    edited Podfile is not). Worth first asking why those two pods disagree, since building
+    from source is a permanent cost on every clean build.
+
+30. ✅ **[design] Inter replaces Nunito - merged 2026-09-05 (PR #12, `9423811`).**
+    Opened earlier in the day and merged at the end of it, after `main` was merged in and CI
+    verified it against a clean `npm ci`. ⚠️ The device build made on 2026-09-05 predates this
+    merge, so **the phone is still running Nunito** until the next build.
 
 ---
 
