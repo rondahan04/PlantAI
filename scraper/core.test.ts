@@ -39,6 +39,8 @@ import {
   PROBE_CONFIDENT_SCORE,
   createRateLimiter,
   rateLimitWaitMs,
+  tavilyLeads,
+  FIRECRAWL_RESCUE_BUDGET_MS,
 } from './core.ts';
 import type { ScrapeFn, ClassifyFn, Plant, VerificationReport } from './core.ts';
 import * as fs from 'node:fs';
@@ -277,7 +279,7 @@ test('resolveScrape: primary returns markdown → Tavily not called', async () =
     tavilyCalls++;
     return 'TAVILY';
   };
-  const md = await resolveScrape({ url: 'x', tavilyKey: 'k', primary: okPrimary('FIRECRAWL'), fallback });
+  const md = await resolveScrape({ url: 'x', fallbackKey: 'k', primary: okPrimary('FIRECRAWL'), fallback });
   assert.equal(md, 'FIRECRAWL');
   assert.equal(tavilyCalls, 0);
 });
@@ -285,7 +287,7 @@ test('resolveScrape: primary returns markdown → Tavily not called', async () =
 test('resolveScrape: primary throws → Tavily rescues', async () => {
   const md = await resolveScrape({
     url: 'x',
-    tavilyKey: 'k',
+    fallbackKey: 'k',
     primary: throwPrimary('Firecrawl 500'),
     fallback: async () => 'TAVILY',
   });
@@ -295,14 +297,14 @@ test('resolveScrape: primary throws → Tavily rescues', async () => {
 test('resolveScrape: primary empty → Tavily rescues', async () => {
   const md = await resolveScrape({
     url: 'x',
-    tavilyKey: 'k',
+    fallbackKey: 'k',
     primary: okPrimary(''),
     fallback: async () => 'TAVILY',
   });
   assert.equal(md, 'TAVILY');
 });
 
-test('resolveScrape: no tavilyKey → empty stays empty, throw rethrows', async () => {
+test('resolveScrape: no fallbackKey → empty stays empty, throw rethrows', async () => {
   let tavilyCalls = 0;
   const fallback = async () => {
     tavilyCalls++;
@@ -320,7 +322,7 @@ test('resolveScrape: no tavilyKey → empty stays empty, throw rethrows', async 
 test('resolveScrape: both fail → empty+empty is "", throw+throw surfaces primary error', async () => {
   const bothEmpty = await resolveScrape({
     url: 'x',
-    tavilyKey: 'k',
+    fallbackKey: 'k',
     primary: okPrimary(''),
     fallback: async () => '',
   });
@@ -329,7 +331,7 @@ test('resolveScrape: both fail → empty+empty is "", throw+throw surfaces prima
     () =>
       resolveScrape({
         url: 'x',
-        tavilyKey: 'k',
+        fallbackKey: 'k',
         primary: throwPrimary('FIRECRAWL_ERR'),
         fallback: throwPrimary('TAVILY_ERR'),
       }),
@@ -941,7 +943,7 @@ test('fetchSearchMarkdown: known platform reads quick first - no wait, hour-old 
   assert.equal(search.length, 1); // the quick read was enough
   assert.equal(search[0].opts.waitFor, 0);
   assert.equal(search[0].opts.maxAge, SEARCH_MAX_AGE_MS);
-  assert.equal(search[0].opts.tavilyKey, undefined); // Tavily is the careful read's job
+  assert.equal(search[0].opts.tavilyKey, 't'); // unrendered read: Tavily leads
 });
 
 test('fetchSearchMarkdown: an empty quick read is followed by a careful one', async () => {
@@ -1186,39 +1188,85 @@ test('createSearcher: a confident probe hit teaches a per-host template - one re
   }
 });
 
-test('fetchSearchMarkdown: with Firecrawl\'s minute spent, a search read goes to Tavily first', async () => {
-  const realFetch = globalThis.fetch;
-  const tavilyCalls: string[] = [];
-  globalThis.fetch = (async (input: any, init: any) => {
-    tavilyCalls.push(JSON.parse(init.body).urls);
-    return new Response(JSON.stringify({ results: [{ raw_content: RESULTS }] }), { status: 200 });
-  }) as any;
-  try {
-    const { fn, calls } = recordingScrape({ 'shop.co.il': SHOPIFY_HOME });
-    const s = createSearcher('k', { scrape: fn, tavilyKey: 't', firecrawlWaitMs: () => 40_000 });
-    const r = await s.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
-    assert.equal(r.md, RESULTS);
-    assert.equal(tavilyCalls.length, 1);
-    assert.equal(calls.filter((c) => c.url.includes('search?q=')).length, 0); // Firecrawl never asked
-  } finally {
-    globalThis.fetch = realFetch;
-  }
+
+// --- which provider leads -------------------------------------------------
+
+test('tavilyLeads: only an unrendered read with a Tavily key goes to Tavily first', () => {
+  assert.equal(tavilyLeads({ waitFor: 0, tavilyKey: 't' }), true);
+  assert.equal(tavilyLeads({ waitFor: 3500, tavilyKey: 't' }), false); // rendering is Firecrawl's job
+  assert.equal(tavilyLeads({ waitFor: 0 }), false); // no key configured
+  assert.equal(tavilyLeads({ tavilyKey: 't' }), false); // waitFor defaults to a render
 });
 
-test('fetchSearchMarkdown: a short Firecrawl queue is waited out, Tavily untouched', async () => {
-  const realFetch = globalThis.fetch;
-  let tavilyCalls = 0;
-  globalThis.fetch = (async () => {
-    tavilyCalls++;
-    return new Response('{}', { status: 500 });
-  }) as any;
-  try {
-    const { fn } = recordingScrape({ 'search?q=': RESULTS, 'shop.co.il': SHOPIFY_HOME });
-    const s = createSearcher('k', { scrape: fn, tavilyKey: 't', firecrawlWaitMs: () => 2_000 });
-    const r = await s.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
-    assert.equal(r.md, RESULTS);
-    assert.equal(tavilyCalls, 0);
-  } finally {
-    globalThis.fetch = realFetch;
-  }
+test('resolveScrape: a bot wall from the primary is treated as a failed read', async () => {
+  const wall = 'Checking your Browser… Verify you are human';
+  const md = await resolveScrape({
+    url: 'x',
+    fallbackKey: 'k',
+    primary: async () => wall,
+    fallback: async () => 'REAL PAGE',
+  });
+  assert.equal(md, 'REAL PAGE');
+});
+
+test('resolveScrape: when the fallback fails too, the primary content is kept', async () => {
+  const wall = 'Please enable JavaScript to continue';
+  assert.equal(
+    await resolveScrape({ url: 'x', fallbackKey: 'k', primary: async () => wall, fallback: async () => { throw new Error('down'); } }),
+    wall
+  );
+  assert.equal(
+    await resolveScrape({ url: 'x', fallbackKey: 'k', primary: async () => wall, fallback: async () => '' }),
+    wall
+  );
+});
+
+test('identifyPlatform: unrendered layers carry the Tavily key, the rendered one does not', async () => {
+  const seen: Array<{ url: string; waitFor?: number; tavilyKey?: string }> = [];
+  const scrape: ScrapeFn = async (url, _k, o) => {
+    seen.push({ url, waitFor: o?.waitFor, tavilyKey: o?.tavilyKey });
+    return '';
+  };
+  await identifyPlatform('https://x.co.il', 'k', { scrape, tavilyKey: 't' });
+  const rendered = seen.filter((c) => (c.waitFor ?? 0) > 0);
+  const asServed = seen.filter((c) => (c.waitFor ?? 0) === 0);
+  assert.ok(rendered.length >= 1);
+  assert.ok(asServed.length >= 2);
+  for (const c of rendered) assert.equal(c.tavilyKey, undefined, `rendered read must stay on Firecrawl: ${c.url}`);
+  for (const c of asServed) assert.equal(c.tavilyKey, 't', `as-served read should offer Tavily: ${c.url}`);
+});
+
+test('fetchSearchMarkdown: the quick read offers Tavily, the careful re-read renders', async () => {
+  const seen: Array<{ url: string; waitFor?: number; tavilyKey?: string }> = [];
+  const scrape: ScrapeFn = async (url, _k, o) => {
+    seen.push({ url, waitFor: o?.waitFor, tavilyKey: o?.tavilyKey });
+    if (!url.includes('search?q=')) return SHOPIFY_HOME;
+    return o?.waitFor === RENDER_WAIT_MS ? RESULTS : '';
+  };
+  const s = createSearcher('k', { scrape, tavilyKey: 't' });
+  const r = await s.fetchSearchMarkdown('https://shop.co.il', 'מרווה', 'shop.co.il');
+  assert.equal(r.md, RESULTS);
+  const searches = seen.filter((c) => c.url.includes('search?q='));
+  assert.equal(searches.length, 2);
+  assert.deepEqual({ waitFor: searches[0].waitFor, tavilyKey: searches[0].tavilyKey }, { waitFor: 0, tavilyKey: 't' });
+  assert.equal(searches[1].waitFor, RENDER_WAIT_MS);
+});
+
+test('fetchSearchMarkdown: probes read as served, then one rendered attempt when none scored', async () => {
+  const seen: Array<{ url: string; waitFor?: number; tavilyKey?: string }> = [];
+  const scrape: ScrapeFn = async (url, _k, o) => {
+    seen.push({ url, waitFor: o?.waitFor, tavilyKey: o?.tavilyKey });
+    // Only a rendered read of the first candidate reveals the grid.
+    if (url.includes('post_type=product') && o?.waitFor === RENDER_WAIT_MS) return RESULTS;
+    return '';
+  };
+  const s = createSearcher('k', { scrape, tavilyKey: 't' });
+  const r = await s.fetchSearchMarkdown('https://x.co.il', 'מרווה', 'x.co.il');
+  assert.equal(r.md, RESULTS);
+  const probes = seen.filter((c) => c.url.includes('%D7%9E') && c.waitFor === 0);
+  assert.equal(probes.length, 3);
+  for (const p of probes) assert.equal(p.tavilyKey, 't');
+  const renderedRescue = seen.filter((c) => c.url.includes('%D7%9E') && c.waitFor === RENDER_WAIT_MS);
+  assert.equal(renderedRescue.length, 1);
+  assert.equal(renderedRescue[0].tavilyKey, undefined); // rendering is the point; Tavily cannot
 });

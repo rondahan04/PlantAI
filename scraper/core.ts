@@ -303,6 +303,15 @@ export interface ScrapeOpts {
   waitFor?: number;
   /* Accept a Firecrawl-cached copy no older than this (ms). 0 = always render. */
   maxAge?: number;
+  /*
+   * Whether a failed read may be retried with the other provider. Default true.
+   * Pass false where an empty read is itself an answer rather than a failure -
+   * platform detection is the case that matters: /products.json coming back
+   * empty MEANS "not Shopify", and paying a second provider to confirm the
+   * silence doubled the Firecrawl requests in a search (measured: 35 for 13
+   * sites) against a window that only allows ten a minute.
+   */
+  rescue?: boolean;
   attempt?: number;
 }
 
@@ -398,24 +407,30 @@ export async function tavilyExtract(
 }
 
 /*
- * Pure scrape orchestration: try the primary provider, fall back to Tavily on
- * throw-OR-empty. "Empty" matters as much as "throw" - bot-walled sites
- * (e.g. irism.co.il) return HTTP 200 with len=0 markdown rather than erroring,
- * so a throw-only fallback would miss the common failure. Both providers are
- * injected, so every branch is unit-testable without touching the network.
+ * Pure scrape orchestration: try the primary provider, hand off to the other
+ * one when the read failed. Which provider leads is the caller's choice (see
+ * scrapeUrl); both are injected, so every branch is unit-testable without
+ * touching the network.
  *
- *   primary md non-empty ─▶ return it (Firecrawl won, no Tavily cost)
- *   primary throws/empty + no tavilyKey ─▶ rethrow (throw) or return '' (empty)
- *   primary throws/empty + tavilyKey ─▶ Tavily; on its failure, surface the
- *                                       original primary error if there was one
+ * A read counts as failed when it throws, returns nothing, OR returns a bot
+ * wall. All three are the same story - we did not see the shop - and only the
+ * first two used to be caught, so a Cloudflare interstitial was handed on as
+ * though it were the page.
+ *
+ *   primary readable ─▶ return it (no second provider cost)
+ *   primary failed + no fallbackKey ─▶ rethrow (threw) or return what we got
+ *   primary failed + fallbackKey ─▶ the other provider; if IT fails too, keep
+ *                                   the primary's content when there was any,
+ *                                   else surface the original error
  */
 export async function resolveScrape(opts: {
   url: string;
-  tavilyKey?: string;
+  /* Key for the fallback provider. Absent = no fallback configured. */
+  fallbackKey?: string;
   primary: (url: string) => Promise<string>;
   fallback: (url: string, key: string) => Promise<string>;
 }): Promise<string> {
-  const { url, tavilyKey, primary, fallback } = opts;
+  const { url, fallbackKey, primary, fallback } = opts;
   let primaryErr: unknown;
   let md = '';
   try {
@@ -423,23 +438,56 @@ export async function resolveScrape(opts: {
   } catch (err) {
     primaryErr = err;
   }
-  if (md) return md;
-  if (!tavilyKey) {
+  if (md && !looksUnreadable(md)) return md;
+  if (!fallbackKey) {
     if (primaryErr) throw primaryErr;
-    return md; // '' - preserve today's empty-is-OK contract when no fallback configured
+    return md; // preserve the empty-is-OK contract when no fallback configured
   }
   try {
-    return await fallback(url, tavilyKey);
+    const alt = await fallback(url, fallbackKey);
+    return alt || md; // a fallback that read nothing does not erase the primary
   } catch (fallbackErr) {
-    throw primaryErr ?? fallbackErr; // both providers failed
+    if (md) return md; // even a wall beats nothing
+    throw primaryErr ?? fallbackErr; // both providers failed outright
   }
 }
 
 /*
- * Scrape a URL to markdown, with an optional Tavily fallback. Pass
- * opts.tavilyKey ONLY for real product scrapes - not for identifyPlatform's
- * detection probes, which return '' by design for the wrong platform and would
- * waste Tavily credits. Firecrawl retry/timeout config is forwarded unchanged.
+ * Which provider reads a page first.
+ *
+ * Tavily fetches and converts a page; it does not run the page's JavaScript.
+ * Firecrawl drives a real browser, which is why it can wait for a grid to
+ * paint - and why it is the scarce resource: the plan allows ten requests a
+ * minute against Tavily's hundred, and Tavily answers in ~700ms where
+ * Firecrawl takes 1.4-2.8s (13-site benchmark, 2026-09-05).
+ *
+ * So the rule follows the capability, not the vendor: `waitFor: 0` says the
+ * caller wants the page as served, which is exactly what Tavily does well, so
+ * Tavily leads. Any `waitFor` above zero is a request to render, which only
+ * Firecrawl can honour, so Firecrawl leads and Tavily is the rescue.
+ */
+export function tavilyLeads(opts: { waitFor?: number; tavilyKey?: string }): boolean {
+  return Boolean(opts.tavilyKey) && (opts.waitFor ?? RENDER_WAIT_MS) === 0;
+}
+
+/*
+ * A Tavily read that failed is worth a Firecrawl retry only if Firecrawl can
+ * answer soon. With the minute window spent, that retry queues up to a minute:
+ * measured on one site it turned a 13-site fan-out from 17s into 106s, all of
+ * it one host waiting its turn. Past this budget we return what we have and
+ * report the shop as unread, which is the honest answer and a bounded one.
+ */
+export const FIRECRAWL_RESCUE_BUDGET_MS = 10_000;
+
+/* True when Firecrawl can answer soon enough to be worth asking. */
+export function firecrawlReady(budgetMs = FIRECRAWL_RESCUE_BUDGET_MS): boolean {
+  return firecrawlWaitMs() <= budgetMs;
+}
+
+/*
+ * Scrape a URL to markdown using both providers, faster one first (see
+ * tavilyLeads). Pass opts.tavilyKey wherever a real page is wanted; without it
+ * this is Firecrawl alone, exactly as before.
  */
 export async function scrapeUrl(
   url: string,
@@ -447,9 +495,18 @@ export async function scrapeUrl(
   opts: ScrapeOpts & { tavilyKey?: string } = {}
 ): Promise<string> {
   const { tavilyKey, ...fcOpts } = opts;
+  if (tavilyLeads(opts)) {
+    const rescueOk = opts.rescue !== false && firecrawlReady();
+    return resolveScrape({
+      url,
+      fallbackKey: rescueOk ? firecrawlKey : undefined,
+      primary: (u) => tavilyExtract(u, tavilyKey!),
+      fallback: (u, k) => firecrawlScrape(u, k, fcOpts),
+    });
+  }
   return resolveScrape({
     url,
-    tavilyKey,
+    fallbackKey: tavilyKey,
     primary: (u) => firecrawlScrape(u, firecrawlKey, fcOpts),
     fallback: (u, k) => tavilyExtract(u, k),
   });
@@ -624,6 +681,13 @@ Homepage signals:\n${fingerprint}`;
  */
 export interface IdentifyOpts {
   scrape?: ScrapeFn;
+  /*
+   * Lets the two unrendered layers (L1 static homepage, L3 well-known
+   * endpoints) read through Tavily, which is both faster and drawn from a
+   * budget ten times larger. L2 deliberately does not get it: rendering the
+   * homepage is the whole point of that layer.
+   */
+  tavilyKey?: string;
   openaiKey?: string;
   learnedFile?: string;
   classify?: ClassifyFn;
@@ -642,11 +706,11 @@ export async function identifyPlatform(
   firecrawlKey: string,
   opts: IdentifyOpts = {}
 ): Promise<string> {
-  const { scrape = scrapeUrl, openaiKey, learnedFile, classify, onHomeMarkdown } = opts;
+  const { scrape = scrapeUrl, tavilyKey, openaiKey, learnedFile, classify, onHomeMarkdown } = opts;
 
   // L1 - fast static homepage. Resolves the common case for one scrape, so it
   // stays alone in its own stage and costs exactly what it always did.
-  const home0 = await safeScrape(scrape, origin, firecrawlKey, 0);
+  const home0 = await safeScrape(scrape, origin, firecrawlKey, 0, tavilyKey);
   if (home0 && onHomeMarkdown) onHomeMarkdown(home0);
   let p: string = detectPlatform(home0);
   if (p !== 'unknown') return p;
@@ -660,9 +724,9 @@ export async function identifyPlatform(
   // results are consulted in L2 → shopify-endpoint → wp-endpoint order
   // regardless of which settles first.
   const [home, shopify, wp] = await Promise.all([
-    safeScrape(scrape, origin, firecrawlKey, 4000),
-    safeScrape(scrape, `${origin}/products.json`, firecrawlKey, 0),
-    safeScrape(scrape, `${origin}/wp-json/`, firecrawlKey, 0),
+    safeScrape(scrape, origin, firecrawlKey, 4000), // rendered: Firecrawl only
+    safeScrape(scrape, `${origin}/products.json`, firecrawlKey, 0, tavilyKey),
+    safeScrape(scrape, `${origin}/wp-json/`, firecrawlKey, 0, tavilyKey),
   ]);
 
   if (home && onHomeMarkdown) onHomeMarkdown(home); // rendered beats static
@@ -702,10 +766,16 @@ async function safeScrape(
   scrape: ScrapeFn,
   url: string,
   key: string,
-  waitFor: number
+  waitFor: number,
+  tavilyKey?: string
 ): Promise<string> {
   try {
-    return await scrape(url, key, { waitFor, maxAge: HOMEPAGE_MAX_AGE_MS });
+    return await scrape(url, key, {
+      waitFor,
+      maxAge: HOMEPAGE_MAX_AGE_MS,
+      tavilyKey,
+      rescue: false, // an empty layer is an answer; the next layer is the retry
+    });
   } catch {
     return '';
   }
@@ -1390,6 +1460,8 @@ export interface SearcherOpts {
   openaiKey?: string;
   learnedFile?: string;
   tavilyKey?: string;
+  /* Injectable view of the Firecrawl minute window, tests only. */
+  firecrawlReady?: () => boolean;
   /*
    * Where to remember each host's platform between processes. Without it the
    * platform cache dies with the process - and the API host sleeps between
@@ -1402,18 +1474,9 @@ export interface SearcherOpts {
   scrape?: ScrapeFn;
   /* Injectable clock for the TTL, tests only. */
   now?: () => number;
-  /* Injectable view of the Firecrawl minute window, tests only. */
-  firecrawlWaitMs?: () => number;
 }
 
-/*
- * Firecrawl's plan allows ten requests a minute; when they are spent the next
- * search read would queue for up to a minute. Past this much queue, and only
- * when Tavily is configured, the read goes to Tavily instead - it is already
- * the provider we trust when Firecrawl reads nothing, so a page it returns is
- * a page we would have accepted anyway, a minute later.
- */
-export const TAVILY_OVERFLOW_MS = 5_000;
+
 
 /*
  * A remembered platform is trusted for 30 days, then re-identified. Only real
@@ -1472,6 +1535,7 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
   /* Per-host search URL templates learned from a confident probe hit. */
   const hostTemplates = new Map<string, string>();
   const scrape: ScrapeFn = opts.scrape ?? scrapeUrl;
+  const canRender = opts.firecrawlReady ?? firecrawlReady;
   const now = opts.now ?? Date.now;
   if (opts.learnedFile) loadLearnedPlatforms(opts.learnedFile);
 
@@ -1488,7 +1552,6 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
       delete persisted[host];
     }
   }
-  const waitMs = opts.firecrawlWaitMs ?? firecrawlWaitMs;
 
   /*
    * 'unknown' is remembered only briefly, in memory. It is as often a verdict
@@ -1545,6 +1608,7 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
     if (!cached && hostTemplates.has(host)) return 'unknown';
     const platform = await identifyPlatform(origin, firecrawlKey, {
       scrape,
+      tavilyKey: opts.tavilyKey,
       openaiKey: opts.openaiKey,
       learnedFile: opts.learnedFile,
       onHomeMarkdown: (md) => homeCache.set(host, md),
@@ -1590,22 +1654,23 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
       const url = urls[0];
       const quickWait = searchWaitFor(platform);
       let md = '';
-      if (opts.tavilyKey && waitMs() > TAVILY_OVERFLOW_MS) {
-        // Firecrawl's minute is spent: Tavily now beats Firecrawl in a minute.
-        try {
-          md = await tavilyExtract(url, opts.tavilyKey);
-        } catch {
-          /* fall through to Firecrawl, which is what waiting would have done */
-        }
+      try {
+        md = await scrape(url, firecrawlKey, {
+          waitFor: quickWait,
+          maxAge: SEARCH_MAX_AGE_MS,
+          tavilyKey: opts.tavilyKey,
+        });
+      } catch {
+        /* the careful read below is the retry */
       }
-      if (looksUnreadable(md)) {
-        try {
-          md = await scrape(url, firecrawlKey, { waitFor: quickWait, maxAge: SEARCH_MAX_AGE_MS });
-        } catch {
-          /* the careful read below is the retry */
-        }
-      }
-      if (looksUnreadable(md)) {
+      /*
+       * Rendering is the one thing Tavily cannot do, so it is worth a second
+       * read - but only while Firecrawl can answer soon. With its minute spent
+       * this retry queued 50s behind other sites for a page we already had a
+       * readable-enough copy of, and one host set the pace for the whole
+       * fan-out.
+       */
+      if (looksUnreadable(md) && canRender()) {
         md = await scrape(url, firecrawlKey, {
           waitFor: RENDER_WAIT_MS,
           maxAge: 0,
@@ -1622,14 +1687,18 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
      * of products). The probes used to fire together and keep the best, which
      * spent three of the plan's ten requests a minute on every unknown site,
      * every search - the budget that starved identification for the others.
-     * Firecrawl only, no per-probe tavilyKey: most probes are empty by design
-     * and would waste credits.
+     * Probes ask for the page as served (`waitFor: 0`), so Tavily leads and
+     * three probes cost about what one rendered Firecrawl read used to.
      */
     let best: SearchResult & { score: number } = { md: '', platform, picked: null, score: -1 };
     for (const u of urls) {
       let md = '';
       try {
-        md = await scrape(u, firecrawlKey, { maxAge: SEARCH_MAX_AGE_MS });
+        md = await scrape(u, firecrawlKey, {
+          waitFor: 0,
+          maxAge: SEARCH_MAX_AGE_MS,
+          tavilyKey: opts.tavilyKey,
+        });
       } catch {
         continue;
       }
@@ -1641,13 +1710,18 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
       }
     }
 
-    // All probes came back empty/failed - try Tavily once on the top candidate.
-    if (best.score <= 0 && opts.tavilyKey) {
+    /*
+     * No probe found a results page. The one thing not yet tried is rendering:
+     * a site whose grid is painted by JavaScript looks identical to a site with
+     * no results when read as served. One rendered Firecrawl read of the first
+     * candidate, which is the layer Tavily cannot supply.
+     */
+    if (best.score <= 0 && canRender()) {
       try {
-        const md = await tavilyExtract(urls[0], opts.tavilyKey);
+        const md = await scrape(urls[0], firecrawlKey, { waitFor: RENDER_WAIT_MS, maxAge: 0 });
         if (md) best = { md, platform, picked: urls[0], score: scoreMarkdown(md, query) };
       } catch {
-        /* keep best (empty) - both providers failed for the probe set */
+        /* keep best - neither provider could read this site */
       }
     }
     return { md: best.md, platform, picked: best.picked };
