@@ -40,14 +40,14 @@ this table mirrors them.
 
 ### Typography
 
-- **Heading Font:** Nunito (700, 800)
-- **Body Font:** Nunito (400, 500, 600)
+- **Heading Font:** Inter (700, 800)
+- **Body Font:** Inter (400, 500, 600)
 - **Mood:** warm, calm, natural, considered - one family at every size
-- **Google Fonts:** [Nunito](https://fonts.google.com/share?selection.family=Nunito:wght@400;500;600;700;800)
+- **Google Fonts:** [Inter](https://fonts.google.com/share?selection.family=Inter:wght@400;500;600;700;800)
 
 **CSS Import:**
 ```css
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 ```
 
 ### Spacing Variables
