@@ -31,6 +31,7 @@ import CameraScreen from './src/screens/CameraScreen';
 import DiagnosisScreen from './src/screens/DiagnosisScreen';
 import NurseriesScreen from './src/screens/NurseriesScreen';
 import PlantDetailScreen from './src/screens/PlantDetailScreen';
+import EditPlantScreen from './src/screens/EditPlantScreen';
 import WateringHistoryScreen from './src/screens/WateringHistoryScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import SignupScreen from './src/screens/SignupScreen';
@@ -153,6 +154,11 @@ export default function App() {
             />
             <Stack.Screen name="Diagnosis" component={DiagnosisScreen} />
             <Stack.Screen name="PlantDetail" component={PlantDetailScreen} />
+            <Stack.Screen
+              name="EditPlant"
+              component={EditPlantScreen}
+              options={{ animation: 'slide_from_bottom' }}
+            />
             <Stack.Screen name="WateringHistory" component={WateringHistoryScreen} />
             <Stack.Screen name="Nurseries" component={NurseriesScreen} />
             <Stack.Screen name="Login" component={LoginScreen} options={{ animation: 'slide_from_bottom' }} />

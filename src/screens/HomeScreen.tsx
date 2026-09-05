@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,7 +9,15 @@ import { Theme, useTheme } from '../theme';
 import { plantRepo } from '../services/plantRepoInstance';
 import { genusCarePlans } from '../services/genusCarePlans';
 import { dueSoon, plantDisplayName } from '../lib/portfolio';
-import { greetingFor, needsCareCount, stripFaces, taskGroups, taskSubtitle, type TaskGroup } from '../lib/home';
+import {
+  greetingFor,
+  needsCareCount,
+  pickHeroPhoto,
+  stripFaces,
+  taskGroups,
+  taskSubtitle,
+  type TaskGroup,
+} from '../lib/home';
 import { directionalIconStyle } from '../lib/rtl';
 import { onboarding } from '../services/onboarding';
 import { useSession } from '../hooks/useSession';
@@ -58,9 +66,19 @@ export default function HomeScreen({ navigation }: Props) {
   /* Coming back from the camera or a plant detail must not leave a stale count
    * on the dashboard - this is the screen most likely to be looked at and not
    * scrolled, so a wrong number here is a wrong number the user trusts. */
+  /*
+   * Re-rolled on every focus, not once per mount: coming back to Home from
+   * another tab is a visit, and the card showing a different plant each time
+   * is the point of the feature. Held in state rather than drawn during render
+   * so a re-render (a reminder toggling, the library reloading) cannot quietly
+   * swap the photo mid-scroll.
+   */
+  const [heroRoll, setHeroRoll] = useState(() => Math.random());
+
   useFocusEffect(
     useCallback(() => {
       setLibrary(plantRepo.loadLocal());
+      setHeroRoll(Math.random());
     }, [session])
   );
 
@@ -97,12 +115,22 @@ export default function HomeScreen({ navigation }: Props) {
     day: 'numeric',
   });
 
-  /* The hero photograph is the user's newest plant, not stock art: the card is
-   * about THEIR garden, and a stranger's monstera under "your garden at a
-   * glance" is a small lie the whole screen then has to live with. With no
+  /* The hero photograph is one of the user's own plants, not stock art: the
+   * card is about THEIR garden, and a stranger's monstera under "your garden
+   * at a glance" is a small lie the whole screen then has to live with. Which
+   * one is re-rolled every visit - see pickHeroPhoto. With no photographed
    * plants there is no photo, and the card drops it rather than showing a
    * placeholder box. */
-  const heroPhoto = shown[0]?.photoUri;
+
+  /* What the card showed last, so the next roll can avoid repeating it. A ref
+   * rather than state: it must not itself trigger a render. Declared before the
+   * memo that reads it. */
+  const heroPrevious = useRef<string | undefined>(undefined);
+  const heroPhoto = useMemo(
+    () => pickHeroPhoto(plants, heroRoll, heroPrevious.current),
+    [plants, heroRoll]
+  );
+  heroPrevious.current = heroPhoto;
 
   /* The same compact vocabulary the plant cards print, so "Today" on a card and
    * "Today" on a task tile are one string rather than two that can drift. */
@@ -376,7 +404,13 @@ const makeStyles = (t: Theme) =>
     },
     heroCtaPressed: { opacity: 0.85 },
     heroCtaText: { ...t.type.bodyStrong, color: t.color.onAccent },
-    heroPhoto: { width: '100%', height: 168, resizeMode: 'cover' as const },
+    /*
+     * A shape rather than a fixed height: 4:3 is what phone cameras shoot, so
+     * this crops the user's own photograph least, and it scales with the phone
+     * instead of being a 168pt sliver on a large screen and a letterbox on a
+     * small one.
+     */
+    heroPhoto: { width: '100%', aspectRatio: 4 / 3, resizeMode: 'cover' as const },
 
     sectionHead: {
       flexDirection: 'row',

@@ -62,6 +62,7 @@ export default function PlantCard({
   plant,
   slots = [],
   onPress,
+  onEdit,
 }: {
   plant: StoredPlant;
   /* All three care kinds, built by `plantSchedule`. Passed in rather than
@@ -73,6 +74,14 @@ export default function PlantCard({
    * Refresh does for a frame when this component reloads ahead of its parent. */
   slots?: CareSlot[];
   onPress: () => void;
+  /*
+   * Optional, and when absent the row keeps its plain chevron. Given, it
+   * replaces the chevron with a pencil rather than adding a second glyph
+   * beside it: two trailing affordances in a list row is a choice the user has
+   * to make on every card, and the chevron was only ever restating what a
+   * whole tappable row already says.
+   */
+  onEdit?: () => void;
 }) {
   const t = useTheme();
   const s = React.useMemo(() => makeStyles(t), [t]);
@@ -210,13 +219,40 @@ export default function PlantCard({
         </View>
       </View>
 
-      <Ionicons name="chevron-forward" size={18} color={t.color.textMuted} style={directionalIconStyle} />
+      {onEdit ? (
+        /*
+         * Nested inside the card's own Pressable on purpose: the inner press
+         * wins, so the pencil edits and everywhere else on the row opens the
+         * plant. hitSlop rather than a bigger box, so the target is a
+         * comfortable 44pt without the icon visually crowding the schedule.
+         */
+        <Pressable
+          onPress={onEdit}
+          hitSlop={12}
+          style={({ pressed }) => [s.editBtn, pressed && s.editBtnPressed]}
+          accessibilityRole="button"
+          accessibilityLabel={copy.editPlant.editA11y(name)}
+        >
+          <Ionicons name="pencil" size={16} color={t.color.textSecondary} />
+        </Pressable>
+      ) : (
+        <Ionicons name="chevron-forward" size={18} color={t.color.textMuted} style={directionalIconStyle} />
+      )}
     </Pressable>
   );
 }
 
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
+    editBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: t.radius.pill,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: t.color.surfaceMuted,
+    },
+    editBtnPressed: { opacity: 0.6 },
     card: {
       flexDirection: 'row',
       alignItems: 'center',

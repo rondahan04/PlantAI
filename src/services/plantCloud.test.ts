@@ -350,3 +350,25 @@ test('importBatch() reports per-plant success/failure and does not stop on one f
   assert.deepEqual(result.imported.sort(), ['l1']);
   assert.deepEqual(result.failed.sort(), ['l2']);
 });
+
+test('replacePhoto uploads first, then points the row at the new object path', async () => {
+  const { deps, rows } = fakeDeps();
+  const cloud = createCloudPlantLibrary(deps, { newId: () => 'p1' });
+  await cloud.savePlant('u1', { photoUri: 'first.jpg', diagnosis });
+
+  const result = await cloud.replacePhoto('u1', 'p1', 'second.png');
+  assert.equal(result.ok, true);
+  assert.equal(result.ok && result.path, 'u1/p1.png');
+  assert.equal(rows.get('p1')?.photo_path, 'u1/p1.png');
+});
+
+test('replacePhoto: a failed upload never patches the row', async () => {
+  const { deps, rows } = fakeDeps({ uploadFails: new Set(['second.png']) });
+  const cloud = createCloudPlantLibrary(deps, { newId: () => 'p1' });
+  await cloud.saveManualPlant('u1', { photoUri: '', species });
+  const before = rows.get('p1')?.photo_path;
+
+  const result = await cloud.replacePhoto('u1', 'p1', 'second.png');
+  assert.equal(result.ok, false);
+  assert.equal(rows.get('p1')?.photo_path, before);
+});

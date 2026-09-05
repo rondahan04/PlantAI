@@ -113,3 +113,35 @@ export function stripFaces(
   const ordered = [...withPhoto].sort((a, b) => Date.parse(b.savedAt) - Date.parse(a.savedAt));
   return { shown: ordered.slice(0, faces), overflow: Math.max(0, plants.length - faces) };
 }
+
+/*
+ * Which of the user's plants is the face of the hero card this visit.
+ *
+ * It used to be `shown[0]` - always the newest plant, forever, so a garden of
+ * twelve showed one of them and the card never changed. Picking at random
+ * makes the whole library the subject rather than the last thing added.
+ *
+ * `previous` is excluded whenever there is anything else to show. Without it a
+ * true random repeats the same photo about one visit in twelve, and a hero
+ * that did not change reads as a screen that failed to load rather than as a
+ * coincidence - the one impression this card cannot afford.
+ *
+ * Pure, and `roll` is passed in rather than drawn here, so the choice is
+ * testable without stubbing Math.random.
+ */
+export function pickHeroPhoto(
+  plants: StoredPlant[],
+  roll: number,
+  previous?: string
+): string | undefined {
+  const photos = plants
+    .map((p) => p.photoUri)
+    .filter((uri): uri is string => uri !== undefined && uri !== '');
+  if (photos.length === 0) return undefined;
+
+  const fresh = photos.filter((uri) => uri !== previous);
+  const pool = fresh.length > 0 ? fresh : photos;
+  // A roll of exactly 1 (or anything out of range) must not index past the end.
+  const index = Math.min(pool.length - 1, Math.max(0, Math.floor(roll * pool.length)));
+  return pool[index];
+}

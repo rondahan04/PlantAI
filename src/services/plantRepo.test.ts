@@ -57,6 +57,7 @@ function makeRepo(
   opts: {
     hint?: boolean;
     cloudFail?: { insert?: boolean; upload?: boolean; insertIds?: Set<string>; update?: boolean; delete?: boolean };
+    adoptFails?: boolean;
   } = {}
 ) {
   let hint = opts.hint ?? false;
@@ -65,14 +66,25 @@ function makeRepo(
   const { deps, rows } = fakeCloudDeps(opts.cloudFail);
   const cloud = createCloudPlantLibrary(deps, { newId: () => `cloud-${rows.size + 1}` });
 
+  /* Records what the guest half was asked to adopt, and answers with the
+   * "stored" path so a test can tell an adopted copy from the raw picker URI. */
+  const adopted: string[] = [];
+  const photos = {
+    adopt: async (id: string, sourceUri: string) => {
+      adopted.push(sourceUri);
+      return opts.adoptFails ? null : `file:///photos/${id}.jpg`;
+    },
+  };
+
   const repo = createPlantRepo({
     guest,
     mirror,
     cloud,
+    photos,
     getSessionHint: () => hint,
     getUserId: () => (hint ? 'u1' : null),
   });
-  return { repo, guest, mirror, rows, setHint: (v: boolean) => (hint = v) };
+  return { repo, guest, mirror, rows, adopted, setHint: (v: boolean) => (hint = v) };
 }
 
 test('logged out: save() passes straight through to the guest store', async () => {
@@ -455,4 +467,69 @@ test('importGuestPlants() without a user id reports every plant as failed, never
   assert.equal(rows.size, 0);
   // And above all: the plants are still there.
   assert.equal(guest.load().plants.length, 1);
+});
+
+// --- setPhoto: two genuinely different stories -----------------------------
+
+test('logged out: setPhoto adopts the picker URI and stores the adopted copy', async () => {
+  const { repo, guest, adopted } = makeRepo({ hint: false });
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  assert.equal(saved.ok, true);
+  const id = saved.ok ? saved.plant.id : '';
+
+  const result = await repo.setPhoto(id, 'file:///cache/new-shot.jpg');
+  assert.equal(result.ok, true);
+  // The cache URI was copied rather than stored as-is: a cache path is deleted
+  // by the OS whenever it likes.
+  assert.deepEqual(adopted, ['file:///cache/new-shot.jpg']);
+  assert.equal(guest.load().plants.find((p) => p.id === id)?.photoUri, `file:///photos/${id}.jpg`);
+});
+
+test('logged out: a failed adopt still stores the picture rather than losing the edit', async () => {
+  const { repo, guest } = makeRepo({ hint: false, adoptFails: true });
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  const id = saved.ok ? saved.plant.id : '';
+
+  const result = await repo.setPhoto(id, 'file:///cache/new-shot.jpg');
+  assert.equal(result.ok, true);
+  // Falls back to the picker URI: it renders this session, and Home re-adopts.
+  assert.equal(guest.load().plants.find((p) => p.id === id)?.photoUri, 'file:///cache/new-shot.jpg');
+});
+
+test('logged in: setPhoto uploads, then points the row at the new object path', async () => {
+  const { repo, rows, setHint } = makeRepo({ hint: true });
+  setHint(true);
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  assert.equal(saved.ok, true);
+  const id = saved.ok ? saved.plant.id : '';
+  const before = rows.get(id)?.photo_path;
+
+  const result = await repo.setPhoto(id, 'file:///cache/second.png');
+  assert.equal(result.ok, true);
+  const after = rows.get(id)?.photo_path;
+  assert.notEqual(after, before);
+  // The key reuses the plant id, so replacing a photo overwrites rather than
+  // accumulating one object per edit.
+  assert.equal(after, `u1/${id}.png`);
+});
+
+test('logged in: a failed upload leaves the stored photo untouched', async () => {
+  const { repo, rows, setHint } = makeRepo({ hint: true, cloudFail: { upload: true } });
+  setHint(true);
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  const id = saved.ok ? saved.plant.id : '';
+  const before = rows.get(id)?.photo_path;
+
+  const result = await repo.setPhoto(id, 'file:///cache/second.png');
+  assert.equal(result.ok, false);
+  assert.equal(result.ok === false && result.reason, 'network');
+  assert.equal(rows.get(id)?.photo_path, before); // no half-applied edit
+});
+
+test('setPhoto on a plant that is gone reports it rather than inventing a row', async () => {
+  const { repo, setHint } = makeRepo({ hint: true });
+  setHint(true);
+  const result = await repo.setPhoto('nope', 'file:///cache/x.jpg');
+  assert.equal(result.ok, false);
+  assert.equal(result.ok === false && result.reason, 'not_found');
 });

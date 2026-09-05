@@ -126,6 +126,8 @@ export type CloudPatch = Partial<{
   fertilizerLog: string[];
   soilMedium: SoilMediumId | null;
   nickname: string | null;
+  /* Storage OBJECT PATH, never a URL - see CloudRow.photo_path. */
+  photoPath: string | null;
 }>;
 
 export interface ImportBatchResult {
@@ -268,8 +270,34 @@ export function createCloudPlantLibrary(deps: CloudDeps, opts: CloudOptions = {}
     if ('fertilizerLog' in patch) rowPatch.fertilizer_log = patch.fertilizerLog ?? [];
     if ('soilMedium' in patch) rowPatch.soil_medium = patch.soilMedium ?? null;
     if ('nickname' in patch) rowPatch.nickname = patch.nickname ?? null;
+    if ('photoPath' in patch) rowPatch.photo_path = patch.photoPath ?? null;
 
     return (await deps.updatePlant(id, rowPatch)) ? { ok: true } : { ok: false, reason: 'network' };
+  }
+
+  /*
+   * Swap the picture on a plant that already exists.
+   *
+   * Upload first, patch second - the same order as insertNew, and for the same
+   * reason: a row pointed at an object that failed to upload renders a broken
+   * image forever, while an uploaded object no row points at is a few
+   * kilobytes nobody sees. The object key deliberately reuses the plant id, so
+   * replacing a photo overwrites the old one rather than accumulating a new
+   * object per edit.
+   *
+   * Returns the stored path so the caller can decide how to resolve it; the
+   * bucket is private, so the path is not directly renderable.
+   */
+  async function replacePhoto(
+    userId: string,
+    id: string,
+    sourceUri: string
+  ): Promise<{ ok: true; path: string } | { ok: false; reason: 'network' }> {
+    const uploaded = await deps.uploadPhoto(`${userId}/${id}.${photoExtension(sourceUri)}`, sourceUri);
+    if (!uploaded) return { ok: false, reason: 'network' };
+
+    const patched = await updatePlant(id, { photoPath: uploaded });
+    return patched.ok ? { ok: true, path: uploaded } : { ok: false, reason: 'network' };
   }
 
   async function removePlant(id: string): Promise<CloudMutateResult> {
@@ -300,7 +328,7 @@ export function createCloudPlantLibrary(deps: CloudDeps, opts: CloudOptions = {}
     return { imported, failed };
   }
 
-  return { fetchAll, savePlant, saveManualPlant, updatePlant, removePlant, importBatch };
+  return { fetchAll, savePlant, saveManualPlant, updatePlant, replacePhoto, removePlant, importBatch };
 }
 
 export type CloudPlantLibrary = ReturnType<typeof createCloudPlantLibrary>;
