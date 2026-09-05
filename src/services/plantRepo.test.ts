@@ -533,3 +533,18 @@ test('setPhoto on a plant that is gone reports it rather than inventing a row', 
   assert.equal(result.ok, false);
   assert.equal(result.ok === false && result.reason, 'not_found');
 });
+
+test('clearing a nickname removes it, so the plant goes back to its species name', async () => {
+  const { repo, guest } = makeRepo({ hint: false });
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  const id = saved.ok ? saved.plant.id : '';
+  await repo.update(id, { nickname: 'Big Bertha' });
+  assert.equal(guest.load().plants.find((p) => p.id === id)?.nickname, 'Big Bertha');
+
+  const cleared = await repo.update(id, { nickname: undefined });
+  assert.equal(cleared.ok, true);
+  const after = guest.load().plants.find((p) => p.id === id);
+  // Absent, not the empty string: plantDisplayName falls back to the species
+  // only when there is no nickname key at all.
+  assert.equal(after?.nickname, undefined);
+});
