@@ -10,6 +10,12 @@
 > (Trello #80).
 > **Hebrew shipped 2026-09-01** - UI copy, model output and catalog. The app runs in Hebrew
 > from the device locale, switchable in Settings without an account. 564 tests green.
+> **Ops pass shipped 2026-09-05** (PRs #13, #15). The failures that were invisible now report
+> themselves, `main` is gated on CI, and "water all" reaches plants that have never been
+> watered. 687 tests green.
+> 🔴 **The shared scrape cache is OFF in production** - `/health` says `cache.enabled: false`,
+> so every nursery search is a live paid scrape. Needs two env vars in the Render dashboard;
+> see step 21.
 > ⚠️ The scan flow has not been verified on a device (Trello #82).
 
 ---
@@ -263,9 +269,22 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
     deletion. `plantRepo` is the facade, `plantCloud` the tested network layer,
     `supabasePlantCloud` the only file that talks to Supabase. New route `POST /api/care-plan`.
     All four migrations applied to the live project and verified.
-    ⚠️ **Two things still open** - the 12-step device script (Trello #80), and whether Render
-    actually has `SUPABASE_SERVICE_ROLE_KEY`, without which the shared scrape cache is silently
-    off and every search is a live paid scrape (Trello #81).
+    ⚠️ **One thing still open** - the 12-step device script (Trello #80).
+    🔴 **Trello #81 is ANSWERED, and the answer is no.** `/health` gained
+    `cache: {enabled, hits, misses, stores, errors}` on 2026-09-05 (PR #13,
+    `cedc432`); read against Render immediately after that deploy it says
+    **`"enabled": false`**. The week-long shared scrape cache Epic 3a shipped
+    has never actually run in production - every nursery search on the live
+    service is a full live scrape, paid to Firecrawl/Tavily/OpenAI, reusing
+    nothing between users or between days.
+    **Fix is a Render dashboard change and needs a login:** add `SUPABASE_URL`
+    and `SUPABASE_SERVICE_ROLE_KEY` (service_role, NOT anon - RLS denies anon
+    every row in `nursery_searches`, which would silently cache nothing and
+    reproduce this bug exactly). Both are `sync: false` in `render.yaml` on
+    purpose: the service-role key bypasses RLS and must never reach the app
+    bundle. Confirm with `cache.enabled: true`, then run one search twice and
+    watch `hits` move - `enabled` proves the credentials exist, `hits` proves
+    the table and its policies work.
 
 22. ✅ **[M3] E4. Hebrew, all three layers - done 2026-09-01 (`df348d1`, Trello #6).**
     The app's own ~320 strings, the model's diagnosis and care plans, and the species
@@ -283,6 +302,75 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
     ⚠️ **The scan flow has NOT been verified on a device** (Trello #82) - a real Hebrew
     diagnosis with its condition colour and buy button intact.
 
+23. ✅ **[ops] Silent failures made visible - done 2026-09-05, merged `cedc432`, live.** Five items that needed no
+    OpenAI credits and no device check, so all five are verified by tests, a local server and
+    CI rather than by eye.
+    - **Scrape cache visibility (Trello #81).** A missing `SUPABASE_SERVICE_ROLE_KEY` breaks
+      nothing and costs money on every search: the cache answers "miss" forever, the scrape
+      runs, the logs look normal. `/health` now carries `cache: {enabled, hits, misses,
+      stores, errors}`. A disabled cache counts nothing - counting its lookups as misses
+      would report a 0% hit rate on a server with no cache, the exact reading being ruled out.
+    - **CI.** See BACKLOG. Uncovered that `npm run typecheck` was already red on main.
+    - **`payload_too_large` client mapping.** The 2026-08-22 live bug: an oversized photo was
+      reported as "the network connection was lost". RN tears the request down mid-body so the
+      413 was never read, and nothing mapped the code even when it arrived. Now refused before
+      the upload starts (`src/lib/uploadLimit.ts`), which also stops spending a tethered
+      hotspot's data to earn an error. Mapping moved to `src/lib/diagnosisFailure.ts` because
+      `plantDiagnosis.ts` imports expo-file-system and so was untestable under `node --test`.
+    - **E11 scrape freshness.** See BACKLOG.
+    - **Stock unknown.** See BACKLOG.
+    ⚠️ **Nothing here was verified on a device, by design** - these were chosen as the items
+    that do not need one. The camera's too-large copy has never been seen rendered, and being
+    client-side it reaches nobody until the next `eas update` or build.
+    🔵 **The cache field paid for itself within a minute of deploying**: it reported
+    `enabled: false`, which is the finding above. That is the entire argument for this kind of
+    work - the failure had been running in production, costing money, since Epic 3a.
+    ✅ **CI is now a required check** - see step 25. The caveat this line used to carry
+    (merges were not blocked on it) was closed the same day.
+    ⚠️ **The API docs site is updated in the repo but not deployed** - needs `vercel --prod`
+    from `docs/api-site` (Trello #52).
+
+24. ✅ **[M3] "Water all" reached no new plant - fixed 2026-09-05 (PR #15, `4138136`, Trello #88).**
+    Reported by Ron. On a fresh library the button did nothing at all and said nothing was due.
+    `waterTargets` read only from `dueSoon`, and `dueSoon` deliberately drops `never_watered`:
+    with no first watering there is no anchor, so there is no honest due date to sort or label
+    by. Right for a list of dates, wrong for a watering can - **"no anchor yet" is not "recently
+    watered"**, and the button treated them the same.
+    - `neverWatered()` in `portfolio.ts` selects scheduled-but-never-watered plants.
+      `unscheduled` deliberately stays out: with no interval anywhere, marking one logs a
+      watering that starts no schedule - a different feature, not one to hide inside this button.
+    - `waterTargets` returns `dueCount` / `firstWaterCount` separately so the confirmation names
+      both. A plant somehow in both counts once, as due - the date-backed reason wins.
+    - The overwatering guard is untouched and now tested *against* the new group. Watering three
+      days early resets a real schedule and records water the plant never got.
+    - **"Due this week" is unchanged, on purpose.** It stays a list of things with a real due
+      date. Accepted consequence: Water all can act on a plant the strip does not list, which is
+      why the dialog names that group out loud.
+    - 🔵 **Two grammar bugs found by PRINTING the sentences, not by reading the code**: English
+      produced "Only those 1 of your 9 plants are marked", and Hebrew agreed a plural verb with 1
+      ("1 צריכים") and joined clauses as "ו2" where a numeral needs "ו-2". Both now covered by
+      tests in `copy.test.ts`. Worth repeating the technique - the copy tree is logic now, and it
+      is the one layer tsc cannot check for sense.
+    - 687 tests, both typecheck projects clean.
+    ⚠️ **Not seen on a device**, and client-side only, so it reaches nobody until the next
+    `eas update` or build.
+
+25. ✅ **[ops] `main` is protected; CI is a required check - 2026-09-05 (Trello #22).**
+    The workflow alone was only a signal: PR #13 was merged while its own run was still in
+    progress. Both jobs (`typecheck + tests`, `docker build`) are now required.
+    - **Enforced for admins too.** Sole admin, so without that flag the rule is decorative - the
+      one person who can merge could merge past it.
+    - **`strict` (branch must be up to date) is OFF.** On, every PR needs a rebase whenever main
+      moves; it would have forced one on #15 the moment #14 landed. CI is 45s, so the staleness
+      risk is small and the friction would be daily. Turn on with
+      `gh api -X PATCH repos/rondahan04/PlantAI/branches/main/protection/required_status_checks -f strict=true`.
+    - **No required reviews** - solo repo; a required reviewer would make merging impossible.
+    - Verified rather than assumed: a direct push to main was rejected with
+      `GH006 ... 2 of 2 required status checks are expected`.
+    ⚠️ **Nobody can push directly to `main` any more, including from the laptop.** Every change
+    goes through a PR with green checks. Escape hatch if CI ever breaks and blocks an urgent fix:
+    `gh api -X DELETE repos/rondahan04/PlantAI/branches/main/protection`.
+
 ---
 
 ## BACKLOG (unordered)
@@ -292,15 +380,15 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
 | P2 | In-app live nursery discovery | M | GPS → `scraper/places.ts` `discoverNurseries()` server-side. The real product goal. Gated on scrape speed. |
 | ✅ | ~~Scrape speed~~ | S | **Done 2026-09-05 (PRs #8, #9, Trello #13).** Measured end to end on the production shape (12 nurseries, default 10km radius, same query, LLM stage equally unavailable in both runs): **81.0s → 36.5s**, slowest single site 79.6s → 34.7s. Healthy shops went from 26-41s each to 0.5-1.3s. Readable sites on the 13-site benchmark rose 11/13 → 13/13 and scored results 8 → 10, so success rate went UP. Root cause was never concurrency: the Firecrawl key allows **10 requests/minute** (cached hits count), and a refused homepage read is indistinguishable from "platform unknown", which is the path that spends 3 more requests per site - the limit fed itself. Fixes: Tavily reads pages as served (~700ms, 100/min) and Firecrawl only renders; platform detection stops paying a second provider for a meaningful empty read (35 → 10 requests per search); timeouts are no longer retried 4x at 25s; every nursery gets a 45s deadline so one dead shop cannot set the pace. **Remaining lever: Firecrawl Hobby is 100 req/min - after upgrading set `FIRECRAWL_MAX_PER_MINUTE=100` and the last tail disappears.** |
 | - | **Scrape success rate** | M | The real quality metric, now measurable: `PipelineResult.funnel.stage` splits every 0-item site into `no_markdown` / `no_excerpt` / `no_match` / `rejected`, logged per site by the dashboard. Fixed 2026-08-25: Wix `/product-page/` links and Hebrew/Latin ILS forms (`ש"ח`, `שח`, `NIS`, `ILS`) were invisible to `priceFocusedExcerpt` + `scoreMarkdown`, so Wix stores and word-priced sites returned an empty excerpt and the model never saw the page. **Next: run the dashboard, tally stages across ~20 sites, and fix whichever bucket dominates.** Candidates if `no_excerpt` leads: more platform link shapes. If `no_match`: the site's own search is failing (try a sitemap/collection crawl instead of `?s=`). If `rejected`: the auditor is too strict about stock wording. |
-| - | Show "stock unknown" instead of dropping the row | S | The auditor rejects extractor rows whose page never states stock - e.g. `[decogarden.co.il] verification REJECTED (conf 92): the source text does not explicitly state stock status`. Correct call by the verifier, but the user loses a nursery that does stock the plant. Product decision: surface as `unknown` rather than drop. |
+| ✅ | ~~Show "stock unknown" instead of dropping the row~~ | S | **Done 2026-09-05.** Auditor prompt now keeps a row whose product and price are supported but whose stock is unstated, as `availability: "unknown"`; it still drops unsupported/invented rows. Pipeline keeps `inStockKnown: false` for those (the flag means "exact listing" and the badge reads it as certainty), carries a `stock_unknown` availability, and the badge reads "Listed · stock not stated", tone `maybe`. Out-of-stock untouched - sold out is knowledge, not absence of it. The auditor half needs OpenAI credits to exercise live; the decision half is tested from injected verdicts. |
 | E2 | Photo timeline per plant | M | Nearly free after PlantStore (5). |
 | E3 | Shareable diagnosis card | M | Virality after retention. |
 | E6 | Light meter | M | Novelty, unclear retention. |
 | E7 | Cache nursery results per plant | M | Nothing cached across jobs today. |
 | E8 | Inventory index as dataset | L | Platform play, premature. |
-| E11 | Scrape freshness monitoring | M | Live silent-failure gap. **Promote the day PlantStore (5) lands.** |
+| ✅ | ~~E11 Scrape freshness monitoring~~ | M | **Done 2026-09-05.** `server/scrapeHealth.ts` retains per-host `ExtractFunnel.stage` (plus timeout/error), which the pipeline computed and threw away. Draws the one distinction that matters: `no_match`/`rejected` mean we READ the catalogue and the plant was absent (normal), everything else means we never read it (our fault). Stale after 3 consecutive unreadable reads - one timeout is weather - cleared by a single good read. Wired as an optional `onSiteRead` observer on `PipelineDeps`, wrapped so a broken counter cannot fail a paid scrape. `/health` gets counts; per-host detail sits behind `?errors=1` + the secret. |
 | - | Firecrawl weekly cron | S | `scripts/scrape-nurseries.ts` as a GitHub Action. |
-| - | CI/CD for the container | M | No `.github/workflows/`; deploys are manual builds from the laptop. |
+| ✅ | ~~CI/CD for the container~~ | M | **Done 2026-09-05.** `.github/workflows/ci.yml`: `npm ci` + both tsconfig projects + full suite, and a second job that builds the Dockerfile, runs the container and requires `/health` to answer. No secrets - the smoke test passes four obviously fake provider keys to clear the server's fail-fast guard, so a fork's PR runs it in full. Found and fixed on the way: `npm run typecheck` was red on main (plantRepo tests never typechecked), so CI could never have gone green. |
 | - | `jest-expo` + RN testing library | L | 17 untested flows, second test stack. After M2. |
 | - | Streaming partial nursery results | M | - |
 | - | Per-device quota / App Attest | M/L | Real protection vs a bundled secret. |

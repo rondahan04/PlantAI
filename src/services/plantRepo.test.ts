@@ -53,6 +53,15 @@ function fakeCloudDeps(
   return { deps, rows };
 }
 
+/*
+ * The photo half of RepoDeps, for the tests that never reach it. `adopt` is
+ * required, so leaving it out made these four cases compile-only-by-accident:
+ * they passed at runtime because their paths never call it, while `tsc` had
+ * been reporting them as errors the whole time.
+ */
+const noPhotos = { adopt: async () => null };
+
+
 function makeRepo(
   opts: {
     hint?: boolean;
@@ -151,6 +160,7 @@ test('importGuestPlants() leaves the guest key untouched on partial failure', as
     guest,
     mirror,
     cloud,
+    photos: noPhotos,
     getSessionHint: () => true,
     getUserId: () => 'u1',
   });
@@ -222,6 +232,7 @@ test('logged in: markWatered() leaves the mirror untouched on a cloud failure', 
     guest: createPlantStore(memoryStorage()),
     mirror,
     cloud,
+    photos: noPhotos,
     getSessionHint: () => true,
     getUserId: () => 'u1',
   });
@@ -292,6 +303,7 @@ test('logged in: remove() leaves the mirror untouched on a cloud failure', async
     guest: createPlantStore(memoryStorage()),
     mirror,
     cloud,
+    photos: noPhotos,
     getSessionHint: () => true,
     getUserId: () => 'u1',
   });
@@ -457,6 +469,7 @@ test('importGuestPlants() without a user id reports every plant as failed, never
     guest,
     mirror,
     cloud: createCloudPlantLibrary(deps),
+    photos: noPhotos,
     getSessionHint: () => true,
     getUserId: () => null,
   });

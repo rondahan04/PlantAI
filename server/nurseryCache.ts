@@ -62,10 +62,33 @@ export interface NurseryCacheConfig {
   onError?: (detail: string) => void;
 }
 
+/*
+ * What /health reports about this layer.
+ *
+ * `enabled` is the load-bearing field. Without a service-role key every rule
+ * above still holds - the cache just answers "miss" forever - so a server that
+ * lost the key looks EXACTLY like a healthy one from the outside while paying
+ * for a live scrape on every single search. That failure is invisible in the
+ * logs (a miss is normal) and shows up only on the provider bill, which is why
+ * it needs a field of its own rather than an inference from the hit rate.
+ *
+ * The counters are lifetime-of-process and deliberately unlabelled by search:
+ * they answer "is this layer doing anything" without retaining what anyone
+ * searched for.
+ */
+export interface NurseryCacheStats {
+  enabled: boolean;
+  hits: number;
+  misses: number;
+  stores: number;
+  errors: number;
+}
+
 export interface NurseryCache<T> {
   enabled: boolean;
   get(parts: SearchParts): Promise<CacheHit<T> | null>;
   put(parts: SearchParts, results: T): Promise<void>;
+  stats(): NurseryCacheStats;
 }
 
 /* A week. Stock moves, so the client is told when the list was checked and can
@@ -86,6 +109,16 @@ export function createNurseryCache<T>(config: NurseryCacheConfig = {}): NurseryC
 
   const enabled = Boolean(url && serviceKey);
   const base = url ? `${url.replace(/\/+$/, '')}/rest/v1/nursery_searches` : '';
+
+  /* Counted only while enabled. A disabled cache returning null on every
+   * lookup is not "missing" anything - counting it as a miss would report a
+   * 0% hit rate on a server that has no cache at all, which is the one reading
+   * these numbers exist to distinguish. */
+  const counts = { hits: 0, misses: 0, stores: 0, errors: 0 };
+  const fail = (detail: string): void => {
+    counts.errors += 1;
+    onError(detail);
+  };
   const headers = {
     apikey: serviceKey ?? '',
     Authorization: `Bearer ${serviceKey ?? ''}`,
@@ -112,6 +145,10 @@ export function createNurseryCache<T>(config: NurseryCacheConfig = {}): NurseryC
   return {
     enabled,
 
+    stats() {
+      return { enabled, ...counts };
+    },
+
     async get(parts) {
       if (!enabled) return null;
       const key = searchKey(parts);
@@ -121,23 +158,30 @@ export function createNurseryCache<T>(config: NurseryCacheConfig = {}): NurseryC
           { method: 'GET' }
         );
         if (!res.ok) {
-          onError(`lookup failed: HTTP ${res.status}`);
+          fail(`lookup failed: HTTP ${res.status}`);
+          counts.misses += 1;
           return null;
         }
         const rows = await res.json();
         const row = Array.isArray(rows) ? rows[0] : null;
-        if (!row) return null;
+        if (!row) {
+          counts.misses += 1;
+          return null;
+        }
 
         const scrapedAt = Date.parse(row.scraped_at);
         // An unparseable stamp is a row we cannot age, and serving a result of
         // unknown age is exactly what the TTL exists to prevent.
-        if (!Number.isFinite(scrapedAt)) return null;
-        if (now() - scrapedAt > ttlMs) return null;
-        if (row.results == null) return null;
+        if (!Number.isFinite(scrapedAt) || now() - scrapedAt > ttlMs || row.results == null) {
+          counts.misses += 1;
+          return null;
+        }
 
+        counts.hits += 1;
         return { results: row.results as T, scrapedAt };
       } catch (err) {
-        onError(`lookup threw: ${err instanceof Error ? err.message : String(err)}`);
+        fail(`lookup threw: ${err instanceof Error ? err.message : String(err)}`);
+        counts.misses += 1;
         return null;
       }
     },
@@ -163,9 +207,10 @@ export function createNurseryCache<T>(config: NurseryCacheConfig = {}): NurseryC
           body: JSON.stringify(row),
           headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
         });
-        if (!res.ok) onError(`write failed: HTTP ${res.status}`);
+        if (res.ok) counts.stores += 1;
+        else fail(`write failed: HTTP ${res.status}`);
       } catch (err) {
-        onError(`write threw: ${err instanceof Error ? err.message : String(err)}`);
+        fail(`write threw: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   };

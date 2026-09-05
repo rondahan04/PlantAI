@@ -76,3 +76,35 @@ test('the English identity copy matches the default inside lib/confidence', () =
   assert.equal(en.lowTitle, EN_IDENTITY_COPY.lowTitle);
   assert.equal(en.lowBody('X'), EN_IDENTITY_COPY.lowBody('X'));
 });
+
+/*
+ * The water-all confirmation is the one sentence standing between a tap and
+ * every plant's schedule being reset. Since the button stopped protecting
+ * against an early mark, this sentence IS the protection.
+ */
+test('the water-all confirmation warns that not-yet-due plants are included', () => {
+  const en = TREES.en.bulkCare.waterConfirmBody(9);
+  assert.match(en, /9/);
+  assert.match(en, /not due yet/i, 'the consequence must be stated, not implied');
+  assert.match(en, /restarts their schedules/i);
+
+  const he = TREES.he.bulkCare.waterConfirmBody(9);
+  assert.match(he, /9/);
+  assert.match(he, /[א-ת]/);
+});
+
+test('the water-all confirmation reads naturally for a single plant', () => {
+  for (const lang of ['en', 'he'] as const) {
+    const body = TREES[lang].bulkCare.waterConfirmBody(1);
+    // No "all 1 plants", and no plural agreement with one.
+    assert.doesNotMatch(body, /all 1|1 plants|1 הצמחים/);
+  }
+});
+
+test('the empty-state copy does not claim nothing is due', () => {
+  // It is only reachable with an empty portfolio now, and telling someone with
+  // no plants that "nothing is due" is a puzzle rather than an answer.
+  for (const lang of ['en', 'he'] as const) {
+    assert.doesNotMatch(TREES[lang].bulkCare.waterNothingTitle, /due|מה להשקות/i);
+  }
+});

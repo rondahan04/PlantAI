@@ -81,6 +81,10 @@ export const en = {
       `In stock now · ${shipsToHome ? 'ships to home' : 'local pickup'}`,
     notFound: "Didn't find the product",
     estimate: (bandLabel: string, confidence: number) => `${bandLabel} · ${confidence}%`,
+    /* We found the product and its price; the page never stated stock. Says
+     * what we know first - "Listed" is the evidence - and is honest about the
+     * half we do not. */
+    stockUnknown: 'Listed · stock not stated',
     unknown: 'Availability unknown',
     unknownCallToConfirm: 'Availability unknown - call to confirm',
   },
@@ -340,18 +344,27 @@ export const en = {
     /* Water-all names the plants it will NOT touch, because the surprise is
      * always that it did less than "all". */
     waterConfirmTitle: 'Water the plants that need it?',
-    waterConfirmBody: (n: number, total: number) =>
-      n === total
-        ? `This marks all ${n} ${n === 1 ? 'plant' : 'plants'} as watered now.`
-        : `${n} of your ${total} plants are due or overdue. Only those are marked, so the rest keep their real schedule.`,
-    waterNothingTitle: 'Nothing is due',
-    waterNothingBody: 'No plant needs watering today. Marking one early would reset its schedule and record water it did not get.',
+    /*
+     * Names the consequence, because the button no longer protects against it.
+     * "Water all" now means all - including plants that were not due - so the
+     * schedule reset is something the user agrees to here rather than
+     * discovers a week later when nothing is due when it should be.
+     */
+    waterConfirmBody: (n: number) =>
+      n === 1
+        ? 'This marks your plant as watered now and restarts its schedule.'
+        : `This marks all ${n} plants as watered now, including any that were not due yet, and restarts their schedules.`,
+    /* Reachable only with an empty portfolio now that the button waters
+     * everything - "nothing is due" would be a puzzling thing to say to
+     * someone who has no plants. */
+    waterNothingTitle: 'No plants yet',
+    waterNothingBody: 'Add a plant and this will mark it as watered.',
     waterDone: (n: number) => `Watered ${n} ${n === 1 ? 'plant' : 'plants'}`,
     waterFailed: 'Some plants could not be updated. Check your connection and try again.',
     confirm: 'Do it',
     cancelAction: 'Cancel',
     a11yDiagnoseAll: 'Diagnose all undiagnosed plants',
-    a11yWaterAll: 'Water all plants that are due',
+    a11yWaterAll: 'Mark every plant as watered',
   },
   speciesPicker: {
     title: 'Choose a species',
@@ -438,6 +451,12 @@ export const en = {
     unsupportedTitle: "We can't read that image",
     unsupportedBody:
       'That file is in a format we cannot open. A photo taken with the camera, or a JPEG or PNG from your library, will work.',
+    /* Names the size AND the limit: "too large" alone invites the same photo
+     * again. The action is concrete - the camera's own capture is compressed
+     * and always fits, so it is the fix, not a workaround. */
+    tooLargeTitle: 'That photo is too large to send',
+    tooLargeBody: (size: string, limit: string) =>
+      `That image is ${size} and the limit is ${limit}. Take the photo with the camera instead - those are compressed and always fit.`,
     unavailableTitle: 'Diagnosis is unavailable',
     unavailableBody:
       'This build is not pointed at a plant identification service. Nothing is wrong with your photo or your plant.',

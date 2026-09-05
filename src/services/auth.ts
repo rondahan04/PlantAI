@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { plantRepo } from './plantRepoInstance';
+import { clearSignedUrlCache } from './supabasePlantCloud';
 import { isUniqueViolation } from '../lib/authErrors';
 import type { Session } from '@supabase/supabase-js';
 
@@ -77,6 +78,9 @@ export async function signOut(): Promise<void> {
   // The mirror is a cache of the account being signed out of - it must not
   // leak into a next login on a shared device.
   plantRepo.wipeMirror();
+  /* A signed URL is a live read capability on a private bucket. Keeping one
+   * after sign-out leaves a reader for an account nobody is signed into. */
+  clearSignedUrlCache();
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {
@@ -173,6 +177,7 @@ export async function deleteAccount(): Promise<void> {
   // guest and cloud plants as one list, so a survivor of either key reads as
   // the app ignoring the deletion the user just confirmed.
   plantRepo.wipeAllLocal();
+  clearSignedUrlCache();
 }
 
 export interface Profile {

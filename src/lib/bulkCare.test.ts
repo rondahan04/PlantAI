@@ -69,33 +69,46 @@ test('diagnoseTargets: an empty library asks for nothing', () => {
 
 // --- waterTargets ----------------------------------------------------------
 
-test('waterTargets: marks what is due today and what is late, nothing else', () => {
+/*
+ * "Water all" waters ALL of them, by explicit product decision (2026-09-05).
+ * It used to be limited to due, overdue and never-watered plants, on the
+ * reasoning that an early mark records water a plant never got and pushes its
+ * next reminder a full interval late. That protection is gone on purpose - the
+ * label promises all, and the confirmation now states the consequence instead.
+ */
+test('waterTargets: every plant in the library, due or not', () => {
   const a = plant('a');
   const b = plant('b');
   const c = plant('c');
-  const targets = waterTargets([
-    due(a, 'water', -3), // overdue
-    due(b, 'water', 0), // due today
-    due(c, 'water', 2), // merely approaching
-  ]);
-  assert.deepEqual(targets.map((p) => p.id), ['a', 'b']);
+  assert.deepEqual(waterTargets([a, b, c]).map((p) => p.id), ['a', 'b', 'c']);
 });
 
-test('waterTargets: never marks a plant that is not due for WATER', () => {
-  // The gap that matters: recording water a plant never got resets its clock
-  // and writes a false entry into the history the user reads later.
+test('waterTargets: a plant watered five minutes ago is included too', () => {
+  // The case the old rule existed to prevent, now allowed deliberately: the
+  // user says they watered everything, so everything gets the stamp.
+  const fresh = plant('fresh');
+  assert.deepEqual(waterTargets([fresh]).map((p) => p.id), ['fresh']);
+});
+
+test('waterTargets: a plant with no schedule is included - the stamp is a log', () => {
+  const unscheduled = plant('unscheduled');
+  assert.deepEqual(waterTargets([unscheduled]).map((p) => p.id), ['unscheduled']);
+});
+
+test('waterTargets: library order is preserved so the count matches the screen', () => {
+  assert.deepEqual(
+    waterTargets([plant('c'), plant('a'), plant('b')]).map((p) => p.id),
+    ['c', 'a', 'b']
+  );
+});
+
+test('waterTargets: one plant is never watered twice in a single batch', () => {
+  // Defensive: two entries for one plant would write two rows into the
+  // watering history for a single errand.
   const a = plant('a');
-  const targets = waterTargets([due(a, 'fertilizer', -5), due(a, 'repot', -30)]);
-  assert.deepEqual(targets, []);
+  assert.deepEqual(waterTargets([a, a, plant('b')]).map((p) => p.id), ['a', 'b']);
 });
 
-test('waterTargets: a plant due for several kinds is marked once, not once per kind', () => {
-  const a = plant('a');
-  const targets = waterTargets([due(a, 'water', -1), due(a, 'fertilizer', -1), due(a, 'water', -1)]);
-  assert.deepEqual(targets.map((p) => p.id), ['a']);
-});
-
-test('waterTargets: nothing due means the button has nothing to do', () => {
+test('waterTargets: an empty portfolio has nothing to water', () => {
   assert.deepEqual(waterTargets([]), []);
-  assert.deepEqual(waterTargets([due(plant('a'), 'water', 4)]), []);
 });

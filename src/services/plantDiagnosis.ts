@@ -1,6 +1,8 @@
 import { readAsStringAsync } from 'expo-file-system/legacy';
 import { PlantDiagnosis } from '../types';
 import { apiFetch, apiHeaders, readApiError } from '../lib/api';
+import { exceedsUploadLimit } from '../lib/uploadLimit';
+import { classifyDiagnosisFailure } from '../lib/diagnosisFailure';
 import { getLanguage } from './language';
 
 /*
@@ -37,6 +39,26 @@ export class UnsupportedImageError extends Error {
   constructor() {
     super('UNSUPPORTED_IMAGE');
     this.name = 'UnsupportedImageError';
+  }
+}
+
+/*
+ * The photo is too big for the server to accept.
+ *
+ * Its own type rather than a DiagnosisServiceError because the user can act on
+ * this one and the action is specific: retake it with the camera, or pick a
+ * smaller image. Folding it into the generic service error is what produced
+ * "the network connection was lost" for a photo that was simply too large.
+ *
+ * `bytes` is the encoded size, for the copy only.
+ */
+export class PhotoTooLargeError extends Error {
+  readonly bytes: number;
+
+  constructor(bytes: number) {
+    super('PHOTO_TOO_LARGE');
+    this.name = 'PhotoTooLargeError';
+    this.bytes = bytes;
   }
 }
 
@@ -105,6 +127,15 @@ export async function diagnosePlant(imageUri: string): Promise<PlantDiagnosis> {
 
   const imageBase64 = await readAsStringAsync(imageUri, { encoding: 'base64' });
 
+  /*
+   * Refuse the upload rather than start one that cannot finish. React Native
+   * tears down an over-sized request while the body is still being written, so
+   * the server's 413 is never read - the client only sees the socket die and
+   * reports a network problem. Checked here, the user gets the real reason
+   * instantly and spends none of their data finding out.
+   */
+  if (exceedsUploadLimit(imageBase64.length)) throw new PhotoTooLargeError(imageBase64.length);
+
   let res: Response;
   try {
     res = await apiFetch('/api/diagnose', {
@@ -123,9 +154,21 @@ export async function diagnosePlant(imageUri: string): Promise<PlantDiagnosis> {
 
   if (!res.ok) {
     const { error } = await readApiError(res);
-    if (error === 'not_a_plant') throw new NotAPlantError();
-    if (error === 'unsupported_image') throw new UnsupportedImageError();
-    throw new DiagnosisServiceError(`${res.status} ${error}`);
+    /* The mapping lives in lib/diagnosisFailure so it can be tested without
+     * this module's expo-file-system import. `payload_too_large` is belt and
+     * braces - the pre-flight guard should mean we never send one this big -
+     * but a future change to the server's cap would otherwise land back in the
+     * generic branch and read as a network fault again. */
+    switch (classifyDiagnosisFailure(res.status, error)) {
+      case 'not_a_plant':
+        throw new NotAPlantError();
+      case 'unsupported_image':
+        throw new UnsupportedImageError();
+      case 'photo_too_large':
+        throw new PhotoTooLargeError(imageBase64.length);
+      default:
+        throw new DiagnosisServiceError(`${res.status} ${error}`);
+    }
   }
 
   // Valid JSON of the wrong shape used to render a blank screen with no error

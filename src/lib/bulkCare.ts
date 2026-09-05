@@ -10,7 +10,6 @@
  */
 
 import type { StoredPlant } from '../services/plantStore';
-import type { DueItem } from './portfolio';
 
 /*
  * Plants a bulk diagnosis can actually run on, and how many it has to leave
@@ -42,33 +41,33 @@ export function diagnoseTargets(plants: StoredPlant[]): DiagnoseTargets {
 }
 
 /*
- * Plants "water all" may mark, which is NOT every plant.
+ * Plants "water all" marks: all of them.
  *
- * Watering is recorded, not just displayed: the stamp resets the plant's clock
- * and appends to a log the history screen shows. Marking a plant that was
- * watered yesterday therefore records water it never got AND pushes its next
- * reminder a full interval late - and overwatering is the most common way a
- * houseplant dies, so the failure is not cosmetic.
+ * This was previously restricted to what was due, overdue, or never watered,
+ * on the reasoning that marking a plant watered yesterday records water it
+ * never got and pushes its next reminder a full interval late. That reasoning
+ * is still true, and the button no longer honours it - by explicit product
+ * decision (2026-09-05), because the label says "Water all" and a user who has
+ * just walked round the flat with a can has in fact watered all of them.
  *
- * Due and overdue only. That is also what actually happened if the user walked
- * around with a can doing the ones that needed it, which is the errand this
- * button exists for.
+ * The honesty moved into the confirmation instead: it now says plainly that
+ * plants which were not due are included, so the user is agreeing to the
+ * schedule reset rather than discovering it later.
  *
- * Deduplicated by plant: `due` carries one row per care KIND, so a plant that
- * is due for both water and fertilizer appears twice and would otherwise be
- * marked (and counted) twice.
+ * Everything, including plants with no schedule at all: for those, the stamp
+ * is simply a log entry with nothing to reschedule.
+ *
+ * Deduplicated by id defensively. The list comes from one store read so it
+ * should not repeat, but watering a plant twice in one batch would write two
+ * entries into the history for a single errand.
  */
-export function waterTargets(due: DueItem[]): StoredPlant[] {
+export function waterTargets(plants: StoredPlant[]): StoredPlant[] {
   const seen = new Set<string>();
   const out: StoredPlant[] = [];
-  for (const item of due) {
-    if (item.kind !== 'water') continue;
-    // `dueSoon` also carries plants that are merely approaching. Only what is
-    // actually due (today) or already late gets marked.
-    if (item.daysUntilDue > 0) continue;
-    if (seen.has(item.plant.id)) continue;
-    seen.add(item.plant.id);
-    out.push(item.plant);
+  for (const plant of plants) {
+    if (seen.has(plant.id)) continue;
+    seen.add(plant.id);
+    out.push(plant);
   }
   return out;
 }

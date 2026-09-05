@@ -193,6 +193,42 @@ export function dueSoon(
   return items.sort((a, b) => a.daysUntilDue - b.daysUntilDue);
 }
 
+/*
+ * Plants with a watering schedule that have never actually been watered.
+ *
+ * These are deliberately absent from `dueSoon` above - with no first watering
+ * there is no anchor, so there is no honest due date to sort or label them by,
+ * and letting them into the "due this week" strip would fill a fresh library
+ * with guesses. That reasoning holds for a LIST OF DATES. It does not hold for
+ * the watering can: a plant that has been sitting in the library unwatered is
+ * exactly what "water all" is for, and excluding it meant the button silently
+ * skipped every plant the user had just added.
+ *
+ * `unscheduled` is still excluded. Those have no interval anywhere, so marking
+ * one logs a watering that starts no schedule - a different feature, and not
+ * one that should hide inside this button.
+ *
+ * Order follows the library, so the confirmation counts the list the user is
+ * looking at.
+ */
+export function neverWatered(
+  plants: StoredPlant[],
+  now: number,
+  genusPlanFor: ((plant: StoredPlant) => GenusCarePlan | null) | null,
+  careWords: CareCopy = EN_CARE_COPY,
+  wateringWords: WateringCopy = EN_WATERING_COPY
+): StoredPlant[] {
+  const out: StoredPlant[] = [];
+  for (const plant of plants) {
+    const genusPlan = genusPlanFor ? genusPlanFor(plant) : null;
+    const soilPlan = soilPlanFor(genusPlan, plant.soilMedium);
+    const carePlan = plantCarePlan(plant.diagnosis?.carePlan, genusPlan, plant.soilMedium);
+    const state = careState('water', carePlan, lastCareAt(plant, 'water'), now, soilPlan, careWords, wateringWords);
+    if (state.status === 'never_watered') out.push(plant);
+  }
+  return out;
+}
+
 const LAST_AT: Record<CareKind, keyof StoredPlant> = {
   water: 'lastWateredAt',
   repot: 'lastRepottedAt',

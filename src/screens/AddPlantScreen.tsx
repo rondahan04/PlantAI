@@ -31,6 +31,7 @@ import {
   Image,
   Alert,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -243,7 +244,13 @@ export default function AddPlantScreen({ navigation, route }: Props) {
           <Text style={s.cardTitle}>{copy.addPlant.photo}</Text>
           {photoUri ? (
             <View style={s.previewWrap}>
-              <Image source={{ uri: photoUri }} style={s.preview} accessibilityIgnoresInvertColors />
+              <ExpoImage
+              source={{ uri: photoUri }}
+              style={s.preview}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              accessibilityIgnoresInvertColors
+            />
               <Pressable
                 style={s.previewClear}
                 onPress={() => setPhotoUri(null)}

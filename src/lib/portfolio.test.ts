@@ -5,6 +5,7 @@ import { SOIL_MEDIUM_IDS } from './soilMedia.ts';
 import {
   dueSoon,
   filterPortfolio,
+  neverWatered,
   isBehindOnCare,
   plantSchedule,
   offersGuestImport,
@@ -300,4 +301,58 @@ test('the Needs care filter keeps the plants the caller says are behind', () => 
 test('Needs care with no predicate hides nothing rather than claiming all is well', () => {
   const plants = [scanned('late', 12), manual('m1')];
   assert.equal(filterPortfolio(plants, 'needsCare').length, 2);
+});
+
+// --- neverWatered ----------------------------------------------------------
+
+/*
+ * The plants "water all" used to skip. They have a schedule but no first
+ * watering, so they carry no due date and `dueSoon` cannot honestly place them
+ * in a list sorted by date - which is right for the strip and wrong for the
+ * watering can.
+ */
+test('neverWatered finds a scheduled plant with no watering logged', () => {
+  const fresh = scanned('fresh', 0);
+  delete fresh.lastWateredAt;
+  assert.deepEqual(neverWatered([fresh], NOW, null).map((p) => p.id), ['fresh']);
+});
+
+test('neverWatered ignores a plant that has been watered, however long ago', () => {
+  // Watered 90 days ago is wildly overdue - that is dueSoon's job, not this
+  // one. Returning it here would double-count it in the confirmation.
+  assert.deepEqual(neverWatered([scanned('old', 90), scanned('recent', 1)], NOW, null), []);
+});
+
+test('neverWatered ignores a plant with no schedule at all', () => {
+  // No interval anywhere, so marking it would log a watering that starts no
+  // schedule. A different feature, and it must not hide inside this button.
+  const unscheduled = scanned('nowhere', 0);
+  delete unscheduled.lastWateredAt;
+  unscheduled.diagnosis!.carePlan = { soil: '', light: '', water: '' };
+  assert.deepEqual(neverWatered([unscheduled], NOW, null), []);
+});
+
+test('neverWatered keeps library order so the confirmation counts what is on screen', () => {
+  const a = scanned('a', 0);
+  const b = scanned('b', 0);
+  const c = scanned('c', 0);
+  for (const p of [a, b, c]) delete p.lastWateredAt;
+  assert.deepEqual(neverWatered([c, a, b], NOW, null).map((p) => p.id), ['c', 'a', 'b']);
+});
+
+test('neverWatered and dueSoon never claim the same plant', () => {
+  // They feed one batch, so an overlap would water a plant twice and report a
+  // count larger than the number of plants touched.
+  const fresh = scanned('fresh', 0);
+  delete fresh.lastWateredAt;
+  const late = scanned('late', 30);
+
+  const firstWater = neverWatered([fresh, late], NOW, null).map((p) => p.id);
+  const dueIds = dueSoon([fresh, late], NOW, null)
+    .filter((d) => d.kind === 'water')
+    .map((d) => d.plant.id);
+
+  assert.deepEqual(firstWater, ['fresh']);
+  assert.ok(dueIds.includes('late'));
+  assert.equal(firstWater.some((id) => dueIds.includes(id)), false);
 });

@@ -318,6 +318,7 @@ export default function PortfolioScreen({ navigation }: Props) {
     // user mid-scroll for a day boundary they cannot see.
   }, [library]);
 
+
   /* Both bulk actions act on many plants at once, so both state the count
    * before spending anything - see lib/bulkCare.ts for who they act on. */
   const onDiagnoseAll = useCallback(() => {
@@ -352,14 +353,19 @@ export default function PortfolioScreen({ navigation }: Props) {
   }, [library]);
 
   const onWaterAll = useCallback(() => {
-    const targets = waterTargets(due);
+    /*
+     * Every plant in the library, not the filtered view: "water all" means the
+     * portfolio, and the All/Diagnosed chips are a way of looking at it rather
+     * than a selection.
+     */
+    const targets = waterTargets(library.plants);
     if (targets.length === 0) {
       Alert.alert(copy.bulkCare.waterNothingTitle, copy.bulkCare.waterNothingBody);
       return;
     }
     Alert.alert(
       copy.bulkCare.waterConfirmTitle,
-      copy.bulkCare.waterConfirmBody(targets.length, library.plants.length),
+      copy.bulkCare.waterConfirmBody(targets.length),
       [
         { text: copy.bulkCare.cancelAction, style: 'cancel' },
         {
@@ -384,7 +390,7 @@ export default function PortfolioScreen({ navigation }: Props) {
         },
       ]
     );
-  }, [due, library]);
+  }, [library]);
 
   /*
    * NOT just "does the library have plants". When logged in, `library` is the cloud mirror, and a
@@ -708,7 +714,7 @@ export default function PortfolioScreen({ navigation }: Props) {
           renderItem={({ item }) => (
             <PlantCard
               plant={item}
-              slots={schedules.get(item.id) ?? []}
+              slots={schedules.get(item.id)}
               onPress={() => navigation.navigate('PlantDetail', { plantId: item.id })}
               onEdit={() => navigation.navigate('EditPlant', { plantId: item.id })}
             />

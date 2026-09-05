@@ -7,6 +7,8 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
+import { shrinkForStorage } from '../services/imageResize';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,8 +19,10 @@ import {
   diagnosePlant,
   DiagnosisUnavailableError,
   NotAPlantError,
+  PhotoTooLargeError,
   UnsupportedImageError,
 } from '../services/plantDiagnosis';
+import { megabytes, SERVER_MAX_BODY_BYTES } from '../lib/uploadLimit';
 import { Theme, useTheme } from '../theme';
 import { copy } from '../services/language';
 import { APP_LOGO } from '../brand';
@@ -57,6 +61,22 @@ function describeFailure(err: unknown, uri: string): Failure {
       icon: 'image-outline',
       title: copy.camera.unsupportedTitle,
       body: copy.camera.unsupportedBody,
+      retryUri: null,
+    };
+  }
+
+  /*
+   * Before this branch existed a too-large photo fell through to the generic
+   * network copy, so the user was told to check their connection about a file
+   * that would have failed on any connection. It is the only failure here the
+   * user can actually fix, so it names the size and the fix.
+   */
+  if (err instanceof PhotoTooLargeError) {
+    return {
+      icon: 'resize-outline',
+      title: copy.camera.tooLargeTitle,
+      body: copy.camera.tooLargeBody(megabytes(err.bytes), megabytes(SERVER_MAX_BODY_BYTES)),
+      // No retryUri: retrying the identical file reproduces it exactly.
       retryUri: null,
     };
   }
@@ -117,8 +137,16 @@ export default function CameraScreen({ navigation }: Props) {
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.7 });
       if (photo) {
-        setCapturedUri(photo.uri);
-        await analyzeImage(photo.uri);
+        /*
+         * Shrink here, at the ONE point every photo enters the app, so
+         * everything downstream inherits the smaller file: the diagnosis
+         * upload, the copy in the documents directory, and the object in the
+         * user's private bucket. Doing it later would mean doing it in three
+         * places and getting a 12MP file in the other two.
+         */
+        const uri = await shrinkForStorage(photo.uri, photo.width, photo.height);
+        setCapturedUri(uri);
+        await analyzeImage(uri);
       }
     } catch {
       setFailure({
@@ -144,8 +172,11 @@ export default function CameraScreen({ navigation }: Props) {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
-      setCapturedUri(asset.uri);
-      await analyzeImage(asset.uri);
+      /* The case that actually broke: a full-resolution library pick sailed
+       * past the server's 12MB body cap and reported as a lost connection. */
+      const uri = await shrinkForStorage(asset.uri, asset.width, asset.height);
+      setCapturedUri(uri);
+      await analyzeImage(uri);
     }
   }, [analyzeImage]);
 
@@ -222,7 +253,17 @@ export default function CameraScreen({ navigation }: Props) {
   if (analyzing && capturedUri) {
     return (
       <View style={s.analyzeOverlay}>
-        <Image source={{ uri: capturedUri }} style={StyleSheet.absoluteFill as any} blurRadius={4} />
+        <ExpoImage
+            source={{ uri: capturedUri }}
+            style={StyleSheet.absoluteFill as any}
+            /* The freshly captured photo, full resolution, painted across the
+             * whole screen while the diagnosis runs. Downscaling it to the
+             * view is the difference between decoding a 12MP bitmap and a
+             * screen-sized one, for something that is blurred anyway. */
+            contentFit="cover"
+            blurRadius={4}
+            cachePolicy="memory"
+          />
         <View style={[StyleSheet.absoluteFill, s.analyzeScrim]} />
         <SafeAreaView style={s.analyzeContent}>
           <View style={s.analyzeCard}>
