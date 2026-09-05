@@ -10,6 +10,12 @@
 > (Trello #80).
 > **Hebrew shipped 2026-09-01** - UI copy, model output and catalog. The app runs in Hebrew
 > from the device locale, switchable in Settings without an account. 564 tests green.
+> **Ops pass shipped 2026-09-05** (PRs #13, #15). The failures that were invisible now report
+> themselves, `main` is gated on CI, and "water all" reaches plants that have never been
+> watered. 687 tests green.
+> 🔴 **The shared scrape cache is OFF in production** - `/health` says `cache.enabled: false`,
+> so every nursery search is a live paid scrape. Needs two env vars in the Render dashboard;
+> see step 21.
 > ⚠️ The scan flow has not been verified on a device (Trello #82).
 
 ---
@@ -302,11 +308,51 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
     🔵 **The cache field paid for itself within a minute of deploying**: it reported
     `enabled: false`, which is the finding above. That is the entire argument for this kind of
     work - the failure had been running in production, costing money, since Epic 3a.
-    ⚠️ **CI is not a required check yet.** It runs on every PR and every push to main, but
-    nothing blocks a merge on it - PR #13 was merged while its own run was still going. Branch
-    protection on `main` requiring "typecheck + tests" is what turns the signal into a gate.
+    ✅ **CI is now a required check** - see step 25. The caveat this line used to carry
+    (merges were not blocked on it) was closed the same day.
     ⚠️ **The API docs site is updated in the repo but not deployed** - needs `vercel --prod`
     from `docs/api-site` (Trello #52).
+
+24. ✅ **[M3] "Water all" reached no new plant - fixed 2026-09-05 (PR #15, `4138136`, Trello #88).**
+    Reported by Ron. On a fresh library the button did nothing at all and said nothing was due.
+    `waterTargets` read only from `dueSoon`, and `dueSoon` deliberately drops `never_watered`:
+    with no first watering there is no anchor, so there is no honest due date to sort or label
+    by. Right for a list of dates, wrong for a watering can - **"no anchor yet" is not "recently
+    watered"**, and the button treated them the same.
+    - `neverWatered()` in `portfolio.ts` selects scheduled-but-never-watered plants.
+      `unscheduled` deliberately stays out: with no interval anywhere, marking one logs a
+      watering that starts no schedule - a different feature, not one to hide inside this button.
+    - `waterTargets` returns `dueCount` / `firstWaterCount` separately so the confirmation names
+      both. A plant somehow in both counts once, as due - the date-backed reason wins.
+    - The overwatering guard is untouched and now tested *against* the new group. Watering three
+      days early resets a real schedule and records water the plant never got.
+    - **"Due this week" is unchanged, on purpose.** It stays a list of things with a real due
+      date. Accepted consequence: Water all can act on a plant the strip does not list, which is
+      why the dialog names that group out loud.
+    - 🔵 **Two grammar bugs found by PRINTING the sentences, not by reading the code**: English
+      produced "Only those 1 of your 9 plants are marked", and Hebrew agreed a plural verb with 1
+      ("1 צריכים") and joined clauses as "ו2" where a numeral needs "ו-2". Both now covered by
+      tests in `copy.test.ts`. Worth repeating the technique - the copy tree is logic now, and it
+      is the one layer tsc cannot check for sense.
+    - 687 tests, both typecheck projects clean.
+    ⚠️ **Not seen on a device**, and client-side only, so it reaches nobody until the next
+    `eas update` or build.
+
+25. ✅ **[ops] `main` is protected; CI is a required check - 2026-09-05 (Trello #22).**
+    The workflow alone was only a signal: PR #13 was merged while its own run was still in
+    progress. Both jobs (`typecheck + tests`, `docker build`) are now required.
+    - **Enforced for admins too.** Sole admin, so without that flag the rule is decorative - the
+      one person who can merge could merge past it.
+    - **`strict` (branch must be up to date) is OFF.** On, every PR needs a rebase whenever main
+      moves; it would have forced one on #15 the moment #14 landed. CI is 45s, so the staleness
+      risk is small and the friction would be daily. Turn on with
+      `gh api -X PATCH repos/rondahan04/PlantAI/branches/main/protection/required_status_checks -f strict=true`.
+    - **No required reviews** - solo repo; a required reviewer would make merging impossible.
+    - Verified rather than assumed: a direct push to main was rejected with
+      `GH006 ... 2 of 2 required status checks are expected`.
+    ⚠️ **Nobody can push directly to `main` any more, including from the laptop.** Every change
+    goes through a PR with green checks. Escape hatch if CI ever breaks and blocks an urgent fix:
+    `gh api -X DELETE repos/rondahan04/PlantAI/branches/main/protection`.
 
 ---
 
