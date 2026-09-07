@@ -35,6 +35,8 @@ import {
   isDecisive,
   ladderTerms,
   rankCandidates,
+  scoreCandidate,
+  WEAK_MATCH,
   type QueryPlan,
 } from './queryPlan.ts';
 
@@ -1290,10 +1292,17 @@ export async function extractAndVerifyPlants(
     catalogueRead?: boolean;
     /* Ranking alone identified the product; no model is needed. */
     decisive?: boolean;
+    /*
+     * The search plan, when the caller built one. Used to hold the model's
+     * answer to the same relevance bar the JSON path is held to - without it
+     * the HTML route will happily return a different cultivar of the right
+     * genus. Absent means no guard, which is the old behaviour.
+     */
+    plan?: QueryPlan;
   },
   deps: ExtractDeps = {}
 ): Promise<PipelineResult> {
-  const { markdown, query, site, openaiKey, html = '', url = '' } = opts;
+  const { markdown, query, site, openaiKey, html = '', url = '', plan } = opts;
   const { extract = extractPlants, verify = verifyPlantsWithGPT } = deps;
 
   /*
@@ -1428,16 +1437,45 @@ export async function extractAndVerifyPlants(
     );
   }
 
+  /*
+   * The same relevance guard the JSON path gets, applied to the model's answer.
+   *
+   * Ranking used to protect only the API route, because that is where the broad
+   * query was introduced. But the broad term goes to the HTML route too, and
+   * there the model picks unguarded - so a search for "Alocasia Regal Shield"
+   * came back from dizi-garden as "אלוקסיה וונטי" at ₪60. An Alocasia Venti is
+   * not a Regal Shield, and the user has no way to tell.
+   *
+   * `scoreCandidate` rejects it on the same rule that protects the API path:
+   * the genus matches, but the title carries a cultivar word we never asked
+   * for. Dropping the row costs us a shop; keeping it tells someone a plant is
+   * in stock somewhere it is not, and this codebase already decided a
+   * confidently wrong answer is worse than none.
+   */
+  const relevant = plan
+    ? verified.filter((p) => {
+        const score = scoreCandidate(p.name, plan);
+        if (score < WEAK_MATCH) {
+          console.log(`   [${site}] ✂️  dropped "${p.name}" (relevance ${score.toFixed(2)})`);
+          return false;
+        }
+        return true;
+      })
+    : verified;
+
   return {
-    plants: verified,
+    plants: relevant,
     report,
     engines: { extractor: OPENAI_MODEL, verifier: OPENAI_MODEL },
     funnel: {
-      stage: verified.length ? 'ok' : 'rejected',
+      /* `rejected` covers both "the auditor threw them out" and "they were not
+       * this plant" - in each case we read a real catalogue and kept nothing,
+       * which is what the stage means downstream. */
+      stage: relevant.length ? 'ok' : 'rejected',
       mdChars: markdown.length,
       excerptChars: excerpt.length,
       extracted: extracted.length,
-      kept: verified.length,
+      kept: relevant.length,
     },
   };
 }
