@@ -37,32 +37,10 @@ both the Android bundle (`app.config.js:9`) and server-side Places (`server/inde
 restricting it to the app breaks Places, and splitting needs an `android.package` that `app.json`
 doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Android + Places API.
 
-0. ⏳ **[P0] Restore OpenAI health assessment - blocked on lecturer's OpenAI credits.**
-   The shared OpenAI key has no credit: `429 insufficient_quota / credit_balance_exhausted`
-   (confirmed live 2026-08-22, still true 2026-09-05).
-
-   **Corrected 2026-09-05 - the stub is NOT switched on.** This entry used to say
-   `DIAGNOSIS_SKIP_OPENAI=true` was set in `.env`, so `/api/diagnose` served
-   `stubAssessHealth` (`server/diagnose.ts`). It is set in neither `.env` nor `render.yaml`, so
-   the real OpenAI call runs, fails, and `/api/diagnose` answers **502 diagnosis_failed**.
-   Verified against Render: `/health` reports `plantnet_identify` succeeding and
-   `health_assessment` never having succeeded - species ID is genuinely fine, the health
-   assessment is the half that is down.
-
-   Blast radius is wider than diagnosis, because three OpenAI calls sit on separate paths:
-   - `/api/diagnose` health assessment → 502, so the whole camera flow dead-ends.
-   - `translateQuery` → returns the English name unchanged, so Israeli catalogues match nothing
-     and every nursery search reports "not found" even when the shop stocks the plant.
-   - `extractAndVerifyPlants` → fails immediately, so no products or prices are ever extracted.
-     The scrape layer itself is healthy (al-haderech returns 64,688 chars of real results page).
-
-   **To make the camera flow testable TODAY without credits:** set `DIAGNOSIS_SKIP_OPENAI=true`
-   in the Render dashboard. `server/index.ts` swaps in the labelled stub, so identification,
-   gating and the whole client UI become exercisable. Nursery search stays broken either way -
-   translation and extraction have no stub.
-
-   **To revert once credits are back:** remove that env var if it was ever set;
-   `server/index.ts` falls back to the real `openAiAssessHealth` with no code change.
+0. ✅ **[P0] Restore OpenAI health assessment - credits back (2026-09-07).**
+   `DIAGNOSIS_SKIP_OPENAI=false` in local `.env` and `render.yaml`. Real
+   `openAiAssessHealth` path is live again. If diagnosis still 502s, check the
+   OpenAI key quota on Render — not the skip flag.
 1. ✅ **[P0] Old OpenAI key revoked 2026-08-17.** The leak is closed.
 2. ✅ **[M1] DEPLOYED - https://plantai-api-eev0.onrender.com (2026-08-18).** The app now talks
    to a backend that exists when the laptop doesn't. Fly was abandoned: it will not provision

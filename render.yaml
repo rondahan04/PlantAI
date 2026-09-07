@@ -38,6 +38,9 @@ services:
         value: "200"
       - key: RATE_LIMIT_PER_MIN
         value: "6"
+      # Real OpenAI health assessment. Set "true" only to force the labelled stub.
+      - key: DIAGNOSIS_SKIP_OPENAI
+        value: "false"
 
       # Plain names. The EXPO_PUBLIC_ prefix these carry in .env exists only
       # because dashboard/server.ts and scripts/scrape-nurseries.ts still read
