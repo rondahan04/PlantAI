@@ -655,7 +655,10 @@ export const en = {
     filterNeedsCareA11y: 'Show only plants that are due or overdue for care',
     filterDiagnosedA11y: 'Show only plants you have diagnosed',
     dueThisWeek: 'Due this week',
-    dueMore: (n: number) => `+${n} more in your plants below`,
+    dueMore: (n: number) => `+${n} more - tap to show all`,
+    dueLess: 'Show fewer',
+    dueMoreA11y: (n: number) => `Show ${n} more plants due this week`,
+    dueLessA11y: 'Show fewer plants due this week',
     /*
      * A filter matching nothing is not an empty library, and the copy has to
      * say so - otherwise the Diagnosed chip on a hand-built portfolio reads as
