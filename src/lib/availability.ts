@@ -49,6 +49,9 @@ export interface AvailabilityCopy {
   unlikely: string;
   inStock: (shipsToHome: boolean) => string;
   notFound: string;
+  /* We never managed to read this shop, so we are not claiming anything about
+   * what it stocks. Distinct from notFound, which says we looked. */
+  couldNotCheck: string;
   estimate: (band: string, confidence: number) => string;
   /* Found the product and its price; the page never says whether it is in
    * stock. Distinct from both 'in stock' and 'did not find it'. */
@@ -64,6 +67,7 @@ export const EN_AVAILABILITY_COPY: AvailabilityCopy = {
   unlikely: 'Probably not',
   inStock: (shipsToHome) => `In stock now · ${shipsToHome ? 'ships to home' : 'local pickup'}`,
   notFound: "Didn't find the product",
+  couldNotCheck: "Couldn't check this shop",
   estimate: (bandLabel, confidence) => `${bandLabel} · ${confidence}%`,
   stockUnknown: 'Listed · stock not stated',
   unknown: 'Availability unknown',
@@ -107,14 +111,24 @@ export function availabilityBadge(
   }
 
   /*
-   * We could not read this shop. Say we did not find the product, NOT that the
-   * scrape failed: our plumbing is not the user's problem, and the honest user
-   * -facing fact is simply that we have nothing to show for this nursery. They
-   * may still want to ring it, which is why the row survives at all.
+   * Nothing to show for this nursery. Two different reasons, and they are worth
+   * separating.
+   *
+   * We SEARCHED and found nothing → "didn't find the product". A claim about
+   * the shop's shelf.
+   *
+   * We could not read the shop at all → "couldn't check this shop". A claim
+   * about us, and the honest one: saying we did not find the product implies we
+   * looked, and for a shop whose search URL 404s we never did. Two nurseries
+   * spent a month in that state telling users their plants were unavailable.
+   *
+   * Neither says "the scrape failed" - our plumbing is not the user's problem.
+   * Both keep the row, because they may still want to ring the place.
    */
   if (n.outcome === 'not_found') {
+    const unread = n.availability?.kind === 'unreadable' || n.availability?.kind === 'error';
     return {
-      text: words.notFound,
+      text: unread ? words.couldNotCheck : words.notFound,
       tone: 'unknown',
       detail: n.availability?.detail ?? '',
       hasDetail: Boolean(n.availability?.detail),
@@ -155,7 +169,7 @@ export function availabilityBadge(
    */
   if (a?.kind === 'unreadable' || a?.kind === 'error') {
     return {
-      text: words.notFound,
+      text: words.couldNotCheck,
       tone: 'unknown',
       detail: a.detail,
       hasDetail: Boolean(a.detail),

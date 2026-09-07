@@ -65,12 +65,14 @@ test('an estimate keeps its reasoning behind the tap, not in the line', () => {
   assert.equal(b.hasDetail, true);
 });
 
-test('a shop we could not read says we did not find the product', () => {
+test('a shop we could not read says so, rather than claiming we looked', () => {
   /*
-   * Two rules in one line. No percentage - we never read the shop, so any
-   * number would describe a captcha page rather than the plant. And no talk of
-   * scrapes or blocking: our plumbing is not the user's problem, and all they
-   * need to know is that we have nothing to show for this nursery.
+   * Three rules in one line. No percentage - we never read the shop, so any
+   * number would describe a captcha page rather than the plant. No talk of
+   * scrapes or blocking: our plumbing is not the user's problem. And crucially
+   * NOT "didn't find the product", which asserts we searched: two nurseries
+   * whose search URL 404ed spent a month telling users their plants were
+   * unavailable when nobody had ever asked.
    */
   const b = availabilityBadge(
     base({
@@ -79,18 +81,25 @@ test('a shop we could not read says we did not find the product', () => {
     })
   );
 
-  assert.equal(b.text, "Didn't find the product");
+  assert.equal(b.text, "Couldn't check this shop");
   assert.doesNotMatch(b.text, /%/);
   assert.doesNotMatch(b.text, /scrape|block|fail|error/i, 'no plumbing language');
   assert.equal(b.tone, 'unknown', 'not amber - this is not a warning about the nursery');
   assert.equal(b.detail, 'the site blocked automated reading', 'the reason stays behind the tap');
 });
 
+test('a shop we DID search, that had nothing, says we did not find the product', () => {
+  // The distinction the line above exists to draw: this one is a claim about
+  // the shop's shelf, and we are entitled to make it.
+  const b = availabilityBadge(base({ outcome: 'not_found' }));
+  assert.equal(b.text, "Didn't find the product");
+});
+
 test('a legacy unreadable/error payload speaks the same words', () => {
   // A job that outlived a deploy must not show the user a second vocabulary.
   for (const kind of ['unreadable', 'error'] as const) {
     const b = availabilityBadge(base({ availability: { kind, detail: 'Firecrawl 429' } }));
-    assert.equal(b.text, "Didn't find the product", kind);
+    assert.equal(b.text, "Couldn't check this shop", kind);
   }
 });
 

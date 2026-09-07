@@ -33,7 +33,19 @@ export type SiteStage =
   | 'rejected'
   | 'ok'
   | 'timeout'
-  | 'error';
+  | 'error'
+  /*
+   * The shop's search interface refused us: the URL we built out of its
+   * remembered platform returned 404 or 410, and it publishes no storefront
+   * JSON either. We never managed to ask the question.
+   *
+   * This exists because it was the one failure nothing could name.
+   * getzler.co.il and peer-nursery.co.il were remembered as Shopify while
+   * serving WordPress, so every search hit a 404 page - which is a large,
+   * perfectly readable body, so every "did we read anything" test passed on it.
+   * Both shops were dead for a month and the health report showed nothing.
+   */
+  | 'no_search';
 
 /*
  * Did we manage to READ this shop's catalogue?

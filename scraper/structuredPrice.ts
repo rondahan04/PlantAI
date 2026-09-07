@@ -40,8 +40,10 @@ export interface StructuredProduct {
   availability: 'in_stock' | 'out_of_stock' | 'unknown';
   /* Absolute product URL when the source carried one. */
   url?: string;
-  /* Which of the four readers produced this row, for the accuracy report. */
-  source: 'jsonld' | 'microdata' | 'meta' | 'card';
+  /* Which reader produced this row, for the accuracy report. The four HTML
+   * readers below, plus 'api' for a row that came from the shop's own
+   * storefront JSON (scraper/platformApi.ts) and never touched HTML at all. */
+  source: 'jsonld' | 'microdata' | 'meta' | 'card' | 'api';
 }
 
 // --- tiny DOM helpers over parse5 -------------------------------------------

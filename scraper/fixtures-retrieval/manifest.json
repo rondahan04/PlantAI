@@ -1,0 +1,5079 @@
+{
+  "capturedAt": "2026-09-07T19:28:11.356Z",
+  "fixtures": [
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "monstera",
+      "variant": "full",
+      "term": "מונסטרה",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "monstera",
+      "variant": "broad",
+      "term": "מונסטרה",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "pothos",
+      "variant": "full",
+      "term": "פותוס",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%A4%D7%95%D7%AA%D7%95%D7%A1",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "pothos",
+      "variant": "broad",
+      "term": "פותוס",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%A4%D7%95%D7%AA%D7%95%D7%A1",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "alocasia-regal-shield",
+      "variant": "full",
+      "term": "אלוקסיה ריגל שילד",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%A8%D7%99%D7%92%D7%9C%20%D7%A9%D7%99%D7%9C%D7%93",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "alocasia-regal-shield",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "alocasia-zebrina",
+      "variant": "full",
+      "term": "אלוקסיה זברינה",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%96%D7%91%D7%A8%D7%99%D7%A0%D7%94",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "alocasia-zebrina",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "zz",
+      "variant": "full",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "zz",
+      "variant": "broad",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "sansevieria",
+      "variant": "full",
+      "term": "סנסוויריה",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "sansevieria",
+      "variant": "broad",
+      "term": "סנסוויריה",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "philodendron-brasil",
+      "variant": "full",
+      "term": "פילודנדרון ברזיל",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F%20%D7%91%D7%A8%D7%96%D7%99%D7%9C",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "philodendron-brasil",
+      "variant": "broad",
+      "term": "פילודנדרון",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "calathea-orbifolia",
+      "variant": "full",
+      "term": "קלתיאה אורביפוליה",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94%20%D7%90%D7%95%D7%A8%D7%91%D7%99%D7%A4%D7%95%D7%9C%D7%99%D7%94",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "calathea-orbifolia",
+      "variant": "broad",
+      "term": "קלתיאה",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "ficus-lyrata",
+      "variant": "full",
+      "term": "פיקוס ליראטה",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%A4%D7%99%D7%A7%D7%95%D7%A1%20%D7%9C%D7%99%D7%A8%D7%90%D7%98%D7%94",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "ficus-lyrata",
+      "variant": "broad",
+      "term": "פיקוס",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%A4%D7%99%D7%A7%D7%95%D7%A1",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "aglaonema",
+      "variant": "full",
+      "term": "אגלאונמה",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "aglaonema",
+      "variant": "broad",
+      "term": "אגלאונמה",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "lavender",
+      "variant": "full",
+      "term": "לבנדר",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%9C%D7%91%D7%A0%D7%93%D7%A8",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "lavender",
+      "variant": "broad",
+      "term": "לבנדר",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%9C%D7%91%D7%A0%D7%93%D7%A8",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "olive",
+      "variant": "full",
+      "term": "זית",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%96%D7%99%D7%AA",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "getzler.co.il",
+      "platform": "shopify",
+      "route": "html",
+      "plantId": "olive",
+      "variant": "broad",
+      "term": "זית",
+      "requestUrl": "https://getzler.co.il/search?q=%D7%96%D7%99%D7%AA",
+      "status": 404,
+      "bodyFile": "95bf9d00acfb9aee.html",
+      "bytes": 44379,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "monstera",
+      "variant": "full",
+      "term": "מונסטרה",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "monstera",
+      "variant": "broad",
+      "term": "מונסטרה",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "pothos",
+      "variant": "full",
+      "term": "פותוס",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "pothos",
+      "variant": "broad",
+      "term": "פותוס",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-regal-shield",
+      "variant": "full",
+      "term": "אלוקסיה ריגל שילד",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%A8%D7%99%D7%92%D7%9C%20%D7%A9%D7%99%D7%9C%D7%93&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-regal-shield",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-zebrina",
+      "variant": "full",
+      "term": "אלוקסיה זברינה",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%96%D7%91%D7%A8%D7%99%D7%A0%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-zebrina",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "zz",
+      "variant": "full",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "zz",
+      "variant": "broad",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "sansevieria",
+      "variant": "full",
+      "term": "סנסוויריה",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "sansevieria",
+      "variant": "broad",
+      "term": "סנסוויריה",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "philodendron-brasil",
+      "variant": "full",
+      "term": "פילודנדרון ברזיל",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F%20%D7%91%D7%A8%D7%96%D7%99%D7%9C&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "philodendron-brasil",
+      "variant": "broad",
+      "term": "פילודנדרון",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "calathea-orbifolia",
+      "variant": "full",
+      "term": "קלתיאה אורביפוליה",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94%20%D7%90%D7%95%D7%A8%D7%91%D7%99%D7%A4%D7%95%D7%9C%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "calathea-orbifolia",
+      "variant": "broad",
+      "term": "קלתיאה",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "ficus-lyrata",
+      "variant": "full",
+      "term": "פיקוס ליראטה",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%A7%D7%95%D7%A1%20%D7%9C%D7%99%D7%A8%D7%90%D7%98%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "ficus-lyrata",
+      "variant": "broad",
+      "term": "פיקוס",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%A7%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "aglaonema",
+      "variant": "full",
+      "term": "אגלאונמה",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "aglaonema",
+      "variant": "broad",
+      "term": "אגלאונמה",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "lavender",
+      "variant": "full",
+      "term": "לבנדר",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "lavender",
+      "variant": "broad",
+      "term": "לבנדר",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "olive",
+      "variant": "full",
+      "term": "זית",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%99%D7%AA&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "ecolution.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "olive",
+      "variant": "broad",
+      "term": "זית",
+      "requestUrl": "https://ecolution.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%99%D7%AA&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "monstera",
+      "variant": "full",
+      "term": "מונסטרה",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "b30dd23152ad294e.json",
+      "bytes": 5990,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "מונסטרה | L"
+        ],
+        "price": 140
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "monstera",
+      "variant": "broad",
+      "term": "מונסטרה",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "b30dd23152ad294e.json",
+      "bytes": 5990,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "מונסטרה | L"
+        ],
+        "price": 140
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "pothos",
+      "variant": "full",
+      "term": "פותוס",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "pothos",
+      "variant": "broad",
+      "term": "פותוס",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "alocasia-regal-shield",
+      "variant": "full",
+      "term": "אלוקסיה ריגל שילד",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%A8%D7%99%D7%92%D7%9C%20%D7%A9%D7%99%D7%9C%D7%93&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "alocasia-regal-shield",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "alocasia-zebrina",
+      "variant": "full",
+      "term": "אלוקסיה זברינה",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%96%D7%91%D7%A8%D7%99%D7%A0%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "alocasia-zebrina",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "zz",
+      "variant": "full",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "zz",
+      "variant": "broad",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "sansevieria",
+      "variant": "full",
+      "term": "סנסוויריה",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "sansevieria",
+      "variant": "broad",
+      "term": "סנסוויריה",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "philodendron-brasil",
+      "variant": "full",
+      "term": "פילודנדרון ברזיל",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F%20%D7%91%D7%A8%D7%96%D7%99%D7%9C&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "philodendron-brasil",
+      "variant": "broad",
+      "term": "פילודנדרון",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "calathea-orbifolia",
+      "variant": "full",
+      "term": "קלתיאה אורביפוליה",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94%20%D7%90%D7%95%D7%A8%D7%91%D7%99%D7%A4%D7%95%D7%9C%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "calathea-orbifolia",
+      "variant": "broad",
+      "term": "קלתיאה",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "ficus-lyrata",
+      "variant": "full",
+      "term": "פיקוס ליראטה",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%A7%D7%95%D7%A1%20%D7%9C%D7%99%D7%A8%D7%90%D7%98%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "פיקוס כינורי"
+        ],
+        "price": 150
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "ficus-lyrata",
+      "variant": "broad",
+      "term": "פיקוס",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%A7%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "75146a44d8a3b0ef.json",
+      "bytes": 24450,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "פיקוס כינורי"
+        ],
+        "price": 150
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "aglaonema",
+      "variant": "full",
+      "term": "אגלאונמה",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "aglaonema",
+      "variant": "broad",
+      "term": "אגלאונמה",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "lavender",
+      "variant": "full",
+      "term": "לבנדר",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "lavender",
+      "variant": "broad",
+      "term": "לבנדר",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "olive",
+      "variant": "full",
+      "term": "זית",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%99%D7%AA&per_page=100",
+      "status": 200,
+      "bodyFile": "9611ee7d8d93963c.json",
+      "bytes": 9019,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "עץ זית בקש",
+          "עץ זית בכלי קרמיקה"
+        ],
+        "price": 55
+      }
+    },
+    {
+      "host": "peer-nursery.co.il",
+      "platform": "shopify",
+      "route": "woo-store",
+      "plantId": "olive",
+      "variant": "broad",
+      "term": "זית",
+      "requestUrl": "https://peer-nursery.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%99%D7%AA&per_page=100",
+      "status": 200,
+      "bodyFile": "9611ee7d8d93963c.json",
+      "bytes": 9019,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "עץ זית בקש",
+          "עץ זית בכלי קרמיקה"
+        ],
+        "price": 55
+      }
+    },
+    {
+      "host": "decogarden.co.il",
+      "platform": "shopify",
+      "route": "shopify-json",
+      "plantId": null,
+      "variant": null,
+      "page": 1,
+      "term": "",
+      "requestUrl": "https://decogarden.co.il/products.json?limit=250&page=1",
+      "status": 200,
+      "bodyFile": "f2ec40c28abd35e2.json",
+      "bytes": 5012911
+    },
+    {
+      "host": "decogarden.co.il",
+      "platform": "shopify",
+      "route": "shopify-json",
+      "plantId": null,
+      "variant": null,
+      "page": 2,
+      "term": "",
+      "requestUrl": "https://decogarden.co.il/products.json?limit=250&page=2",
+      "status": 200,
+      "bodyFile": "7edd3a601fdf6ae8.json",
+      "bytes": 4681926
+    },
+    {
+      "host": "wlovep.com",
+      "platform": "shopify",
+      "route": "shopify-json",
+      "plantId": null,
+      "variant": null,
+      "page": 1,
+      "term": "",
+      "requestUrl": "https://wlovep.com/products.json?limit=250&page=1",
+      "status": 200,
+      "bodyFile": "b599d61d231f0a35.json",
+      "bytes": 385208
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "monstera",
+      "variant": "full",
+      "term": "מונסטרה",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "a0e41537b98b1308.html",
+      "bytes": 55717,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "monstera",
+      "variant": "broad",
+      "term": "מונסטרה",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "dd3227ecf884a1a3.html",
+      "bytes": 55714,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "pothos",
+      "variant": "full",
+      "term": "פותוס",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&post_type=product",
+      "status": 200,
+      "bodyFile": "0d5e7192691d5a3d.html",
+      "bytes": 55701,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "pothos",
+      "variant": "broad",
+      "term": "פותוס",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&post_type=product",
+      "status": 200,
+      "bodyFile": "f1dd472c30daac4c.html",
+      "bytes": 55698,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "alocasia-regal-shield",
+      "variant": "full",
+      "term": "אלוקסיה ריגל שילד",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%A8%D7%99%D7%92%D7%9C%20%D7%A9%D7%99%D7%9C%D7%93&post_type=product",
+      "status": 200,
+      "bodyFile": "d6c7828714cfd34b.html",
+      "bytes": 55799,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "alocasia-regal-shield",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "c21d2fa06e5a8d12.html",
+      "bytes": 55714,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "alocasia-zebrina",
+      "variant": "full",
+      "term": "אלוקסיה זברינה",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%96%D7%91%D7%A8%D7%99%D7%A0%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "d4b4415169519526.html",
+      "bytes": 55771,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "alocasia-zebrina",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "ad0999051ce84d1b.html",
+      "bytes": 55714,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "zz",
+      "variant": "full",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&post_type=product",
+      "status": 200,
+      "bodyFile": "f414734432f240dd.html",
+      "bytes": 55733,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "zz",
+      "variant": "broad",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&post_type=product",
+      "status": 200,
+      "bodyFile": "1538e3f245eacdfb.html",
+      "bytes": 55733,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "sansevieria",
+      "variant": "full",
+      "term": "סנסוויריה",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "2e53deb25dea1fb3.html",
+      "bytes": 55733,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "sansevieria",
+      "variant": "broad",
+      "term": "סנסוויריה",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "ab953ecd53ffb7a2.html",
+      "bytes": 55730,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "philodendron-brasil",
+      "variant": "full",
+      "term": "פילודנדרון ברזיל",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F%20%D7%91%D7%A8%D7%96%D7%99%D7%9C&post_type=product",
+      "status": 200,
+      "bodyFile": "f8aa24f54693ae9a.html",
+      "bytes": 55790,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "philodendron-brasil",
+      "variant": "broad",
+      "term": "פילודנדרון",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F&post_type=product",
+      "status": 200,
+      "bodyFile": "1e02198cf418f8ab.html",
+      "bytes": 55738,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "calathea-orbifolia",
+      "variant": "full",
+      "term": "קלתיאה אורביפוליה",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94%20%D7%90%D7%95%D7%A8%D7%91%D7%99%D7%A4%D7%95%D7%9C%D7%99%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "4d2767c90ccafa6a.html",
+      "bytes": 55798,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "calathea-orbifolia",
+      "variant": "broad",
+      "term": "קלתיאה",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "201f8a03d81ae6fb.html",
+      "bytes": 55706,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "ficus-lyrata",
+      "variant": "full",
+      "term": "פיקוס ליראטה",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%A4%D7%99%D7%A7%D7%95%D7%A1%20%D7%9C%D7%99%D7%A8%D7%90%D7%98%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "1ef454f0c6e95fec.html",
+      "bytes": 55758,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "ficus-lyrata",
+      "variant": "broad",
+      "term": "פיקוס",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%A4%D7%99%D7%A7%D7%95%D7%A1&post_type=product",
+      "status": 200,
+      "bodyFile": "b6539679576c5618.html",
+      "bytes": 55698,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "aglaonema",
+      "variant": "full",
+      "term": "אגלאונמה",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "b90e874f806c8c13.html",
+      "bytes": 55725,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "aglaonema",
+      "variant": "broad",
+      "term": "אגלאונמה",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "6d8ad2cbaa22d954.html",
+      "bytes": 55725,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "lavender",
+      "variant": "full",
+      "term": "לבנדר",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&post_type=product",
+      "status": 200,
+      "bodyFile": "0ea436938a765a0f.html",
+      "bytes": 55701,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "lavender",
+      "variant": "broad",
+      "term": "לבנדר",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&post_type=product",
+      "status": 200,
+      "bodyFile": "cef29d22b85f5d0c.html",
+      "bytes": 55698,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "olive",
+      "variant": "full",
+      "term": "זית",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%96%D7%99%D7%AA&post_type=product",
+      "status": 200,
+      "bodyFile": "e668bbbd31789185.html",
+      "bytes": 55685,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtela-urbanit.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "olive",
+      "variant": "broad",
+      "term": "זית",
+      "requestUrl": "https://mashtela-urbanit.co.il/?s=%D7%96%D7%99%D7%AA&post_type=product",
+      "status": 200,
+      "bodyFile": "fec6f8acdc58eea2.html",
+      "bytes": 55685,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "monstera",
+      "variant": "full",
+      "term": "מונסטרה",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "dd7f92c6fc75fc26.json",
+      "bytes": 8153,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "מונסטרה מאנקי",
+          "עציץ מונסטרה"
+        ],
+        "price": 69
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "monstera",
+      "variant": "broad",
+      "term": "מונסטרה",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "dd7f92c6fc75fc26.json",
+      "bytes": 8153,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "מונסטרה מאנקי",
+          "עציץ מונסטרה"
+        ],
+        "price": 69
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "pothos",
+      "variant": "full",
+      "term": "פותוס",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "pothos",
+      "variant": "broad",
+      "term": "פותוס",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-regal-shield",
+      "variant": "full",
+      "term": "אלוקסיה ריגל שילד",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%A8%D7%99%D7%92%D7%9C%20%D7%A9%D7%99%D7%9C%D7%93&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-regal-shield",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "714adbc676234f8e.json",
+      "bytes": 12252,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-zebrina",
+      "variant": "full",
+      "term": "אלוקסיה זברינה",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%96%D7%91%D7%A8%D7%99%D7%A0%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-zebrina",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "714adbc676234f8e.json",
+      "bytes": 12252,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "zz",
+      "variant": "full",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "zz",
+      "variant": "broad",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "sansevieria",
+      "variant": "full",
+      "term": "סנסוויריה",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "sansevieria",
+      "variant": "broad",
+      "term": "סנסוויריה",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "philodendron-brasil",
+      "variant": "full",
+      "term": "פילודנדרון ברזיל",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F%20%D7%91%D7%A8%D7%96%D7%99%D7%9C&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "philodendron-brasil",
+      "variant": "broad",
+      "term": "פילודנדרון",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "calathea-orbifolia",
+      "variant": "full",
+      "term": "קלתיאה אורביפוליה",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94%20%D7%90%D7%95%D7%A8%D7%91%D7%99%D7%A4%D7%95%D7%9C%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "calathea-orbifolia",
+      "variant": "broad",
+      "term": "קלתיאה",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "ficus-lyrata",
+      "variant": "full",
+      "term": "פיקוס ליראטה",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%A7%D7%95%D7%A1%20%D7%9C%D7%99%D7%A8%D7%90%D7%98%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "ficus-lyrata",
+      "variant": "broad",
+      "term": "פיקוס",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%A7%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "aglaonema",
+      "variant": "full",
+      "term": "אגלאונמה",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "aglaonema",
+      "variant": "broad",
+      "term": "אגלאונמה",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "lavender",
+      "variant": "full",
+      "term": "לבנדר",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "lavender",
+      "variant": "broad",
+      "term": "לבנדר",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "olive",
+      "variant": "full",
+      "term": "זית",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%99%D7%AA&per_page=100",
+      "status": 200,
+      "bodyFile": "3951c9fb830d5116.json",
+      "bytes": 4308,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "עציץ זית ננסי"
+        ],
+        "price": 60
+      }
+    },
+    {
+      "host": "lpflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "olive",
+      "variant": "broad",
+      "term": "זית",
+      "requestUrl": "https://lpflowers.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%99%D7%AA&per_page=100",
+      "status": 200,
+      "bodyFile": "3951c9fb830d5116.json",
+      "bytes": 4308,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "עציץ זית ננסי"
+        ],
+        "price": 60
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "monstera",
+      "variant": "full",
+      "term": "מונסטרה",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "449c3b3fbf6c50a3.html",
+      "bytes": 73293,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "מונסטרה מאנקי – קוטר 12",
+          "מונסטרה – קוטר 24"
+        ],
+        "price": 60
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "monstera",
+      "variant": "broad",
+      "term": "מונסטרה",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "449c3b3fbf6c50a3.html",
+      "bytes": 73293,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "מונסטרה מאנקי – קוטר 12",
+          "מונסטרה – קוטר 24"
+        ],
+        "price": 60
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "pothos",
+      "variant": "full",
+      "term": "פותוס",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&post_type=product",
+      "status": 200,
+      "bodyFile": "0afc049645cbe632.html",
+      "bytes": 64583,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "pothos",
+      "variant": "broad",
+      "term": "פותוס",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&post_type=product",
+      "status": 200,
+      "bodyFile": "0afc049645cbe632.html",
+      "bytes": 64583,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "alocasia-regal-shield",
+      "variant": "full",
+      "term": "אלוקסיה ריגל שילד",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%A8%D7%99%D7%92%D7%9C%20%D7%A9%D7%99%D7%9C%D7%93&post_type=product",
+      "status": 200,
+      "bodyFile": "dc63e95651bba2eb.html",
+      "bytes": 64743,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "alocasia-regal-shield",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "76d114071c5f5149.html",
+      "bytes": 78973,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "alocasia-zebrina",
+      "variant": "full",
+      "term": "אלוקסיה זברינה",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%96%D7%91%D7%A8%D7%99%D7%A0%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "ea0e31af94776a1d.html",
+      "bytes": 64708,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "alocasia-zebrina",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "76d114071c5f5149.html",
+      "bytes": 78973,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "zz",
+      "variant": "full",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&post_type=product",
+      "status": 200,
+      "bodyFile": "495772255e2f73e7.html",
+      "bytes": 64643,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "zz",
+      "variant": "broad",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&post_type=product",
+      "status": 200,
+      "bodyFile": "495772255e2f73e7.html",
+      "bytes": 64643,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "sansevieria",
+      "variant": "full",
+      "term": "סנסוויריה",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "f0976ec8511ba733.html",
+      "bytes": 64643,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "sansevieria",
+      "variant": "broad",
+      "term": "סנסוויריה",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "f0976ec8511ba733.html",
+      "bytes": 64643,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "philodendron-brasil",
+      "variant": "full",
+      "term": "פילודנדרון ברזיל",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F%20%D7%91%D7%A8%D7%96%D7%99%D7%9C&post_type=product",
+      "status": 200,
+      "bodyFile": "a82fa6bd2559d9c3.html",
+      "bytes": 64738,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "philodendron-brasil",
+      "variant": "broad",
+      "term": "פילודנדרון",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F&post_type=product",
+      "status": 200,
+      "bodyFile": "a142f82b44d460aa.html",
+      "bytes": 64658,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "calathea-orbifolia",
+      "variant": "full",
+      "term": "קלתיאה אורביפוליה",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94%20%D7%90%D7%95%D7%A8%D7%91%D7%99%D7%A4%D7%95%D7%9C%D7%99%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "50c0ffbda2f5d879.html",
+      "bytes": 64753,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "calathea-orbifolia",
+      "variant": "broad",
+      "term": "קלתיאה",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "d83645435ca493bc.html",
+      "bytes": 64598,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "ficus-lyrata",
+      "variant": "full",
+      "term": "פיקוס ליראטה",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%A4%D7%99%D7%A7%D7%95%D7%A1%20%D7%9C%D7%99%D7%A8%D7%90%D7%98%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "c59fd32193b01fcd.html",
+      "bytes": 64678,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "פיקוס כינורי – קוטר 24"
+        ],
+        "price": 60
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "ficus-lyrata",
+      "variant": "broad",
+      "term": "פיקוס",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%A4%D7%99%D7%A7%D7%95%D7%A1&post_type=product",
+      "status": 200,
+      "bodyFile": "81476729765b52d1.html",
+      "bytes": 87020,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "פיקוס כינורי – קוטר 24"
+        ],
+        "price": 60
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "aglaonema",
+      "variant": "full",
+      "term": "אגלאונמה",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "8a3de913b4588812.html",
+      "bytes": 64628,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "aglaonema",
+      "variant": "broad",
+      "term": "אגלאונמה",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "8a3de913b4588812.html",
+      "bytes": 64628,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "lavender",
+      "variant": "full",
+      "term": "לבנדר",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&post_type=product",
+      "status": 200,
+      "bodyFile": "692f3b2d0c8b1450.html",
+      "bytes": 64583,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "lavender",
+      "variant": "broad",
+      "term": "לבנדר",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&post_type=product",
+      "status": 200,
+      "bodyFile": "692f3b2d0c8b1450.html",
+      "bytes": 64583,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "olive",
+      "variant": "full",
+      "term": "זית",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%96%D7%99%D7%AA&post_type=product",
+      "status": 200,
+      "bodyFile": "940a190dfef00269.html",
+      "bytes": 64553,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "dizi-garden.co.il",
+      "platform": "woo",
+      "route": "html",
+      "plantId": "olive",
+      "variant": "broad",
+      "term": "זית",
+      "requestUrl": "https://dizi-garden.co.il/?s=%D7%96%D7%99%D7%AA&post_type=product",
+      "status": 200,
+      "bodyFile": "940a190dfef00269.html",
+      "bytes": 64553,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "monstera",
+      "variant": "full",
+      "term": "מונסטרה",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "78d090f551ceadcf.json",
+      "bytes": 267049,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "מבצע מונסטרה סילטפיקנה אוראה ע&#8217; 9",
+          "מונסטרה אוסי דרים ע&#8217; 12",
+          "מבצע מונסטרה דוויל ע&#8217; 6",
+          "מבצע מונסטרה וויט מונסטר ע&#8217; 12",
+          "מבצע מונסטרה פילמנטוס ע&#8217; 11",
+          "מבצע מונסטרה דיסקטה ע&#8217; 11",
+          "מבצע מונסטרה גמבנסיס ע&#8217; 11",
+          "מבצע מונסטרה SP נאפו ע&#8217; 12",
+          "מבצע מונסטרה אלקטרולייט ע&#8217; 6",
+          "מבצע מונסטרה גולדן/למון ליים ע&#8217; 6",
+          "מבצע מונסטרה קסנטוספטאה ע&#8217; 12",
+          "מבצע מונסטרה טווינזה נארו ע&#8217; 12",
+          "מבצע מונסטרה אוראו פינאטה ע&#8217; 12",
+          "מונסטרה סטדליאנה סטאר דסט ע&#8217; 12",
+          "מונסטרה סיראנה הוואי ע&#8217; 14",
+          "מבצע מונסטרה אובליקה אמזונס ע&#8217; 12",
+          "מבצע מונסטרה SP קולומביה ע&#8217; 12",
+          "מבצע מונסטרה אדנסוני אוראה ע&#8217; 12",
+          "מבצע מונסטרה מינט ע&#8217; 7",
+          "מונסטרה סילטפיקנה לתלייה",
+          "מבצע מונסטרה בלבזור ע&#8217; 7",
+          "מונסטרה אדנסוני מגוונת ע׳ 6",
+          "מונסטרה אובליקה יסוני ע&#8217; 10",
+          "מבצע מונסטרה מינט ע&#8217; 12",
+          "מונסטרה אלבו בכד",
+          "מונסטרה בורל מרקס פליים בכד",
+          "מונסטרה בורל מרקס פליים ע&#8217; 15",
+          "מבצע מונסטרה פרוזן פרקלס ע&#8217; 12",
+          "מבצע מונסטרה בורל מרקס פליים ע&#8217; 6",
+          "מבצע מונסטרה לכלריאנה מגוונת ע&#8217; 15",
+          "מבצע מונסטרה אוראופינאטה ע&#8217; 12",
+          "מונסטרה פרו מגוונת ע&#8217; 12",
+          "מונסטרה דלסיוסה ע&#8217; 24",
+          "מבצע מונסטרה דלסיוסה אוראה ע&#8217; 7",
+          "מבצע מונסטרה פרוזן פרקלס ע&#8217; 6",
+          "מונסטרה אובליקה פרו ע&#8217; 6",
+          "מונסטרה אדנסוני מינט ע&#8217; 12",
+          "מונסטרה אסקולטו ע&#8217; 17",
+          "מונסטרה פרו ע&#8217; 12",
+          "מבצע מונסטרה אלבו ע&#8217; 15",
+          "מבצע מונסטרה תאי קונסטליישן מוטציה ע&#8217; 12",
+          "מונסטרה אדנסוני ע&#8217; 12",
+          "מונסטרה סטדליאנה אוראה ע׳ 12",
+          "מונסטרה דליסיוסה ע&#8217; 12"
+        ],
+        "price": 499.9
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "monstera",
+      "variant": "broad",
+      "term": "מונסטרה",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "78d090f551ceadcf.json",
+      "bytes": 267049,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "מבצע מונסטרה סילטפיקנה אוראה ע&#8217; 9",
+          "מונסטרה אוסי דרים ע&#8217; 12",
+          "מבצע מונסטרה דוויל ע&#8217; 6",
+          "מבצע מונסטרה וויט מונסטר ע&#8217; 12",
+          "מבצע מונסטרה פילמנטוס ע&#8217; 11",
+          "מבצע מונסטרה דיסקטה ע&#8217; 11",
+          "מבצע מונסטרה גמבנסיס ע&#8217; 11",
+          "מבצע מונסטרה SP נאפו ע&#8217; 12",
+          "מבצע מונסטרה אלקטרולייט ע&#8217; 6",
+          "מבצע מונסטרה גולדן/למון ליים ע&#8217; 6",
+          "מבצע מונסטרה קסנטוספטאה ע&#8217; 12",
+          "מבצע מונסטרה טווינזה נארו ע&#8217; 12",
+          "מבצע מונסטרה אוראו פינאטה ע&#8217; 12",
+          "מונסטרה סטדליאנה סטאר דסט ע&#8217; 12",
+          "מונסטרה סיראנה הוואי ע&#8217; 14",
+          "מבצע מונסטרה אובליקה אמזונס ע&#8217; 12",
+          "מבצע מונסטרה SP קולומביה ע&#8217; 12",
+          "מבצע מונסטרה אדנסוני אוראה ע&#8217; 12",
+          "מבצע מונסטרה מינט ע&#8217; 7",
+          "מונסטרה סילטפיקנה לתלייה",
+          "מבצע מונסטרה בלבזור ע&#8217; 7",
+          "מונסטרה אדנסוני מגוונת ע׳ 6",
+          "מונסטרה אובליקה יסוני ע&#8217; 10",
+          "מבצע מונסטרה מינט ע&#8217; 12",
+          "מונסטרה אלבו בכד",
+          "מונסטרה בורל מרקס פליים בכד",
+          "מונסטרה בורל מרקס פליים ע&#8217; 15",
+          "מבצע מונסטרה פרוזן פרקלס ע&#8217; 12",
+          "מבצע מונסטרה בורל מרקס פליים ע&#8217; 6",
+          "מבצע מונסטרה לכלריאנה מגוונת ע&#8217; 15",
+          "מבצע מונסטרה אוראופינאטה ע&#8217; 12",
+          "מונסטרה פרו מגוונת ע&#8217; 12",
+          "מונסטרה דלסיוסה ע&#8217; 24",
+          "מבצע מונסטרה דלסיוסה אוראה ע&#8217; 7",
+          "מבצע מונסטרה פרוזן פרקלס ע&#8217; 6",
+          "מונסטרה אובליקה פרו ע&#8217; 6",
+          "מונסטרה אדנסוני מינט ע&#8217; 12",
+          "מונסטרה אסקולטו ע&#8217; 17",
+          "מונסטרה פרו ע&#8217; 12",
+          "מבצע מונסטרה אלבו ע&#8217; 15",
+          "מבצע מונסטרה תאי קונסטליישן מוטציה ע&#8217; 12",
+          "מונסטרה אדנסוני ע&#8217; 12",
+          "מונסטרה סטדליאנה אוראה ע׳ 12",
+          "מונסטרה דליסיוסה ע&#8217; 12"
+        ],
+        "price": 499.9
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "pothos",
+      "variant": "full",
+      "term": "פותוס",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "pothos",
+      "variant": "broad",
+      "term": "פותוס",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-regal-shield",
+      "variant": "full",
+      "term": "אלוקסיה ריגל שילד",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%A8%D7%99%D7%92%D7%9C%20%D7%A9%D7%99%D7%9C%D7%93&per_page=100",
+      "status": 200,
+      "bodyFile": "a4a3ea7d00a2d23a.json",
+      "bytes": 7640,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "מבצע אלוקסיה ריגל שילד אלבו ע&#8217; 6"
+        ],
+        "price": 1499.9
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-regal-shield",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "b15145593fef193b.json",
+      "bytes": 401608,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "מבצע אלוקסיה ריגל שילד אלבו ע&#8217; 6"
+        ],
+        "price": 1499.9
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-zebrina",
+      "variant": "full",
+      "term": "אלוקסיה זברינה",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%96%D7%91%D7%A8%D7%99%D7%A0%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "26f5194548cb0f5e.json",
+      "bytes": 18633,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "מבצע אלוקסיה זברינה מוחיטו ע&#8217; 12",
+          "מבצע אלוקסיה זברינה אוראה ע&#8217; 12",
+          "מבצע אלוקסיה זברינה שחורה מגוונת ע&#8217; 12"
+        ],
+        "price": 999.9
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-zebrina",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "b15145593fef193b.json",
+      "bytes": 401608,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "מבצע אלוקסיה זברינה מוחיטו ע&#8217; 12",
+          "מבצע אלוקסיה זברינה אוראה ע&#8217; 12",
+          "מבצע אלוקסיה זברינה שחורה מגוונת ע&#8217; 12"
+        ],
+        "price": 999.9
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "zz",
+      "variant": "full",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "zz",
+      "variant": "broad",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "sansevieria",
+      "variant": "full",
+      "term": "סנסוויריה",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "sansevieria",
+      "variant": "broad",
+      "term": "סנסוויריה",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "philodendron-brasil",
+      "variant": "full",
+      "term": "פילודנדרון ברזיל",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F%20%D7%91%D7%A8%D7%96%D7%99%D7%9C&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "philodendron-brasil",
+      "variant": "broad",
+      "term": "פילודנדרון",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F&per_page=100",
+      "status": 200,
+      "bodyFile": "9d0d88330c0dbaea.json",
+      "bytes": 272324,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "calathea-orbifolia",
+      "variant": "full",
+      "term": "קלתיאה אורביפוליה",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94%20%D7%90%D7%95%D7%A8%D7%91%D7%99%D7%A4%D7%95%D7%9C%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "calathea-orbifolia",
+      "variant": "broad",
+      "term": "קלתיאה",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "ficus-lyrata",
+      "variant": "full",
+      "term": "פיקוס ליראטה",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%A7%D7%95%D7%A1%20%D7%9C%D7%99%D7%A8%D7%90%D7%98%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "פיקוס כינורי מגוון ע&#8217; 10",
+          "פיקוס כינורי 10 ליטר"
+        ],
+        "price": 159
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "ficus-lyrata",
+      "variant": "broad",
+      "term": "פיקוס",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%A7%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "3548976ac2aceb51.json",
+      "bytes": 21707,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "פיקוס כינורי מגוון ע&#8217; 10",
+          "פיקוס כינורי 10 ליטר"
+        ],
+        "price": 159
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "aglaonema",
+      "variant": "full",
+      "term": "אגלאונמה",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "aglaonema",
+      "variant": "broad",
+      "term": "אגלאונמה",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "lavender",
+      "variant": "full",
+      "term": "לבנדר",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "lavender",
+      "variant": "broad",
+      "term": "לבנדר",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "olive",
+      "variant": "full",
+      "term": "זית",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%99%D7%AA&per_page=100",
+      "status": 200,
+      "bodyFile": "bba99ed8f4556750.json",
+      "bytes": 22204,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "זית 10 ל&#8217;",
+          "זית בונזאי קטן ע&#8217; 12"
+        ],
+        "price": 135
+      }
+    },
+    {
+      "host": "al-haderech.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "olive",
+      "variant": "broad",
+      "term": "זית",
+      "requestUrl": "https://al-haderech.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%99%D7%AA&per_page=100",
+      "status": 200,
+      "bodyFile": "bba99ed8f4556750.json",
+      "bytes": 22204,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "זית 10 ל&#8217;",
+          "זית בונזאי קטן ע&#8217; 12"
+        ],
+        "price": 135
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "monstera",
+      "variant": "full",
+      "term": "מונסטרה",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "aac3e9bbbf06ac2a.json",
+      "bytes": 56553,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "מונסטרה מאנקי &#8211; Monstera Monkey",
+          "מונסטרה בשילוב כלי קש עבודת יד",
+          "מונסטרה בכלי קרמיקה בשילוב חלוקי נחל צבע שחור"
+        ],
+        "price": 59
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "monstera",
+      "variant": "broad",
+      "term": "מונסטרה",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "aac3e9bbbf06ac2a.json",
+      "bytes": 56553,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "מונסטרה מאנקי &#8211; Monstera Monkey",
+          "מונסטרה בשילוב כלי קש עבודת יד",
+          "מונסטרה בכלי קרמיקה בשילוב חלוקי נחל צבע שחור"
+        ],
+        "price": 59
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "pothos",
+      "variant": "full",
+      "term": "פותוס",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "pothos",
+      "variant": "broad",
+      "term": "פותוס",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-regal-shield",
+      "variant": "full",
+      "term": "אלוקסיה ריגל שילד",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%A8%D7%99%D7%92%D7%9C%20%D7%A9%D7%99%D7%9C%D7%93&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-regal-shield",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "0c608b22141f8339.json",
+      "bytes": 12095,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-zebrina",
+      "variant": "full",
+      "term": "אלוקסיה זברינה",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%96%D7%91%D7%A8%D7%99%D7%A0%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-zebrina",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "0c608b22141f8339.json",
+      "bytes": 12095,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "zz",
+      "variant": "full",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "zz",
+      "variant": "broad",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "sansevieria",
+      "variant": "full",
+      "term": "סנסוויריה",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "sansevieria",
+      "variant": "broad",
+      "term": "סנסוויריה",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "philodendron-brasil",
+      "variant": "full",
+      "term": "פילודנדרון ברזיל",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F%20%D7%91%D7%A8%D7%96%D7%99%D7%9C&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "philodendron-brasil",
+      "variant": "broad",
+      "term": "פילודנדרון",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F&per_page=100",
+      "status": 200,
+      "bodyFile": "5081ebac8a086795.json",
+      "bytes": 15303,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "calathea-orbifolia",
+      "variant": "full",
+      "term": "קלתיאה אורביפוליה",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94%20%D7%90%D7%95%D7%A8%D7%91%D7%99%D7%A4%D7%95%D7%9C%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "calathea-orbifolia",
+      "variant": "broad",
+      "term": "קלתיאה",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "ficus-lyrata",
+      "variant": "full",
+      "term": "פיקוס ליראטה",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%A7%D7%95%D7%A1%20%D7%9C%D7%99%D7%A8%D7%90%D7%98%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "פיקוס כינור בכד פוליטילן בשילוב חלוקי נחל שחור"
+        ],
+        "price": 320
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "ficus-lyrata",
+      "variant": "broad",
+      "term": "פיקוס",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%A7%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "27317c84f9ed221c.json",
+      "bytes": 71132,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "פיקוס כינור בכד פוליטילן בשילוב חלוקי נחל שחור"
+        ],
+        "price": 320
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "aglaonema",
+      "variant": "full",
+      "term": "אגלאונמה",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "aglaonema",
+      "variant": "broad",
+      "term": "אגלאונמה",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "lavender",
+      "variant": "full",
+      "term": "לבנדר",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&per_page=100",
+      "status": 200,
+      "bodyFile": "a91b1702ca65c3de.json",
+      "bytes": 17741,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "לבנדר Lavender"
+        ],
+        "price": 15
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "lavender",
+      "variant": "broad",
+      "term": "לבנדר",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&per_page=100",
+      "status": 200,
+      "bodyFile": "a91b1702ca65c3de.json",
+      "bytes": 17741,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "לבנדר Lavender"
+        ],
+        "price": 15
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "olive",
+      "variant": "full",
+      "term": "זית",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%99%D7%AA&per_page=100",
+      "status": 200,
+      "bodyFile": "5e6d9842630e6fab.json",
+      "bytes": 42372,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "זית בונסאי מעוצב גזע בכלי קרמיקה בתוספת חלוקי נחל גוון טבעי",
+          "זית בונסאי &#8211; Olive Tree Bonsai"
+        ],
+        "price": 189
+      }
+    },
+    {
+      "host": "mashtelatramatgan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "olive",
+      "variant": "broad",
+      "term": "זית",
+      "requestUrl": "https://mashtelatramatgan.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%99%D7%AA&per_page=100",
+      "status": 200,
+      "bodyFile": "5e6d9842630e6fab.json",
+      "bytes": 42372,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "זית בונסאי מעוצב גזע בכלי קרמיקה בתוספת חלוקי נחל גוון טבעי",
+          "זית בונסאי &#8211; Olive Tree Bonsai"
+        ],
+        "price": 189
+      }
+    },
+    {
+      "host": "rootine.co.il",
+      "platform": "shopify",
+      "route": "shopify-json",
+      "plantId": null,
+      "variant": null,
+      "page": 1,
+      "term": "",
+      "requestUrl": "https://rootine.co.il/products.json?limit=250&page=1",
+      "status": 200,
+      "bodyFile": "2b890df9cda51f78.json",
+      "bytes": 2355201
+    },
+    {
+      "host": "rootine.co.il",
+      "platform": "shopify",
+      "route": "shopify-json",
+      "plantId": null,
+      "variant": null,
+      "page": 2,
+      "term": "",
+      "requestUrl": "https://rootine.co.il/products.json?limit=250&page=2",
+      "status": 200,
+      "bodyFile": "764403babff0fe42.json",
+      "bytes": 2495383
+    },
+    {
+      "host": "rootine.co.il",
+      "platform": "shopify",
+      "route": "shopify-json",
+      "plantId": null,
+      "variant": null,
+      "page": 3,
+      "term": "",
+      "requestUrl": "https://rootine.co.il/products.json?limit=250&page=3",
+      "status": 200,
+      "bodyFile": "97aa93a5d1046e83.json",
+      "bytes": 1730858
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "monstera",
+      "variant": "full",
+      "term": "מונסטרה",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "monstera",
+      "variant": "broad",
+      "term": "מונסטרה",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "pothos",
+      "variant": "full",
+      "term": "פותוס",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "pothos",
+      "variant": "broad",
+      "term": "פותוס",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-regal-shield",
+      "variant": "full",
+      "term": "אלוקסיה ריגל שילד",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%A8%D7%99%D7%92%D7%9C%20%D7%A9%D7%99%D7%9C%D7%93&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-regal-shield",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-zebrina",
+      "variant": "full",
+      "term": "אלוקסיה זברינה",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%96%D7%91%D7%A8%D7%99%D7%A0%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-zebrina",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "zz",
+      "variant": "full",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "zz",
+      "variant": "broad",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "sansevieria",
+      "variant": "full",
+      "term": "סנסוויריה",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "sansevieria",
+      "variant": "broad",
+      "term": "סנסוויריה",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "philodendron-brasil",
+      "variant": "full",
+      "term": "פילודנדרון ברזיל",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F%20%D7%91%D7%A8%D7%96%D7%99%D7%9C&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "philodendron-brasil",
+      "variant": "broad",
+      "term": "פילודנדרון",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "calathea-orbifolia",
+      "variant": "full",
+      "term": "קלתיאה אורביפוליה",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94%20%D7%90%D7%95%D7%A8%D7%91%D7%99%D7%A4%D7%95%D7%9C%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "calathea-orbifolia",
+      "variant": "broad",
+      "term": "קלתיאה",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "114dedef741a6195.json",
+      "bytes": 26137,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "ficus-lyrata",
+      "variant": "full",
+      "term": "פיקוס ליראטה",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%A7%D7%95%D7%A1%20%D7%9C%D7%99%D7%A8%D7%90%D7%98%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "ficus-lyrata",
+      "variant": "broad",
+      "term": "פיקוס",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%A7%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "bf46371a15f7dcd0.json",
+      "bytes": 11487,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "aglaonema",
+      "variant": "full",
+      "term": "אגלאונמה",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "aglaonema",
+      "variant": "broad",
+      "term": "אגלאונמה",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "lavender",
+      "variant": "full",
+      "term": "לבנדר",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "lavender",
+      "variant": "broad",
+      "term": "לבנדר",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "olive",
+      "variant": "full",
+      "term": "זית",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%99%D7%AA&per_page=100",
+      "status": 200,
+      "bodyFile": "391c37208cb597e7.json",
+      "bytes": 26380,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "מיני ישראל- עץ זית בונסאי",
+          "מיני ישראל -עץ זית"
+        ],
+        "price": 49
+      }
+    },
+    {
+      "host": "perahvagan.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "olive",
+      "variant": "broad",
+      "term": "זית",
+      "requestUrl": "https://perahvagan.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%99%D7%AA&per_page=100",
+      "status": 200,
+      "bodyFile": "391c37208cb597e7.json",
+      "bytes": 26380,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "מיני ישראל- עץ זית בונסאי",
+          "מיני ישראל -עץ זית"
+        ],
+        "price": 49
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "monstera",
+      "variant": "full",
+      "term": "מונסטרה",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "6d8068cf4f25ca63.json",
+      "bytes": 23943,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "מונסטרה - עציץ 18 ס\"מ",
+          "מונסטרה מאנקי מאסק",
+          "מונסטרה"
+        ],
+        "price": 119
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "monstera",
+      "variant": "broad",
+      "term": "מונסטרה",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "6d8068cf4f25ca63.json",
+      "bytes": 23943,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "מונסטרה - עציץ 18 ס\"מ",
+          "מונסטרה מאנקי מאסק",
+          "מונסטרה"
+        ],
+        "price": 119
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "pothos",
+      "variant": "full",
+      "term": "פותוס",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "pothos",
+      "variant": "broad",
+      "term": "פותוס",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-regal-shield",
+      "variant": "full",
+      "term": "אלוקסיה ריגל שילד",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%A8%D7%99%D7%92%D7%9C%20%D7%A9%D7%99%D7%9C%D7%93&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-regal-shield",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "7d2f627fcbb323da.json",
+      "bytes": 50377,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-zebrina",
+      "variant": "full",
+      "term": "אלוקסיה זברינה",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%96%D7%91%D7%A8%D7%99%D7%A0%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-zebrina",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "7d2f627fcbb323da.json",
+      "bytes": 50377,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "zz",
+      "variant": "full",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "55e38f6358fba1d0.json",
+      "bytes": 8010,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "זמיה (זמיוקולקס)"
+        ],
+        "price": 69
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "zz",
+      "variant": "broad",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "55e38f6358fba1d0.json",
+      "bytes": 8010,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "זמיה (זמיוקולקס)"
+        ],
+        "price": 69
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "sansevieria",
+      "variant": "full",
+      "term": "סנסוויריה",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "sansevieria",
+      "variant": "broad",
+      "term": "סנסוויריה",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "philodendron-brasil",
+      "variant": "full",
+      "term": "פילודנדרון ברזיל",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F%20%D7%91%D7%A8%D7%96%D7%99%D7%9C&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "philodendron-brasil",
+      "variant": "broad",
+      "term": "פילודנדרון",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F&per_page=100",
+      "status": 200,
+      "bodyFile": "d66c2a046ec0fa86.json",
+      "bytes": 48771,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "calathea-orbifolia",
+      "variant": "full",
+      "term": "קלתיאה אורביפוליה",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94%20%D7%90%D7%95%D7%A8%D7%91%D7%99%D7%A4%D7%95%D7%9C%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "calathea-orbifolia",
+      "variant": "broad",
+      "term": "קלתיאה",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "ficus-lyrata",
+      "variant": "full",
+      "term": "פיקוס ליראטה",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%A7%D7%95%D7%A1%20%D7%9C%D7%99%D7%A8%D7%90%D7%98%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "פיקוס כינורי - עציץ 12 ס\"מ",
+          "פיקוס כינורי"
+        ],
+        "price": 75
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "ficus-lyrata",
+      "variant": "broad",
+      "term": "פיקוס",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%A7%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "3e26bd2e46334dc3.json",
+      "bytes": 70521,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "פיקוס כינורי - עציץ 12 ס\"מ",
+          "פיקוס כינורי"
+        ],
+        "price": 75
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "aglaonema",
+      "variant": "full",
+      "term": "אגלאונמה",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "aglaonema",
+      "variant": "broad",
+      "term": "אגלאונמה",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "lavender",
+      "variant": "full",
+      "term": "לבנדר",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "lavender",
+      "variant": "broad",
+      "term": "לבנדר",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "olive",
+      "variant": "full",
+      "term": "זית",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%99%D7%AA&per_page=100",
+      "status": 200,
+      "bodyFile": "b6b097acddfb14a0.json",
+      "bytes": 32402,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "עץ זית בינוני בכלי קרמיקה + בקבוק יין",
+          "עץ זית בונסאי ענק",
+          "עץ זית ברנע",
+          "עץ זית בונסאי"
+        ],
+        "price": 159
+      }
+    },
+    {
+      "host": "azurflowers.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "olive",
+      "variant": "broad",
+      "term": "זית",
+      "requestUrl": "https://azurflowers.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%99%D7%AA&per_page=100",
+      "status": 200,
+      "bodyFile": "b6b097acddfb14a0.json",
+      "bytes": 32402,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "עץ זית בינוני בכלי קרמיקה + בקבוק יין",
+          "עץ זית בונסאי ענק",
+          "עץ זית ברנע",
+          "עץ זית בונסאי"
+        ],
+        "price": 159
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "monstera",
+      "variant": "full",
+      "term": "מונסטרה",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "a48d8d231f4597a5.json",
+      "bytes": 28921,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "סופר מונסטרה מאנקי",
+          "מונסטרה מאנקי",
+          "מונסטרה נאה"
+        ],
+        "price": 180
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "monstera",
+      "variant": "broad",
+      "term": "מונסטרה",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "a48d8d231f4597a5.json",
+      "bytes": 28921,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "סופר מונסטרה מאנקי",
+          "מונסטרה מאנקי",
+          "מונסטרה נאה"
+        ],
+        "price": 180
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "pothos",
+      "variant": "full",
+      "term": "פותוס",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "pothos",
+      "variant": "broad",
+      "term": "פותוס",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-regal-shield",
+      "variant": "full",
+      "term": "אלוקסיה ריגל שילד",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%A8%D7%99%D7%92%D7%9C%20%D7%A9%D7%99%D7%9C%D7%93&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-regal-shield",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "26bb222f43a9bcd4.json",
+      "bytes": 19723,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-zebrina",
+      "variant": "full",
+      "term": "אלוקסיה זברינה",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%96%D7%91%D7%A8%D7%99%D7%A0%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "794763ef37a890f4.json",
+      "bytes": 6267,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "אלוקסיה זברינה"
+        ],
+        "price": 385
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "alocasia-zebrina",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "26bb222f43a9bcd4.json",
+      "bytes": 19723,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "אלוקסיה זברינה"
+        ],
+        "price": 385
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "zz",
+      "variant": "full",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "zz",
+      "variant": "broad",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "sansevieria",
+      "variant": "full",
+      "term": "סנסוויריה",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "sansevieria",
+      "variant": "broad",
+      "term": "סנסוויריה",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "philodendron-brasil",
+      "variant": "full",
+      "term": "פילודנדרון ברזיל",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F%20%D7%91%D7%A8%D7%96%D7%99%D7%9C&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "philodendron-brasil",
+      "variant": "broad",
+      "term": "פילודנדרון",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "calathea-orbifolia",
+      "variant": "full",
+      "term": "קלתיאה אורביפוליה",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94%20%D7%90%D7%95%D7%A8%D7%91%D7%99%D7%A4%D7%95%D7%9C%D7%99%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "calathea-orbifolia",
+      "variant": "broad",
+      "term": "קלתיאה",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "8df24e6e116aa3d8.json",
+      "bytes": 7658,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "ficus-lyrata",
+      "variant": "full",
+      "term": "פיקוס ליראטה",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%A7%D7%95%D7%A1%20%D7%9C%D7%99%D7%A8%D7%90%D7%98%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "פיקוס כינורי"
+        ],
+        "price": 285
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "ficus-lyrata",
+      "variant": "broad",
+      "term": "פיקוס",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%A4%D7%99%D7%A7%D7%95%D7%A1&per_page=100",
+      "status": 200,
+      "bodyFile": "6aed3ee8a5fae217.json",
+      "bytes": 42409,
+      "truth": {
+        "listed": true,
+        "productNames": [
+          "פיקוס כינורי"
+        ],
+        "price": 285
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "aglaonema",
+      "variant": "full",
+      "term": "אגלאונמה",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "aglaonema",
+      "variant": "broad",
+      "term": "אגלאונמה",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "lavender",
+      "variant": "full",
+      "term": "לבנדר",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "lavender",
+      "variant": "broad",
+      "term": "לבנדר",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "olive",
+      "variant": "full",
+      "term": "זית",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%99%D7%AA&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "h-shtilshop.co.il",
+      "platform": "woo",
+      "route": "woo-store",
+      "plantId": "olive",
+      "variant": "broad",
+      "term": "זית",
+      "requestUrl": "https://h-shtilshop.co.il/wp-json/wc/store/v1/products?search=%D7%96%D7%99%D7%AA&per_page=100",
+      "status": 200,
+      "bodyFile": "4f53cda18c2baa0c.json",
+      "bytes": 2,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "monstera",
+      "variant": "full",
+      "term": "מונסטרה",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "monstera",
+      "variant": "broad",
+      "term": "מונסטרה",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "pothos",
+      "variant": "full",
+      "term": "פותוס",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "pothos",
+      "variant": "broad",
+      "term": "פותוס",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "alocasia-regal-shield",
+      "variant": "full",
+      "term": "אלוקסיה ריגל שילד",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%A8%D7%99%D7%92%D7%9C%20%D7%A9%D7%99%D7%9C%D7%93&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "alocasia-regal-shield",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "alocasia-zebrina",
+      "variant": "full",
+      "term": "אלוקסיה זברינה",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%96%D7%91%D7%A8%D7%99%D7%A0%D7%94&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "alocasia-zebrina",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "zz",
+      "variant": "full",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "zz",
+      "variant": "broad",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "sansevieria",
+      "variant": "full",
+      "term": "סנסוויריה",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "sansevieria",
+      "variant": "broad",
+      "term": "סנסוויריה",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "philodendron-brasil",
+      "variant": "full",
+      "term": "פילודנדרון ברזיל",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F%20%D7%91%D7%A8%D7%96%D7%99%D7%9C&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "philodendron-brasil",
+      "variant": "broad",
+      "term": "פילודנדרון",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "calathea-orbifolia",
+      "variant": "full",
+      "term": "קלתיאה אורביפוליה",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94%20%D7%90%D7%95%D7%A8%D7%91%D7%99%D7%A4%D7%95%D7%9C%D7%99%D7%94&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "calathea-orbifolia",
+      "variant": "broad",
+      "term": "קלתיאה",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "ficus-lyrata",
+      "variant": "full",
+      "term": "פיקוס ליראטה",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%A4%D7%99%D7%A7%D7%95%D7%A1%20%D7%9C%D7%99%D7%A8%D7%90%D7%98%D7%94&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "ficus-lyrata",
+      "variant": "broad",
+      "term": "פיקוס",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%A4%D7%99%D7%A7%D7%95%D7%A1&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "aglaonema",
+      "variant": "full",
+      "term": "אגלאונמה",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "aglaonema",
+      "variant": "broad",
+      "term": "אגלאונמה",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "lavender",
+      "variant": "full",
+      "term": "לבנדר",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "lavender",
+      "variant": "broad",
+      "term": "לבנדר",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "olive",
+      "variant": "full",
+      "term": "זית",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%96%D7%99%D7%AA&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "vcactus.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "olive",
+      "variant": "broad",
+      "term": "זית",
+      "requestUrl": "https://vcactus.co.il/?s=%D7%96%D7%99%D7%AA&post_type=product",
+      "status": 0,
+      "bodyFile": null,
+      "bytes": 0,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "monstera",
+      "variant": "full",
+      "term": "מונסטרה",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "f52a4d5f7d19fc2d.html",
+      "bytes": 343529,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "monstera",
+      "variant": "broad",
+      "term": "מונסטרה",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%9E%D7%95%D7%A0%D7%A1%D7%98%D7%A8%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "f52a4d5f7d19fc2d.html",
+      "bytes": 343529,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "pothos",
+      "variant": "full",
+      "term": "פותוס",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&post_type=product",
+      "status": 200,
+      "bodyFile": "9978ca3474d5b7ac.html",
+      "bytes": 343517,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "pothos",
+      "variant": "broad",
+      "term": "פותוס",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%A4%D7%95%D7%AA%D7%95%D7%A1&post_type=product",
+      "status": 200,
+      "bodyFile": "9978ca3474d5b7ac.html",
+      "bytes": 343517,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "alocasia-regal-shield",
+      "variant": "full",
+      "term": "אלוקסיה ריגל שילד",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%A8%D7%99%D7%92%D7%9C%20%D7%A9%D7%99%D7%9C%D7%93&post_type=product",
+      "status": 200,
+      "bodyFile": "768f82fa4f288ead.html",
+      "bytes": 343579,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "alocasia-regal-shield",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "9b0b75d2aafed74b.html",
+      "bytes": 343529,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "alocasia-zebrina",
+      "variant": "full",
+      "term": "אלוקסיה זברינה",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94%20%D7%96%D7%91%D7%A8%D7%99%D7%A0%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "cc85ea92705f3417.html",
+      "bytes": 343566,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "alocasia-zebrina",
+      "variant": "broad",
+      "term": "אלוקסיה",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%90%D7%9C%D7%95%D7%A7%D7%A1%D7%99%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "9b0b75d2aafed74b.html",
+      "bytes": 343529,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "zz",
+      "variant": "full",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&post_type=product",
+      "status": 200,
+      "bodyFile": "239bf046208775b8.html",
+      "bytes": 343541,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "zz",
+      "variant": "broad",
+      "term": "זמיוקולקס",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%96%D7%9E%D7%99%D7%95%D7%A7%D7%95%D7%9C%D7%A7%D7%A1&post_type=product",
+      "status": 200,
+      "bodyFile": "239bf046208775b8.html",
+      "bytes": 343541,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "sansevieria",
+      "variant": "full",
+      "term": "סנסוויריה",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "76e8cf0854d4154b.html",
+      "bytes": 343541,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "sansevieria",
+      "variant": "broad",
+      "term": "סנסוויריה",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%A1%D7%A0%D7%A1%D7%95%D7%95%D7%99%D7%A8%D7%99%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "76e8cf0854d4154b.html",
+      "bytes": 343541,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "philodendron-brasil",
+      "variant": "full",
+      "term": "פילודנדרון ברזיל",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F%20%D7%91%D7%A8%D7%96%D7%99%D7%9C&post_type=product",
+      "status": 200,
+      "bodyFile": "53a67e5f8f1c4e14.html",
+      "bytes": 343578,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "philodendron-brasil",
+      "variant": "broad",
+      "term": "פילודנדרון",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%A4%D7%99%D7%9C%D7%95%D7%93%D7%A0%D7%93%D7%A8%D7%95%D7%9F&post_type=product",
+      "status": 200,
+      "bodyFile": "59103ca9181dbd47.html",
+      "bytes": 343547,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "calathea-orbifolia",
+      "variant": "full",
+      "term": "קלתיאה אורביפוליה",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94%20%D7%90%D7%95%D7%A8%D7%91%D7%99%D7%A4%D7%95%D7%9C%D7%99%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "df43c477e84f2e6c.html",
+      "bytes": 343584,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "calathea-orbifolia",
+      "variant": "broad",
+      "term": "קלתיאה",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%A7%D7%9C%D7%AA%D7%99%D7%90%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "5041ba456f83a414.html",
+      "bytes": 343523,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "ficus-lyrata",
+      "variant": "full",
+      "term": "פיקוס ליראטה",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%A4%D7%99%D7%A7%D7%95%D7%A1%20%D7%9C%D7%99%D7%A8%D7%90%D7%98%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "44c8f76ebea756bd.html",
+      "bytes": 343554,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "ficus-lyrata",
+      "variant": "broad",
+      "term": "פיקוס",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%A4%D7%99%D7%A7%D7%95%D7%A1&post_type=product",
+      "status": 200,
+      "bodyFile": "3477ed95e4373333.html",
+      "bytes": 343517,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "aglaonema",
+      "variant": "full",
+      "term": "אגלאונמה",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "ade0ce1cea6c76c6.html",
+      "bytes": 343535,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "aglaonema",
+      "variant": "broad",
+      "term": "אגלאונמה",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%90%D7%92%D7%9C%D7%90%D7%95%D7%A0%D7%9E%D7%94&post_type=product",
+      "status": 200,
+      "bodyFile": "ade0ce1cea6c76c6.html",
+      "bytes": 343535,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "lavender",
+      "variant": "full",
+      "term": "לבנדר",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&post_type=product",
+      "status": 200,
+      "bodyFile": "1c84df4341d0f850.html",
+      "bytes": 343517,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "lavender",
+      "variant": "broad",
+      "term": "לבנדר",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%9C%D7%91%D7%A0%D7%93%D7%A8&post_type=product",
+      "status": 200,
+      "bodyFile": "1c84df4341d0f850.html",
+      "bytes": 343517,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "olive",
+      "variant": "full",
+      "term": "זית",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%96%D7%99%D7%AA&post_type=product",
+      "status": 200,
+      "bodyFile": "ed2bf6d23e1f76e4.html",
+      "bytes": 343505,
+      "truth": {
+        "listed": false
+      }
+    },
+    {
+      "host": "yifrach.co.il",
+      "platform": "unknown",
+      "route": "html",
+      "plantId": "olive",
+      "variant": "broad",
+      "term": "זית",
+      "requestUrl": "https://yifrach.co.il/?s=%D7%96%D7%99%D7%AA&post_type=product",
+      "status": 200,
+      "bodyFile": "ed2bf6d23e1f76e4.html",
+      "bytes": 343505,
+      "truth": {
+        "listed": false
+      }
+    }
+  ]
+}

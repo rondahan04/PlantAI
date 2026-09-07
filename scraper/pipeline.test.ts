@@ -236,7 +236,8 @@ test('the query is translated once for the whole fan-out, not once per site', as
         return 'אלוקסיה ריגל שילד';
       },
       search: async (_website, query) => {
-        searchedFor.push(query);
+        // `translate` yields a plain string, so that is what arrives here.
+        searchedFor.push(typeof query === 'string' ? query : query.hebrew);
         return { md: 'x', platform: 'woo', picked: 'u' };
       },
     })

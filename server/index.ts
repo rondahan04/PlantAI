@@ -28,7 +28,7 @@ import {
   createSearcher,
   hostOf,
   extractAndVerifyPlants,
-  translateQuery,
+  planQuery,
   sanityCheckPrices,
   inferAvailabilityLLM,
   scrapeUrl,
@@ -120,6 +120,16 @@ const searcher = createSearcher(FIRECRAWL_KEY, {
    * identification for a shop we have already met. See SearcherOpts. */
   hostsFile: path.join(ROOT, 'scraper', 'known-hosts.json'),
   tavilyKey: TAVILY_KEY,
+  /*
+   * Ask each shop's own storefront JSON before scraping it (Woo Store API,
+   * Shopify /products.json). Ten of the sixteen nurseries we know publish one,
+   * and on those a search costs no Firecrawl request at all - which is what
+   * leaves the ten-a-minute window for the shops that genuinely need a browser.
+   *
+   * On by default; set RETRIEVAL_API=0 to fall back to the old HTML+LLM path
+   * without a code change.
+   */
+  apiEnabled: env('RETRIEVAL_API') !== '0',
 });
 
 const deps: PipelineDeps = {
@@ -127,8 +137,15 @@ const deps: PipelineDeps = {
     discoverNurseries(lat, lng, GOOGLE_KEY!, { radiusM, richFields: true }),
   search: (website, query, host) => searcher.fetchSearchMarkdown(website, query, host),
   extract: (o) => extractAndVerifyPlants({ ...o, openaiKey: OPENAI_KEY }),
-  /* English in, Hebrew out - see translateQuery. One call per search. */
-  translate: (plantName) => translateQuery(plantName, OPENAI_KEY!),
+  /*
+   * English in, a search plan out - see planQuery. One call per search.
+   *
+   * Replaces `translate`, which returned one Hebrew string and made that string
+   * the entire search. The plan carries the genus to ask each shop for and the
+   * tokens to rank their answers with, which is what stops a three-word
+   * cultivar name returning nothing from a search engine that ANDs every word.
+   */
+  plan: (plantName) => planQuery(plantName, OPENAI_KEY!),
   /* One call for the whole search - the cross-nursery comparison is the point. */
   checkPrices: (query, candidates) => sanityCheckPrices(query, candidates, OPENAI_KEY!),
   /*
