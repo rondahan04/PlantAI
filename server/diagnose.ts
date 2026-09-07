@@ -418,7 +418,7 @@ export async function diagnose(
      * diagnosis. `scientificName` below is deliberately untouched: this changes
      * what we call the plant, never what we think it is.
      */
-    plantName: friendlyName(id.scientificName, id.commonName),
+    plantName: friendlyName(id.scientificName, id.commonName, lang),
     scientificName: id.scientificName,
     condition: health.condition,
     conditionLabel: health.conditionLabel,
