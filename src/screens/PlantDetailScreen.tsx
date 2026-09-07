@@ -10,6 +10,14 @@ import { Theme, useTheme } from '../theme';
 import { directionalIconStyle } from '../lib/rtl';
 import { LOGO_GLYPH } from '../brand';
 import { plantRepo } from '../services/plantRepoInstance';
+import {
+  DiagnosisUnavailableError,
+  NotAPlantError,
+  PhotoTooLargeError,
+  UnsupportedImageError,
+  diagnosePlant,
+} from '../services/plantDiagnosis';
+import { SERVER_MAX_BODY_BYTES, megabytes } from '../lib/uploadLimit';
 import { copy, localeTag } from '../services/language';
 import { plantPhotos } from '../services/photos';
 import { intervalLabel, wateringState } from '../lib/watering';
@@ -38,6 +46,27 @@ type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'PlantDetail'>;
   route: RouteProp<RootStackParamList, 'PlantDetail'>;
 };
+
+/*
+ * Why a check did not finish, in the words the camera already uses.
+ *
+ * The strings are `copy.camera.*` on purpose rather than a second set: the same
+ * failure has to read the same way whether the photo came from the camera or
+ * from the plant's own record, and one of the app's older bugs (E9) was three
+ * screens speaking three error dialects about one network fault.
+ *
+ * A body only - the title is this screen's own, because the sentence "we could
+ * not check this plant" is about the plant here, not about a scan in progress.
+ */
+function describeDiagnosisFailure(err: unknown): string {
+  if (err instanceof NotAPlantError) return copy.camera.notAPlantBody;
+  if (err instanceof UnsupportedImageError) return copy.camera.unsupportedBody;
+  if (err instanceof PhotoTooLargeError) {
+    return copy.camera.tooLargeBody(megabytes(err.bytes), megabytes(SERVER_MAX_BODY_BYTES));
+  }
+  if (err instanceof DiagnosisUnavailableError) return copy.camera.unavailableBody;
+  return copy.camera.failedBody;
+}
 
 /*
  * The three schedules, ordered by how often each comes round: weekly, monthly,
@@ -84,6 +113,9 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
   );
   const [watering, setWatering] = useState(false);
   const [removing, setRemoving] = useState(false);
+  /* A paid call that takes seconds, so the button says "Checking…" rather than
+   * going quiet - and refuses a second tap, which would spend twice. */
+  const [checking, setChecking] = useState(false);
   const { busy: searching, search: findNurseries } = useNurserySearch();
 
   /*
@@ -219,6 +251,50 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
       return;
     }
     setPlant(stored.plant);
+  };
+
+  /*
+   * Check the plant the user is looking at, using the photo it already has.
+   *
+   * WHAT THIS REPLACED. The button used to `navigate('Camera')`, which starts
+   * the ordinary scan flow: a NEW photo, and a diagnosis that ends up on a NEW
+   * plant, because nothing carries this plant's id through the camera. So the
+   * one button offered for a plant already in the library could not diagnose
+   * that plant - it quietly made a second one beside it.
+   *
+   * The camera is still the answer for a plant with no photograph at all, and
+   * only for that: there is nothing to send, so something has to be taken.
+   */
+  const handleCheckIt = async () => {
+    if (!plant.photoUri) {
+      navigation.navigate('Camera');
+      return;
+    }
+
+    setChecking(true);
+    try {
+      const diagnosis = await diagnosePlant(plant.photoUri);
+      const stored = await plantRepo.setDiagnosis(plant.id, diagnosis);
+      if (!stored.ok) {
+        /* The paid call succeeded and the finding could not be saved. Say so
+         * with the storage copy rather than the diagnosis copy - retrying the
+         * photo is not the fix, and the user should not be told the check
+         * failed when it did not. */
+        Alert.alert(
+          copy.plantDetail.saveFailedTitle,
+          SAVE_FAILURE[stored.reason] ?? copy.plantDetail.saveFailedStorage
+        );
+        return;
+      }
+      setPlant(stored.plant);
+    } catch (err: unknown) {
+      /* One vocabulary for diagnosis failures, shared with CameraScreen: the
+       * same "not a plant" or "service is down" deserves the same sentence
+       * wherever the user meets it. */
+      Alert.alert(copy.plantDetail.checkFailedTitle, describeDiagnosisFailure(err));
+    } finally {
+      setChecking(false);
+    }
   };
 
   /*
@@ -411,13 +487,17 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
             <Ionicons name="scan-outline" size={18} color={t.color.textSecondary} />
             <Text style={s.undiagnosedText}>{copy.plantDetail.undiagnosed}</Text>
             <Pressable
-              style={({ pressed }) => [s.undiagnosedBtn, pressed && { opacity: 0.7 }]}
-              onPress={() => navigation.navigate('Camera')}
+              style={({ pressed }) => [s.undiagnosedBtn, (pressed || checking) && { opacity: 0.7 }]}
+              onPress={handleCheckIt}
+              disabled={checking}
               accessibilityRole="button"
+              accessibilityState={{ disabled: checking, busy: checking }}
               accessibilityLabel={copy.plantDetail.checkA11y(plantName)}
               hitSlop={6}
             >
-              <Text style={s.undiagnosedBtnText}>{copy.plantDetail.checkIt}</Text>
+              <Text style={s.undiagnosedBtnText}>
+                {checking ? copy.plantDetail.checking : copy.plantDetail.checkIt}
+              </Text>
             </Pressable>
           </View>
         )}

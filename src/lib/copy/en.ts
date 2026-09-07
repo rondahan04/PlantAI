@@ -540,7 +540,14 @@ export const en = {
     removeA11y: 'Remove this plant',
     undiagnosed: 'You have not had this plant checked yet.',
     checkIt: 'Check it',
-    checkA11y: (name: string) => `Check ${name} with the camera`,
+    /* Shown while the plant's own photo is being checked. The button says what
+     * is happening rather than going dead: a paid call takes seconds, and a
+     * button that only dims reads as a tap that missed. */
+    checking: 'Checking…',
+    /* Not "with the camera" any more: the button checks the photo the plant
+     * already has, and only falls back to the camera when there is none. */
+    checkA11y: (name: string) => `Check ${name}`,
+    checkFailedTitle: 'That check did not finish',
     issues: 'Issues detected',
     treatments: 'Treatment plan',
     urgent: 'URGENT',

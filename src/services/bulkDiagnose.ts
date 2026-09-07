@@ -95,10 +95,15 @@ export function createBulkDiagnose(deps: BulkDiagnoseDeps) {
          * done would make the button look like it worked when it did not.
          */
         emit(stored.ok ? { done: progress.done + 1 } : { failed: progress.failed + 1 });
-      } catch {
+      } catch (err: unknown) {
         // One bad photo, one 429, one dropped connection: the plant is counted
         // and the run carries on. Aborting the batch over a single plant would
         // punish the eleven behind it.
+        //
+        // Logged, though. This catch was silent, and that silence is why a
+        // whole-library failure - every cloud photo rejected by the file reader
+        // - looked like a button that did nothing rather than like a bug.
+        console.warn(`[bulk] ${deps.nameOf(plant)}: ${err instanceof Error ? err.message : err}`);
         emit({ failed: progress.failed + 1 });
       }
 
