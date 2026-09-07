@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Alert } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
+import { photoCacheKey } from '../lib/photoCacheKey';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -448,7 +449,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
         <View style={s.imageWrap}>
           <Image source={LOGO_GLYPH} style={[s.heroGlyph, { tintColor: t.color.textMuted }]} />
           <ExpoImage
-              source={{ uri: plant.photoUri }}
+              source={{ uri: plant.photoUri, cacheKey: photoCacheKey(plant.photoUri) }}
               style={s.image}
               contentFit="cover"
               cachePolicy="memory-disk"
