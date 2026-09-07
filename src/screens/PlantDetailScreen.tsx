@@ -495,6 +495,18 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
               lastAt={careHistory(plant, kind)[0]}
               /* Only watering talks to the OS, so only watering can hang. */
               busy={kind === 'water' && watering}
+              /*
+               * Only watering schedules an OS reminder, so only watering has
+               * this to confirm. `reminderId` is the honest test: it is the id
+               * the OS handed back, so its presence means a notification was
+               * really accepted - not merely that we asked, or that permission
+               * was granted. Absent is a normal outcome (permission declined,
+               * reminders switched off, a due date already past), and the card
+               * says nothing in that case.
+               */
+              note={
+                kind === 'water' && plant.reminderId ? copy.scheduleCard.reminderSet : undefined
+              }
               onLog={kind === 'water' ? handleWater : () => handleCare(kind)}
               onHistory={() => navigation.navigate('WateringHistory', { plantId: plant.id, kind })}
             />

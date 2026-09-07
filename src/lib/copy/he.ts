@@ -668,6 +668,11 @@ export const he: Copy = {
     actionA11y: (title: string, action: string, label: string) =>
       `${title}: ${action}.${label ? ` ${label}` : ''}`,
     earlyHint: (title: string) => `הקישו הקשה כפולה והחזיקו כדי לתעד ${title} מוקדם`,
+    /* Names the action rather than the button, matching `earlyHint` above:
+     * "החזיקו כדי לתעד השקיה מוקדם" reads as Hebrew, while threading the
+     * button's own past-tense label ("הושקה") through it does not. */
+    earlyNote: (done: string, title: string) => `החזיקו כדי לתעד ${title} מוקדם`,
+    reminderSet: 'תזכורת נקבעה',
   },
   importBanner: {
     title: (n: number) =>
