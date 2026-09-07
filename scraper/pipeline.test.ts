@@ -550,3 +550,66 @@ test('an out-of-stock listing is not laundered into "unknown"', async () => {
   assert.equal(out[0].hasPlant, false);
   assert.equal(out[0].inStockKnown, true);
 });
+
+// --- nurseries with no website --------------------------------------------
+
+test('a nursery with no website is reported, never scraped', async () => {
+  let searched = 0;
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      discover: async () => [
+        {
+          name: 'משתלת רימון',
+          website: '',
+          lat: 32.1,
+          lng: 34.8,
+          address: 'רימון 3',
+          phone: '03-9',
+        },
+      ],
+      search: async () => {
+        searched += 1;
+        return { md: '', platform: 'unknown', picked: null };
+      },
+    })
+  );
+  assert.equal(searched, 0, 'there is no site to read, so nothing may be paid for');
+  assert.equal(out.length, 1);
+  const n = out[0];
+  assert.equal(n.name, 'משתלת רימון');
+  assert.equal(n.phone, '03-9');
+  assert.equal(n.hasPlant, false);
+  assert.equal(n.outcome, 'not_found');
+  assert.equal(n.availability?.kind, 'no_website');
+  // Finite distance is what puts it in the Pick Up tab.
+  assert.ok(Number.isFinite(n.distanceKm));
+});
+
+test('two site-less nurseries do not collide on an empty host', async () => {
+  const at = (name: string, lat: number) => ({
+    name,
+    website: '',
+    lat,
+    lng: 34.8,
+    address: name,
+  });
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({ discover: async () => [at('A', 32.1), at('B', 32.2)] })
+  );
+  assert.deepEqual(out.map((n) => n.name).sort(), ['A', 'B']);
+});
+
+test('a shop with stock still outranks a nearer nursery with no website', async () => {
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      discover: async () => [
+        { name: 'No Site', website: '', lat: 32.086, lng: 34.782, address: 'next door' },
+        { name: 'Green House', website: 'https://gh.example/', lat: 32.3, lng: 34.9, address: 'far' },
+      ],
+    })
+  );
+  assert.deepEqual(out.map((n) => n.name), ['Green House', 'No Site']);
+});

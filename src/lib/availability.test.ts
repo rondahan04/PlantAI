@@ -95,6 +95,26 @@ test('a shop we DID search, that had nothing, says we did not find the product',
   assert.equal(b.text, "Didn't find the product");
 });
 
+test('a nursery with no online shop is not phrased as a failed search', () => {
+  /*
+   * Third member of the same family, and the one the other two would get
+   * wrong. "Couldn't check this shop" blames our plumbing for a shop that
+   * never had a page; "didn't find the product" claims we searched a catalogue
+   * that does not exist. The user's move here is the phone.
+   */
+  const b = availabilityBadge(
+    base({
+      outcome: 'not_found',
+      availability: { kind: 'no_website', detail: 'This nursery has no online shop.' },
+    })
+  );
+
+  assert.equal(b.text, 'No online shop · call to check');
+  assert.doesNotMatch(b.text, /%/);
+  assert.equal(b.tone, 'unknown');
+  assert.equal(b.detail, 'This nursery has no online shop.');
+});
+
 test('a legacy unreadable/error payload speaks the same words', () => {
   // A job that outlived a deploy must not show the user a second vocabulary.
   for (const kind of ['unreadable', 'error'] as const) {

@@ -88,8 +88,10 @@ export interface Availability {
    * `unreadable` - the site was a bot wall or returned nothing. NOT a
    *                likelihood: there is no number to honestly report.
    * `error`      - the scrape itself failed.
+   * `no_website` - there was never a site to read. A real nursery Places knows
+   *                about, reachable only by phone or in person.
    */
-  kind: 'estimate' | 'unreadable' | 'error' | 'stock_unknown';
+  kind: 'estimate' | 'unreadable' | 'error' | 'stock_unknown' | 'no_website';
   confidence?: number; // `estimate` only
   detail: string; // full reasoning / error text, shown on demand
 }
@@ -266,8 +268,16 @@ async function scrapeOne(
     }
   };
 
+  /* No storefront to read: Places gave us a nursery with no website, or with a
+   * Facebook page where a website should be. The row is built from what Places
+   * knows and nothing is scraped. */
+  const contactOnly = !n.website;
+
   const base: NurseryResult = {
-    id: host,
+    /* A contact-only place has no host to be identified by, and two of them
+     * would collide on '' in the dedup below. Name and coordinates are what
+     * make one of these places distinct from the next. */
+    id: contactOnly ? `place:${n.name}@${n.lat},${n.lng}` : host,
     name: n.name || host,
     website: n.website,
     address: n.address,
@@ -284,6 +294,23 @@ async function scrapeOne(
     inStockKnown: false,
     shipsToHome,
   };
+
+  /*
+   * Nothing to read, so nothing to wait for. The row says what it honestly can
+   * - this nursery is here, this is its number - and `no_website` is what stops
+   * the client phrasing that as a failed search: we did not fail to find the
+   * plant on their site, they have no site.
+   */
+  if (contactOnly) {
+    return {
+      ...base,
+      outcome: 'not_found',
+      availability: {
+        kind: 'no_website',
+        detail: 'This nursery has no online shop, so their stock cannot be checked from here.',
+      },
+    };
+  }
 
   /*
    * Everything past this point is network work on someone else's server, so it

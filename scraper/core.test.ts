@@ -1373,11 +1373,14 @@ test('createSearcher: a confident probe hit teaches a per-host template - one re
 
 // --- which provider leads -------------------------------------------------
 
-test('tavilyLeads: only an unrendered read with a Tavily key goes to Tavily first', () => {
+test('tavilyLeads: every read with a Tavily key goes to Tavily first', () => {
   assert.equal(tavilyLeads({ waitFor: 0, tavilyKey: 't' }), true);
-  assert.equal(tavilyLeads({ waitFor: 3500, tavilyKey: 't' }), false); // rendering is Firecrawl's job
+  // A render request no longer hands the lead to Firecrawl: Firecrawl is the
+  // scarce resource, so it is the rescue for a read that came back a shell.
+  assert.equal(tavilyLeads({ waitFor: 3500, tavilyKey: 't' }), true);
+  assert.equal(tavilyLeads({ tavilyKey: 't' }), true);
   assert.equal(tavilyLeads({ waitFor: 0 }), false); // no key configured
-  assert.equal(tavilyLeads({ tavilyKey: 't' }), false); // waitFor defaults to a render
+  assert.equal(tavilyLeads({ waitFor: 3500 }), false); // no key configured
 });
 
 test('resolveScrape: a bot wall from the primary is treated as a failed read', async () => {

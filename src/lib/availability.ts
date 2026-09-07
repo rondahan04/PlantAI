@@ -52,6 +52,9 @@ export interface AvailabilityCopy {
   /* We never managed to read this shop, so we are not claiming anything about
    * what it stocks. Distinct from notFound, which says we looked. */
   couldNotCheck: string;
+  /* The nursery has no online shop to read. Distinct from couldNotCheck, which
+   * says we tried and failed. */
+  noWebsite: string;
   estimate: (band: string, confidence: number) => string;
   /* Found the product and its price; the page never says whether it is in
    * stock. Distinct from both 'in stock' and 'did not find it'. */
@@ -68,6 +71,7 @@ export const EN_AVAILABILITY_COPY: AvailabilityCopy = {
   inStock: (shipsToHome) => `In stock now · ${shipsToHome ? 'ships to home' : 'local pickup'}`,
   notFound: "Didn't find the product",
   couldNotCheck: "Couldn't check this shop",
+  noWebsite: 'No online shop · call to check',
   estimate: (bandLabel, confidence) => `${bandLabel} · ${confidence}%`,
   stockUnknown: 'Listed · stock not stated',
   unknown: 'Availability unknown',
@@ -125,6 +129,20 @@ export function availabilityBadge(
    * Neither says "the scrape failed" - our plumbing is not the user's problem.
    * Both keep the row, because they may still want to ring the place.
    */
+  /*
+   * A nursery with no online shop at all. Not a failure of ours and not a
+   * statement about their shelf - "didn't find the product" would be both. What
+   * the user can do here is ring them, so that is what the row says.
+   */
+  if (n.availability?.kind === 'no_website') {
+    return {
+      text: words.noWebsite,
+      tone: 'unknown',
+      detail: n.availability.detail,
+      hasDetail: Boolean(n.availability.detail),
+    };
+  }
+
   if (n.outcome === 'not_found') {
     const unread = n.availability?.kind === 'unreadable' || n.availability?.kind === 'error';
     return {

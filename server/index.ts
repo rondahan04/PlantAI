@@ -101,17 +101,32 @@ const nurseryCache = createNurseryCache<NurseryResult[]>({
  */
 const CORS_ORIGIN = env('CORS_ORIGIN');
 
+const FALLBACK_URLS_PATH = path.join(ROOT, 'nurseries-fallback.txt');
+
+/* The shipper list, read from disk so adding a shop is an edit to a text file
+ * rather than a deploy of new code. */
+function readFallbackUrls(): string[] {
+  return fs
+    .readFileSync(FALLBACK_URLS_PATH, 'utf8')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith('http'));
+}
+
 /*
- * The nurseries that actually ship nationally. These are scraped on EVERY
- * search, not only when nothing local matches, because they are the whole
- * content of the Deliver tab - a user who opens it wants delivery whether or
- * not a local shop happened to have the plant.
+ * The nurseries that ship. These are scraped on EVERY search, not only when
+ * nothing local matches, because they are the whole content of the Deliver tab
+ * - a user who opens it wants delivery whether or not a local shop happened to
+ * have the plant.
  *
- * Kept to the two confirmed shippers. The others on this list were general
- * nurseries with no delivery, so including them padded the tab with rows that
- * could not be delivered and cost a scrape each.
+ * All eight of nurseries-fallback.txt, not the two it was trimmed to. That trim
+ * predates the retrieval rework: the other six looked like they had nothing to
+ * deliver because a multi-word cultivar name ANDed to zero results on their
+ * search, not because they stock nothing. The broad-query + ranking path reads
+ * them, and a shop with no matching listing now returns `not_sold` and is
+ * hidden by the client, so an empty shop costs a scrape and no screen space.
  */
-const NATIONAL_NURSERIES = ['https://al-haderech.co.il/', 'https://rootine.co.il/'];
+const NATIONAL_NURSERIES = readFallbackUrls();
 
 const searcher = createSearcher(FIRECRAWL_KEY, {
   openaiKey: OPENAI_KEY,
@@ -160,12 +175,7 @@ const deps: PipelineDeps = {
     scrapeUrl(origin, FIRECRAWL_KEY!, { tavilyKey: TAVILY_KEY }),
   infer: (homeMd, query, site) => inferAvailabilityLLM(homeMd, query, site, OPENAI_KEY!),
   resolvePhoto: (photoName) => resolvePhotoUrl(photoName, GOOGLE_KEY!),
-  readFallbackUrls: () =>
-    fs
-      .readFileSync(path.join(ROOT, 'nurseries-fallback.txt'), 'utf8')
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l.startsWith('http')),
+  readFallbackUrls,
   nationalUrls: NATIONAL_NURSERIES,
   onSiteRead: (host, stage) => scrapeHealth.record(host, stage),
 };

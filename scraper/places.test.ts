@@ -42,10 +42,59 @@ test('discoverNurseries: parses displayName/location/website/address', async () 
   });
 });
 
-test('discoverNurseries: drops places with no website (unscrapable)', async () => {
-  const places = [place(), place({ websiteUri: undefined }), place({ websiteUri: '' })];
+test('discoverNurseries: a place with no website comes back contact-only, not dropped', async () => {
+  const places = [
+    place(),
+    place({ websiteUri: undefined, displayName: { text: 'משתלת רימון' }, formattedAddress: 'רימון 3' }),
+    place({ websiteUri: '', displayName: { text: 'משתלת אלון' }, formattedAddress: 'אלון 4' }),
+  ];
+  const out = await discoverNurseries(32.08, 34.78, 'KEY', {}, fakeFetch(200, { places }));
+  assert.equal(out.length, 3);
+  // Scrapable shops lead; the site-less ones carry '' so the pipeline knows not
+  // to scrape them.
+  assert.equal(out[0].website, 'https://vered.co.il');
+  assert.deepEqual(out.slice(1).map((n) => n.website), ['', '']);
+  assert.deepEqual(out.slice(1).map((n) => n.name), ['משתלת רימון', 'משתלת אלון']);
+});
+
+test('discoverNurseries: a social page is contact-only, never scraped', async () => {
+  const places = [place({ websiteUri: 'https://www.facebook.com/somenursery' })];
   const out = await discoverNurseries(32.08, 34.78, 'KEY', {}, fakeFetch(200, { places }));
   assert.equal(out.length, 1);
+  assert.equal(out[0].website, '');
+});
+
+test('discoverNurseries: contact-only places dedup on name + address, not host', async () => {
+  const places = [
+    place({ websiteUri: undefined, formattedAddress: 'same place' }),
+    place({ websiteUri: undefined, formattedAddress: 'same place' }),
+    place({ websiteUri: undefined, formattedAddress: 'other branch' }),
+  ];
+  const out = await discoverNurseries(32.08, 34.78, 'KEY', {}, fakeFetch(200, { places }));
+  // Two branches of one chain are two places to drive to; one place listed
+  // twice is a bug.
+  assert.deepEqual(out.map((n) => n.address), ['same place', 'other branch']);
+});
+
+test('discoverNurseries: contactOnlyMax caps them, 0 restores the old drop', async () => {
+  const places = Array.from({ length: 6 }, (_, i) =>
+    place({ websiteUri: undefined, formattedAddress: `addr ${i}` })
+  );
+  const capped = await discoverNurseries(32.08, 34.78, 'KEY', { contactOnlyMax: 2 }, fakeFetch(200, { places }));
+  assert.equal(capped.length, 2);
+  const none = await discoverNurseries(32.08, 34.78, 'KEY', { contactOnlyMax: 0 }, fakeFetch(200, { places }));
+  assert.deepEqual(none, []);
+});
+
+test('discoverNurseries: the scrapable cap does not stop contact-only rows being found', async () => {
+  const places = [
+    place({ websiteUri: 'https://a.co.il' }),
+    place({ websiteUri: 'https://b.co.il' }),
+    place({ websiteUri: undefined, formattedAddress: 'no site here' }),
+  ];
+  const out = await discoverNurseries(32.08, 34.78, 'KEY', { maxResults: 1 }, fakeFetch(200, { places }));
+  // One paid scrape, and the site-less nursery still reaches the Pick Up tab.
+  assert.deepEqual(out.map((n) => n.website), ['https://a.co.il', '']);
 });
 
 test('discoverNurseries: sends textQuery + circle bias + auth/mask headers', async () => {
