@@ -68,6 +68,16 @@ test('the reminder confirmation is translated', () => {
   assert.notEqual(TREES.he.scheduleCard.reminderSet, TREES.en.scheduleCard.reminderSet);
 });
 
+/* The collapsed repot row's only label for a screen reader, and function-valued
+ * so the walk above cannot see it. */
+test('the expand hint is translated', () => {
+  const en = TREES.en.scheduleCard.expandHint('Repotting');
+  const he = TREES.he.scheduleCard.expandHint('החלפת עציץ');
+  assert.match(he, /[א-ת]/);
+  assert.doesNotMatch(he, /show|schedule/i, 'the Hebrew hint still contains English');
+  assert.notEqual(he, en);
+});
+
 /*
  * The Hebrew footer names the ACTION, the English one names the BUTTON. That is
  * deliberate (see the note in he.ts), and this pins it: threading the button's

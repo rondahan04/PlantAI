@@ -72,6 +72,34 @@ test('a repot that is due points at the roots, not the calendar', () => {
   assert.equal(state.label, 'Due now - check the roots');
 });
 
+/*
+ * The repot card collapses to a single row when it has nothing to say, and the
+ * ONLY thing standing between that and a hidden overdue repot is `status ===
+ * 'ok'` (ScheduleCard's `settled`). These pin that gate from the state machine
+ * side, which is the half that can be tested without a renderer.
+ *
+ * If one of these ever goes red, the bug is not in the schedule - it is that
+ * the plant screen has started hiding a repot the user needed to see.
+ */
+test('a repot that needs doing is never in the collapsible state', () => {
+  for (const daysSince of [REPOT_EVERY_DAYS, REPOT_EVERY_DAYS + 21, REPOT_EVERY_DAYS * 2]) {
+    const state = careState('repot', undefined, daysAgo(daysSince), NOW);
+    assert.notEqual(state.status, 'ok', `${daysSince} days since repot must not read as settled`);
+  }
+});
+
+test('a never-repotted plant is never in the collapsible state', () => {
+  // The tap that starts the schedule has to be reachable, and a collapsed row
+  // has no action button on it.
+  const state = careState('repot', plan(7), undefined, NOW);
+  assert.notEqual(state.status, 'ok');
+});
+
+test('a freshly repotted plant is settled, which is what lets the row collapse', () => {
+  const state = careState('repot', plan(7), daysAgo(30), NOW);
+  assert.equal(state.status, 'ok');
+});
+
 test('water is passed through untouched - same interval, same words', () => {
   const range: CarePlan = { ...plan(7), waterEveryDaysMax: 10 };
   const state = careState('water', range, daysAgo(3), NOW);

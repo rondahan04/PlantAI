@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Theme, useTheme } from '../theme';
@@ -55,6 +55,23 @@ export interface ScheduleCardProps {
    * what a reminder is; the caller owns the fact and the wording.
    */
   note?: string;
+  /*
+   * May this card shrink to a single row when there is nothing to do?
+   *
+   * WHY IT IS THE CALLER'S CALL. Repotting comes round every 540-730 days
+   * against watering's ~7, so on the plant screen it was a full bordered card,
+   * equal in weight to watering, for about eighteen months at a stretch - the
+   * least urgent thing on screen looking exactly as important as the most
+   * urgent (Trello #78). But "how loud should this be" is a question about the
+   * screen, not about the schedule, so the layout decision stays with the
+   * screen and this component only obeys.
+   *
+   * NOT A KIND CHECK, deliberately. Urgency is not a property of repotting: a
+   * repot three weeks overdue is genuinely urgent, and a rule that always
+   * shrinks repot would go quiet at exactly the moment it should not. This
+   * permits collapsing; `settled` below decides whether it actually happens.
+   */
+  collapsible?: boolean;
   onLog: () => void;
   onHistory: () => void;
 }
@@ -116,11 +133,18 @@ export default function ScheduleCard({
   lastAt,
   busy = false,
   note,
+  collapsible = false,
   onLog,
   onHistory,
 }: ScheduleCardProps) {
   const t = useTheme();
   const s = useMemo(() => makeStyles(t), [t]);
+  /*
+   * Opened by hand. Deliberately NOT persisted: the collapsed row is the
+   * resting state, and a card left open eighteen months ago is not a preference
+   * worth restoring - it is the screen failing to settle back down.
+   */
+  const [expanded, setExpanded] = useState(false);
   const k = KINDS[kind];
   const tint = t.color[k.tint];
   const onTint = t.color[k.onTint];
@@ -150,6 +174,37 @@ export default function ScheduleCard({
    * the pot rather than by what the pot is filled with.
    */
   const advice = kind === 'water' ? soilPlan?.water : kind === 'fertilizer' ? soilPlan?.fertilizer : undefined;
+
+  /*
+   * The quiet state: allowed to collapse, nothing to do, and not opened by
+   * hand. `settled` is what makes this safe - it is false for `due`, `overdue`,
+   * `never_watered` and `unscheduled`, so every state that wants the user's
+   * attention keeps the full card and the action button, and the row is only
+   * ever standing in for a card that had nothing to say.
+   */
+  if (collapsible && settled && !expanded) {
+    return (
+      <Pressable
+        style={({ pressed }) => [s.collapsedRow, pressed && { opacity: 0.6 }]}
+        onPress={() => setExpanded(true)}
+        accessibilityRole="button"
+        accessibilityLabel={[k.title, state.label].filter(Boolean).join('. ')}
+        accessibilityHint={copy.scheduleCard.expandHint(k.title)}
+      >
+        <Text style={s.collapsedText} numberOfLines={1}>
+          {[k.title, state.label].filter(Boolean).join(' · ')}
+        </Text>
+        {/* The same chevron the History link uses, for the same reason: it says
+            "there is more behind this" without adding a second control. */}
+        <Ionicons
+          name="chevron-forward"
+          size={14}
+          color={t.color.textMuted}
+          style={directionalIconStyle}
+        />
+      </Pressable>
+    );
+  }
 
   return (
     <View
@@ -352,4 +407,25 @@ const makeStyles = (t: Theme) =>
     actionText: { ...t.type.label },
 
     note: { ...t.type.caption, color: t.color.textMuted, marginTop: t.space.sm, textAlign: 'center' },
+
+    /*
+     * No ground, no border, no lift - the opposite of `card` above, and the
+     * whole point: this has to read as a line of text the eye can skip, not as
+     * a fourth object competing with the two real cards above it.
+     *
+     * `minHeight` rather than padding alone so the tap target clears the 44pt
+     * accessibility floor even though the row only draws one line of caption.
+     */
+    collapsedRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: t.space.sm,
+      minHeight: 44,
+      paddingHorizontal: t.space.lg,
+      marginBottom: t.space.sm,
+    },
+    // `flexShrink` so a long interval label truncates rather than shoving the
+    // chevron off the end of the row.
+    collapsedText: { ...t.type.caption, color: t.color.textSecondary, flexShrink: 1 },
   });
