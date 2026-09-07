@@ -23,6 +23,8 @@
  * of them.
  */
 
+import type { Lang } from './carePlan.ts';
+
 /*
  * Species → the name a person would actually say. Genus keys are allowed and
  * act as a fallback for any species in that genus we have not listed, which is
@@ -130,6 +132,82 @@ const COMMON_NAMES: Record<string, string> = {
 };
 
 /*
+ * The same table in Hebrew, and GENUS-KEYED ON PURPOSE.
+ *
+ * WHERE THESE NAMES COME FROM. Every string below is copied verbatim from
+ * `src/data/catalogHebrew.ts`, which is the file where the Hebrew naming policy
+ * was argued through and where the hand-add path already reads its names. None
+ * of them were written here. `commonNames.test.ts` asserts that equality, so a
+ * name edited there and not here fails the suite rather than drifting quietly.
+ *
+ * WHY COPIED RATHER THAN IMPORTED. `src/` is React Native and is deliberately
+ * absent from the server image (see .dockerignore and the Dockerfile header), so
+ * the server cannot import it at runtime. The test can, because it runs in the
+ * repo where both files exist. That is the whole reason the check is a test.
+ *
+ * WHY GENUS AND NOT SPECIES. catalogHebrew's policy is that the genus is the
+ * level that has a real Hebrew name - the transliteration Israeli nurseries
+ * print on the label - while below it sit cultivar trade names growers say in
+ * English. Inventing a Hebrew species name to fill a row would be exactly the
+ * failure card #73 exists to fix, so a species with no vetted genus name falls
+ * through to English, which catalogHebrew documents as the correct outcome.
+ */
+export const HEBREW_NAMES: Record<string, string> = {
+  // Aroids.
+  alocasia: 'אלוקזיה',
+  anthurium: 'אנתוריום',
+  colocasia: 'קולוקסיה',
+  epipremnum: 'אפיפרמנום',
+  monstera: 'מונסטרה',
+  philodendron: 'פילודנדרון',
+  rhaphidophora: 'רפידופורה',
+  scindapsus: 'סקינדפסוס',
+  syngonium: 'סינגוניום',
+
+  // Figs, dracaenas and the other trees people keep indoors.
+  crassula: 'קרסולה',
+  dracaena: 'דרצנה',
+  ficus: 'פיקוס',
+  sansevieria: 'סנסיביירה',
+
+  // Palms and ferns.
+  adiantum: 'שערות שולמית',
+  asplenium: 'אספלניום',
+  chamaedorea: 'כמדוריאה',
+  dypsis: 'דיפסיס',
+  howea: 'הוויאה',
+  nephrolepis: 'נפרולפיס',
+  platycerium: 'קרן הצבי',
+
+  // Prayer plants and the small foliage.
+  calathea: 'קלתיאה',
+  ctenanthe: 'קטנתה',
+  maranta: 'מרנטה',
+  peperomia: 'פפרומיה',
+
+  // Succulents and cacti.
+  aloe: 'אלוורה',
+  echeveria: 'אכוריה',
+  haworthia: 'הוורתיה',
+  opuntia: 'צבר',
+  schlumbergera: 'שלומברגרה',
+
+  // Flowering.
+  begonia: 'בגוניה',
+  hoya: 'הויה',
+
+  /*
+   * Accepted-synonym genera. Not new names: each is the same plant under a
+   * different botanical genus, pointed at the Hebrew name already vetted for its
+   * other spelling, exactly as COMMON_NAMES above pairs sansevieria/dracaena and
+   * senecio/curio. Keeping them here means a Hebrew user sees one name no matter
+   * which genus their identifier happened to answer with.
+   */
+  goeppertia: 'קלתיאה', // = Calathea
+  haworthiopsis: 'הוורתיה', // = Haworthia
+};
+
+/*
  * Reduce a botanical name to the key the table is written in.
  *
  * The same species reaches us spelled several ways depending on who answered:
@@ -171,10 +249,24 @@ export function speciesKey(scientificName: string): string {
  * is the common case and must stay cheap and lossless. An empty fallback falls
  * through to the scientific name rather than to an empty headline - a screen
  * with no plant name on it reads as a broken app.
+ *
+ * In Hebrew the vetted genus name wins where there is one, and everything else
+ * takes the English path unchanged. A Hebrew user therefore never sees a name
+ * nobody invented for them - only a name from the nursery label, or the same
+ * English name the app showed before this parameter existed.
  */
-export function friendlyName(scientificName: string, fallback: string): string {
+export function friendlyName(
+  scientificName: string,
+  fallback: string,
+  lang: Lang = 'en'
+): string {
   const key = speciesKey(scientificName);
   const genus = key.split(' ')[0];
+
+  if (lang === 'he' && genus) {
+    const he = HEBREW_NAMES[genus];
+    if (he) return he;
+  }
 
   const named = COMMON_NAMES[key] ?? (genus ? COMMON_NAMES[genus] : undefined);
   if (named) return named;

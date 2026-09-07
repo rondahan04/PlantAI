@@ -128,6 +128,15 @@ const GROUPS: Record<string, string> = {
 export const HEBREW_TAXA: Record<string, string> = { ...FAMILIES, ...GENERA, ...GROUPS };
 
 /*
+ * The genus layer on its own. Exported because the server keeps a copy of these
+ * names (`server/commonNames.ts` - it cannot import from src/, which is absent
+ * from the server image) and its test asserts the two agree. Read from here
+ * rather than from HEBREW_TAXA, where a group of the same name would win: Ficus
+ * the genus is פיקוס, while Ficus the shelf group is the plural פיקוסים.
+ */
+export const HEBREW_GENERA: Record<string, string> = { ...GENERA };
+
+/*
  * Extra Hebrew spellings the search should match but which are NOT display
  * names: the descriptive name where a transliteration is what the label says,
  * and the common misspellings that follow from writing a Latin name in Hebrew
