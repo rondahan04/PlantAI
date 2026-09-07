@@ -42,8 +42,12 @@ import {
   tavilyLeads,
   FIRECRAWL_RESCUE_BUDGET_MS,
   isTimeout,
+  fetchRawHtml,
+  structuredCatalog,
+  snapPricesToStructured,
 } from './core.ts';
 import type { ScrapeFn, ClassifyFn, Plant, VerificationReport } from './core.ts';
+import { extractStructuredProducts } from './structuredPrice.ts';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -438,6 +442,115 @@ const verdict = (over: Partial<VerificationReport> = {}): VerificationReport => 
   feedback: '',
   corrected_output: [],
   ...over,
+});
+
+// --- structured price integration (SCRAPE-ACCURACY-PLAN Phase 1) ------------
+
+/* One WooCommerce grid cell, priced. The name and price are in one container,
+ * which is the pairing evidence markdown conversion destroys. */
+const PRICED_HTML = `
+  <ul class="products">
+    <li class="product">
+      <a href="/products/sage"><h2>מרווה</h2><span class="price">&#8362;49</span></a>
+    </li>
+  </ul>`;
+
+test('extractAndVerifyPlants: structured data becomes the model input, not the markdown', async () => {
+  let seen = '';
+  await extractAndVerifyPlants(
+    {
+      markdown: '# a page\nlots of noise\n₪0.00 עגלת קניות\n',
+      html: PRICED_HTML,
+      url: 'https://x.co.il/?s=sage',
+      query: 'q',
+      site: 's',
+      openaiKey: 'k',
+    },
+    {
+      extract: async (excerpt) => {
+        seen = excerpt;
+        return [];
+      },
+      verify: async () => verdict(),
+    }
+  );
+  // One line per product, name and price already paired.
+  assert.match(seen, /מרווה \| ₪49/);
+  // The cart total the markdown path would have handed over is simply not there.
+  assert.doesNotMatch(seen, /עגלת קניות/);
+});
+
+test('extractAndVerifyPlants: falls back to the markdown excerpt with no structured data', async () => {
+  let seen = '';
+  await extractAndVerifyPlants(
+    { markdown: PRICED_MD, html: '<p>no products here</p>', query: 'q', site: 's', openaiKey: 'k' },
+    {
+      extract: async (excerpt) => {
+        seen = excerpt;
+        return [];
+      },
+      verify: async () => verdict(),
+    }
+  );
+  assert.match(seen, /מרווה/);
+});
+
+test('extractAndVerifyPlants: the page price overrides a price the model misread', async () => {
+  /*
+   * The model decides WHICH products match the query - a language judgement.
+   * The price is not its call: we parsed that from the shop's own markup, so a
+   * transcription slip cannot reach the user.
+   */
+  const res = await extractAndVerifyPlants(
+    {
+      markdown: '',
+      html: PRICED_HTML,
+      url: 'https://x.co.il/?s=sage',
+      query: 'q',
+      site: 's',
+      openaiKey: 'k',
+    },
+    {
+      extract: async () => [{ name: 'מרווה', price: '₪490', availability: 'unknown' }],
+      verify: async (_e, plants) => verdict({ corrected_output: plants }),
+    }
+  );
+  assert.equal(res.plants[0].price, '₪49');
+});
+
+test('snapPricesToStructured leaves a product the page never listed alone', () => {
+  const plants: Plant[] = [{ name: 'לא קיים', price: '₪77', availability: 'unknown' }];
+  const structured = extractStructuredProducts(PRICED_HTML, 'https://x.co.il/');
+  assert.equal(snapPricesToStructured(plants, structured)[0].price, '₪77');
+});
+
+test('structuredCatalog writes one product per line and truncates to its budget', () => {
+  const many = Array.from({ length: 400 }, (_, i) => ({
+    name: `צמח ${i}`,
+    price: 10 + i,
+    currency: 'ILS',
+    availability: 'unknown' as const,
+    source: 'card' as const,
+  }));
+  const text = structuredCatalog(many, 200);
+  assert.ok(text.length <= 200);
+  assert.match(text, /צמח 0 \| ₪10/);
+});
+
+test('fetchRawHtml returns nothing rather than throwing when the shop refuses', async () => {
+  // A failed direct read means "no structured data", which is a normal answer.
+  // It must never be the reason a search fails.
+  const refuse = async () => new Response('nope', { status: 403 });
+  assert.equal(await fetchRawHtml('https://x.co.il/', refuse as never), '');
+  const boom = async () => {
+    throw new Error('ECONNRESET');
+  };
+  assert.equal(await fetchRawHtml('https://x.co.il/', boom as never), '');
+});
+
+test('fetchRawHtml discards a bot wall, which is not the shop', async () => {
+  const wall = async () => new Response('<html>Checking your browser before access</html>');
+  assert.equal(await fetchRawHtml('https://x.co.il/', wall as never), '');
 });
 
 test('extractAndVerifyPlants: zero extracted rows skip the auditor call entirely', async () => {

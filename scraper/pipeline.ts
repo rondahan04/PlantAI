@@ -122,8 +122,15 @@ export interface PipelineDeps {
     website: string,
     query: string,
     host: string
-  ) => Promise<{ md: string; platform: string; picked: string | null }>;
-  extract: (opts: { markdown: string; query: string; site: string }) => Promise<PipelineResult>;
+  ) => Promise<{ md: string; platform: string; picked: string | null; html?: string }>;
+  extract: (opts: {
+    markdown: string;
+    query: string;
+    site: string;
+    /* The page as served, carrying the structured price. */
+    html?: string;
+    url?: string;
+  }) => Promise<PipelineResult>;
   /*
    * No longer used by runNurserySearch: neither surviving outcome shows a
    * likelihood, so the homepage fetch and the estimate behind it were pure cost.
@@ -282,8 +289,14 @@ async function scrapeOne(
 
   async function readOneSite(): Promise<NurseryResult> {
   try {
-    const { md } = await deps.search(n.website, searchTerm, host);
-    const { plants, funnel } = await deps.extract({ markdown: md, query: input.plantName, site: host });
+    const { md, html, picked } = await deps.search(n.website, searchTerm, host);
+    const { plants, funnel } = await deps.extract({
+      markdown: md,
+      query: input.plantName,
+      site: host,
+      html,
+      url: picked ?? n.website,
+    });
     noteSite(host, funnel?.stage ?? 'no_markdown');
     if (plants.length > 0) {
       const best = cheapestMatch(plants);

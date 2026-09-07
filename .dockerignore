@@ -31,3 +31,9 @@ photos_for_testing
 *.jpeg
 scraper/scrape.log
 **/*.test.ts
+
+# Price-accuracy fixtures: 2 MB of captured nursery pages that only the offline
+# test suite reads (tests themselves are already excluded above). The server
+# never touches either.
+scraper/fixtures
+scraper/fixtures.ts
