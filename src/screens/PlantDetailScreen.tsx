@@ -507,6 +507,19 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
               note={
                 kind === 'water' && plant.reminderId ? copy.scheduleCard.reminderSet : undefined
               }
+              /*
+               * Repotting only. At 540-730 days it spends most of its life with
+               * nothing to say, and a full bordered card saying nothing for
+               * eighteen months made the least urgent thing here look as
+               * important as the most urgent (Trello #78). Feeding stays a
+               * card: at 21-28 days it is close enough to watering's rhythm to
+               * be a routine the user is actually running.
+               *
+               * This only PERMITS the collapse. The card still expands itself
+               * the moment the repot is due or overdue, so quietening it costs
+               * no urgency.
+               */
+              collapsible={kind === 'repot'}
               onLog={kind === 'water' ? handleWater : () => handleCare(kind)}
               onHistory={() => navigation.navigate('WateringHistory', { plantId: plant.id, kind })}
             />

@@ -808,6 +808,9 @@ export const en = {
      * note in ScheduleCard on why silence is the right answer otherwise.
      */
     reminderSet: 'Reminder set',
+    /* The collapsed row's a11y hint. A sighted user has the chevron; this is
+     * the same promise in words. */
+    expandHint: (title: string) => `Show the ${title.toLowerCase()} schedule`,
   },
   importBanner: {
     title: (n: number) => `Import your ${n} saved plant${n === 1 ? '' : 's'}?`,
