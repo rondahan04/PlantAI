@@ -248,7 +248,9 @@ export interface CareCopy {
   dueNowRepot: string;
   dueNow: string;
   nextTomorrow: (kind: Exclude<CareKind, 'water'>) => string;
-  nextInDays: (kind: Exclude<CareKind, 'water'>, days: number) => string;
+  /* The interval arrives already formatted by `monthsish` - see the note on
+   * the copy entry. A raw day count here is what produced "in 510 days". */
+  nextInDays: (kind: Exclude<CareKind, 'water'>, interval: string) => string;
   months: (n: number) => string;
   weeks: (n: number) => string;
   days: (n: number) => string;
@@ -260,7 +262,7 @@ export const EN_CARE_COPY: CareCopy = {
   dueNowRepot: 'Due now - check the roots',
   dueNow: 'Due now',
   nextTomorrow: (kind) => `Next ${kind === 'repot' ? 'repot' : 'feed'} tomorrow`,
-  nextInDays: (kind, days) => `Next ${kind === 'repot' ? 'repot' : 'feed'} in ${days} days`,
+  nextInDays: (kind, interval) => `Next ${kind === 'repot' ? 'repot' : 'feed'} in ${interval}`,
   months: (n) => (n === 1 ? 'month' : `${n} months`),
   weeks: (n) => (n === 1 ? 'week' : `${n} weeks`),
   days: (n) => (n === 1 ? 'day' : `${n} days`),
@@ -279,7 +281,7 @@ function relabel(
     case 'ok':
       return state.daysUntilDue !== null && state.daysUntilDue <= 1
         ? words.nextTomorrow(kind)
-        : words.nextInDays(kind, state.daysUntilDue ?? 0);
+        : words.nextInDays(kind, monthsish(state.daysUntilDue, words));
     default:
       // 'overdue' and 'unscheduled' already read correctly for any kind
       // ("5 days overdue", "").

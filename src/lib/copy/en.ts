@@ -67,8 +67,11 @@ export const en = {
     dueNow: 'Due now',
     nextTomorrow: (kind: 'repot' | 'fertilizer') =>
       `Next ${kind === 'repot' ? 'repot' : 'feed'} tomorrow`,
-    nextInDays: (kind: 'repot' | 'fertilizer', days: number) =>
-      `Next ${kind === 'repot' ? 'repot' : 'feed'} in ${days} days`,
+    /* Takes an ALREADY FORMATTED interval ("17 months", "12 days") rather than
+     * a raw count, because 540 days out is a real answer nobody reads. See
+     * `monthsish` in lib/care.ts, which owns the units in every language. */
+    nextInDays: (kind: 'repot' | 'fertilizer', interval: string) =>
+      `Next ${kind === 'repot' ? 'repot' : 'feed'} in ${interval}`,
     months: (n: number) => (n === 1 ? 'month' : `${n} months`),
     weeks: (n: number) => (n === 1 ? 'week' : `${n} weeks`),
     days: (n: number) => (n === 1 ? 'day' : `${n} days`),
