@@ -48,6 +48,7 @@ import {
 } from './core.ts';
 import type { ScrapeFn, ClassifyFn, Plant, VerificationReport } from './core.ts';
 import { extractStructuredProducts } from './structuredPrice.ts';
+import { buildQueryPlan } from './queryPlan.ts';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -442,6 +443,73 @@ const verdict = (over: Partial<VerificationReport> = {}): VerificationReport => 
   feedback: '',
   corrected_output: [],
   ...over,
+});
+
+/*
+ * The relevance guard on the HTML path.
+ *
+ * Found in production, not in a fixture: a live search for "Alocasia Regal
+ * Shield" came back from dizi-garden.co.il as "אלוקסיה וונטי" at ₪60. An
+ * Alocasia Venti is a different plant. Ranking had been wired into the JSON
+ * route only, because that is where the broad query was introduced - but the
+ * broad term goes to the HTML route too, where the model picks unguarded.
+ *
+ * The offline metric missed it because every HTML-route shop in the fixture set
+ * was either unreadable or a genuine absence, so the guard was never exercised
+ * there. Hence a unit test, pinned to the exact strings that failed.
+ */
+test('extractAndVerifyPlants: the model may not return a different cultivar', async () => {
+  const plan = buildQueryPlan({
+    original: 'Alocasia Regal Shield',
+    hebrew: 'אלוקסיה ריגל שילד',
+    latin: 'Alocasia Regal Shield',
+  });
+
+  const out = await extractAndVerifyPlants(
+    { markdown: PRICED_MD, query: 'Alocasia Regal Shield', site: 'dizi-garden.co.il', openaiKey: 'k', plan },
+    {
+      extract: async () => [
+        { name: 'אלוקסיה וונטי – קוטר 24', price: '₪60', availability: 'in_stock' },
+      ],
+      verify: async () => verdict(),
+    }
+  );
+
+  assert.deepEqual(out.plants, [], 'a Venti must never be offered for a Regal Shield');
+  assert.equal(out.funnel.stage, 'rejected', 'we read the catalogue and kept nothing');
+  assert.equal(out.funnel.kept, 0);
+});
+
+test('extractAndVerifyPlants: the guard keeps the right cultivar', async () => {
+  const plan = buildQueryPlan({
+    original: 'Alocasia Regal Shield',
+    hebrew: 'אלוקסיה ריגל שילד',
+    latin: 'Alocasia Regal Shield',
+  });
+
+  const out = await extractAndVerifyPlants(
+    { markdown: PRICED_MD, query: 'Alocasia Regal Shield', site: 'decogarden.co.il', openaiKey: 'k', plan },
+    {
+      // The real decogarden title, pot size and all.
+      extract: async () => [
+        { name: 'אלוקסיה ריגל שילד 10 ליטר', price: '₪149', availability: 'in_stock' },
+      ],
+      verify: async () => verdict(),
+    }
+  );
+
+  assert.equal(out.plants.length, 1);
+  assert.equal(out.funnel.stage, 'ok');
+});
+
+test('extractAndVerifyPlants: with no plan the guard is off, as it was before', async () => {
+  // dashboard/server.ts and the older callers pass a plain string and get the
+  // old behaviour rather than a silently stricter one.
+  const out = await extractAndVerifyPlants(
+    { markdown: PRICED_MD, query: 'Alocasia Regal Shield', site: 'x.co.il', openaiKey: 'k' },
+    { extract: async () => [plant('אלוקסיה וונטי')], verify: async () => verdict() }
+  );
+  assert.equal(out.plants.length, 1);
 });
 
 // --- structured price integration (SCRAPE-ACCURACY-PLAN Phase 1) ------------

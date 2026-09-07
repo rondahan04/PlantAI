@@ -63,6 +63,20 @@ platform that then returns nothing re-probes the shop instead of falling back to
 a scrape. Measured on peer-nursery: 23s → 4.4s, and `known-hosts.json` corrected
 itself from `shopify` to `woo` on the way past.
 
+**The relevance guard applies to BOTH routes.** Ranking was originally wired
+into the JSON route only, because that is where the broad query was introduced -
+but the broad term goes to the HTML route too, where the model picks unguarded.
+A live search for Alocasia Regal Shield came back from dizi-garden as
+`אלוקסיה וונטי` at ₪60, a different plant. The model's answer now passes through
+the same `scoreCandidate` bar, and anything below `WEAK_MATCH` is dropped with
+the reason logged. Callers that pass a plain string rather than a plan get the
+old, unguarded behaviour, so `dashboard/server.ts` is unaffected.
+
+Worth noting how it was found: **the offline metric did not catch it.** Every
+HTML-route shop in the fixture set is either unreadable or a genuine absence, so
+the guard was never exercised on that path. It took a live search. The
+regression is pinned in `core.test.ts` against the exact strings that failed.
+
 **"Couldn't check this shop" is now distinct from "didn't find the product"**
 (`src/lib/availability.ts`). The second claims we looked. Two nurseries spent a
 month telling users their plants were unavailable when nobody had ever asked.
@@ -107,6 +121,11 @@ comparison, so a metric that stops being able to fail fails the build instead.
   across runs. Re-labelling can move a number without any code changing.
 - **Truth is "listed at capture time".** Shops restock. `capturedAt` is stamped
   in the manifest; re-capture when a number moves for no reason you can name.
+- **The metric does not exercise the HTML route's ranking.** Every HTML-route
+  shop in the fixture set is unreadable or a genuine absence, so `precision` and
+  `quiet` are effectively statements about the JSON routes. That blind spot is
+  what let the dizi-garden wrong-cultivar bug ship. Capturing a plant that an
+  HTML-only shop genuinely stocks would close it.
 - **HTML-route labels are weaker.** For the JSON routes the judge sees the raw
   field; for HTML there is no independent reading short of a second parser, so
   those titles come from our own extractor.

@@ -148,6 +148,8 @@ export interface PipelineDeps {
     products?: StructuredProduct[];
     catalogueRead?: boolean;
     decisive?: boolean;
+    /* Holds the model's answer to the same relevance bar the JSON path meets. */
+    plan?: QueryPlan;
   }) => Promise<PipelineResult>;
   /*
    * No longer used by runNurserySearch: neither surviving outcome shows a
@@ -331,6 +333,9 @@ async function scrapeOne(
       products,
       catalogueRead,
       decisive,
+      /* Only when the caller planned the query; a bare string carries no tokens
+       * to judge relevance with. */
+      plan: typeof searchTerm === 'string' ? undefined : searchTerm,
     });
     /*
      * A search URL that does not exist is its own failure, and naming it is the
