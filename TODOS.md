@@ -416,22 +416,41 @@ doesn't have. Cheap partial anytime: API-restrict that key to Maps SDK for Andro
     about not degrading the first-run screen, and this was a requested change to it.
     ⚠️ Never seen rendered; the 23pt choice is a taste call awaiting Ron's eye.
 
-29. ⏳ **[ops] Clean iOS builds need RN compiled from source (Trello #91).**
-    `expo run:ios` fails at link with missing RN core C++ symbols
+29. ✅ **[ops] Clean iOS builds link against prebuilt RN again - fixed 2026-09-07 (Trello #91).**
+    `expo run:ios` failed at link with missing RN core C++ symbols
     (`facebook::react::Sealable`, `ShadowNode::getDebugName`) referenced from
-    **RNGestureHandler** and **RNScreens** - not from anything this app wrote, and not from
-    the new image dependencies. `Podfile` defaults `RCT_USE_PREBUILT_RNCORE=1`, so a prebuilt
-    core meets pods compiled from source against a different ABI. Clearing DerivedData does
-    not help.
-    **Workaround, used for the 2026-09-05 device build:** `cd ios && RCT_USE_PREBUILT_RNCORE=0
-    pod install`, then build. ~1,600 compile steps, but it links and installs.
-    🔵 **Red herring worth remembering:** the log also warns `cannot link directly with
-    'SwiftUICore'`. That is a WARNING, not the failure, and chasing it wastes time - the real
-    error only appears under `Undefined symbols`.
-    **Proper fix:** `expo-build-properties` with `ios.buildReactNativeFromSource: true`, which
-    the Podfile already reads and which survives prebuild (`ios/` is gitignored, so a hand-
-    edited Podfile is not). Worth first asking why those two pods disagree, since building
-    from source is a permanent cost on every clean build.
+    **RNGestureHandler** and **RNScreens**.
+    **The fix is one command, and it is not "build RN from source":**
+
+    ```
+    rm -rf ios/Pods ios/build ios/Podfile.lock && (cd ios && pod install)
+    rm -rf ~/Library/Developer/Xcode/DerivedData/PlantAI-*
+    ```
+
+    Verified 2026-09-07: clean simulator build, `Build Succeeded`, 0 errors, app installed.
+    Prebuilt core stays on, so builds stay fast - no ~1,600-step source compile, no
+    `expo-build-properties`, no permanent cost.
+    ⚠️ **The 2026-09-05 diagnosis in this entry was wrong on three counts**, recorded so the
+    next person does not re-derive it:
+    - *"The prebuilt core lacks the symbols / ABI mismatch."* No. `nm -gU` on the cached
+      `React.xcframework` exports `Sealable::Sealable` (6) and `ShadowNode::getDebugName` (1)
+      in **every** slice, device and simulator.
+    - *"RNGestureHandler and RNScreens disagree with the prebuilt core."* No. Zero `Sealable`
+      issues are filed on either tracker; any Fabric pod built from source hits this.
+    - *"Clearing DerivedData does not help."* Misleading - DerivedData **alone** does not.
+      `ios/Pods` is what holds the bad artifact.
+    **Actual cause.** The prebuilt core ships two flavors. The **Release** flavor is compiled
+    with `NDEBUG`, which strips debug-only C++ symbols (`Sealable`, `DebugStringConvertible`).
+    `React-Core-prebuilt` has a `before_compile` script phase (`replace-rncore-version.js`)
+    that swaps in the flavor matching the configuration; when that swap is skipped or
+    interrupted, a **Debug** build links the **Release** framework and those symbols are gone.
+    Upstream: react-native#57293, reproduced on Xcode 26.6 in an Expo SDK 56 project.
+    ⚠️ **It can recur.** The hardening (PR #57831, an in-progress marker so an interrupted swap
+    is recoverable) shipped in **0.87**; there is no 0.85.x patch, so RN 0.85.3 carries the
+    pre-fix script. If it comes back, run the command above - do not go looking for an ABI bug.
+    🔵 **Red herring, still worth remembering:** the log also warns `cannot link directly with
+    'SwiftUICore'`. That is a WARNING, not the failure. After the fix it disappears entirely
+    (0 occurrences), which is its own evidence it was never the cause.
 
 30. ✅ **[design] Inter replaces Nunito - merged 2026-09-05 (PR #12, `9423811`).**
     Opened earlier in the day and merged at the end of it, after `main` was merged in and CI
