@@ -48,6 +48,146 @@ test('no Hebrew string was left as its English original', () => {
 });
 
 /*
+ * The same check, for the keys the walk above cannot see.
+ *
+ * The tree deliberately holds FUNCTIONS wherever agreement has to be written as
+ * logic rather than squeezed into a format string - plurals, gender, dropping
+ * the numeral in the Hebrew singular. There are 92 of them, and every one was
+ * invisible to the string walk: a function matches neither of its two branches,
+ * so it fell through and was silently skipped. Every one could have returned
+ * word-for-word English and the suite would have stayed green (Trello #93).
+ *
+ * This calls each one in both trees with the same arguments and compares the
+ * results, which is the only way to see what a user would actually read.
+ *
+ * ARGUMENTS. Most take a string or a number, so the tuple is discovered by
+ * trying the candidates below and keeping the first that returns a non-empty
+ * string from BOTH trees. Anything with a shape of its own needs an entry in
+ * ARGS. A function that neither route can call is a FAILURE, not a skip - that
+ * silent skip is the whole bug this test exists to remove.
+ */
+const ARGS: Record<string, unknown[]> = {
+  'copy.identity.genusLedBody': [
+    { genus: 'Alocasia', genusPercent: 90, plantName: 'Alocasia zebrina', percent: 30 },
+  ],
+  'copy.diagnosis.identityA11y': [
+    {
+      prefix: 'Probably',
+      headline: 'Alocasia zebrina',
+      genusLabel: 'Alocasia',
+      species: 'zebrina',
+      label: '30% match',
+      caveat: 'Check the leaves',
+    },
+  ],
+  'copy.plantCard.a11y': [
+    {
+      name: 'Steve',
+      secondary: 'Alocasia zebrina',
+      conditionLabel: 'Healthy',
+      when: 'Saved today',
+      watering: 'Next water in 5 days',
+    },
+  ],
+};
+
+/*
+ * Outputs that are legitimately identical in both languages, with the reason.
+ * Keep this list short and justified: every entry is a key nobody is checking
+ * any more.
+ */
+const SHARED_OUTPUT = new Set<string>([
+  /*
+   * PURE FORMATTERS. Every one of these is `${a}<separator>${b}` with no words
+   * of its own, and its inputs reach it already translated - so identical
+   * output in both trees is the design, not a missed translation. Each was
+   * read and confirmed as such rather than allowlisted to silence a failure.
+   *
+   * Most are accessibility labels, which is why so many are pure joins: they
+   * exist to say several already-translated facts in one utterance.
+   *
+   * If you add to this list, read the two definitions first. An entry here is
+   * a key nobody checks any more.
+   */
+  'copy.availability.estimate', //      `${bandLabel} · ${confidence}%`
+  'copy.speciesPicker.rowA11y', //      `${name}, ${scientific}`
+  'copy.statusView.a11y', //            `${title}. ${body}`
+  'copy.nurseries.pillA11y', //         `${text}. ${detail}`
+  'copy.careHistory.dayA11y', //        `${date}${done}${due}`
+  'copy.carePlan.rowA11y', //           `${label}: ${text}`
+  'copy.soilCard.optionA11y', //        `${label}. ${description}`
+  'copy.portfolio.filterCount', //      `${label} (${n})`
+  'copy.home.greetingWithName', //      `${greeting}, ${name}`
+  'copy.home.a11yTask', //              `${kind}, ${plants}, ${when}`
+  'copy.scheduleCard.settledA11y', //   `${done}. ${label}`
+  'copy.scheduleCard.actionA11y', //    `${title}: ${action}.${label}`
+]);
+
+test('no Hebrew FUNCTION was left returning its English original', () => {
+  const candidates: unknown[] = ['Watering', 3];
+
+  /* Every tuple of the given length drawn from `candidates`, shortest first.
+   * Arities here are 1-3, so this is at most 8 attempts. */
+  const tuples = (n: number): unknown[][] =>
+    n === 0 ? [[]] : tuples(n - 1).flatMap((rest) => candidates.map((c) => [...rest, c]));
+
+  /*
+   * A function taking an object does NOT throw when handed a string - it
+   * quietly renders "undefined. undefined." and looks like a working call. So a
+   * result carrying `undefined` or `NaN` counts as not-callable: those are the
+   * fingerprints of the wrong argument shape, and treating them as success is
+   * how a key gets "checked" without ever being read.
+   */
+  const callable = (fn: Function, args: unknown[]): string | null => {
+    try {
+      const out = fn(...args);
+      if (typeof out !== 'string' || out.trim() === '') return null;
+      return /undefined|NaN/.test(out) ? null : out;
+    } catch {
+      return null;
+    }
+  };
+
+  const checked: string[] = [];
+  const walk = (en: unknown, he: unknown, path: string) => {
+    if (typeof en === 'function' && typeof he === 'function') {
+      const explicit = ARGS[path];
+      const args =
+        explicit ??
+        tuples(en.length).find((t) => callable(en as Function, t) && callable(he as Function, t));
+
+      assert.ok(
+        args,
+        `${path} could not be called with a string or a number. Add its arguments to ARGS in this file - a function nothing can call is a function nothing is checking.`
+      );
+
+      const enOut = callable(en as Function, args);
+      const heOut = callable(he as Function, args);
+      assert.ok(enOut, `${path} returned nothing from the English tree`);
+      assert.ok(heOut, `${path} returned nothing from the Hebrew tree`);
+
+      checked.push(path);
+      if (SHARED_OUTPUT.has(path)) return;
+      assert.notEqual(heOut, enOut, `${path} still returns the English words: ${JSON.stringify(enOut)}`);
+      return;
+    }
+    if (typeof en === 'object' && en !== null && typeof he === 'object' && he !== null) {
+      for (const key of Object.keys(en as Record<string, unknown>)) {
+        walk((en as Record<string, unknown>)[key], (he as Record<string, unknown>)[key], `${path}.${key}`);
+      }
+    }
+  };
+  walk(TREES.en, TREES.he, 'copy');
+
+  /* A floor, not an exact count, so adding copy does not fail the suite - but
+   * deleting the walk, or breaking it so it silently matches nothing, does. */
+  assert.ok(
+    checked.length >= 90,
+    `only ${checked.length} function-valued keys were checked; the walk has stopped seeing most of the tree`
+  );
+});
+
+/*
  * The walk above only compares STRINGS. A function-valued key falls through
  * both branches and is never checked, which is how an untranslated sentence can
  * live in the tree unnoticed - and the schedule card's footer was worse than
