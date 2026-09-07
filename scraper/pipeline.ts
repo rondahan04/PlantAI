@@ -6,8 +6,10 @@
  */
 import { env, hostOf, type PipelineResult, type Plant } from './core.ts';
 import { type DiscoveredNursery } from './places.ts';
+import type { StructuredProduct } from './structuredPrice.ts';
+import type { QueryPlan } from './queryPlan.ts';
 
-import type { SiteStage } from '../server/scrapeHealth.ts';
+import { readable, type SiteStage } from '../server/scrapeHealth.ts';
 
 export interface NurseryResult {
   id: string;
@@ -120,9 +122,22 @@ export interface PipelineDeps {
   discover: (lat: number, lng: number, radiusM: number) => Promise<DiscoveredNursery[]>;
   search: (
     website: string,
-    query: string,
+    /* A QueryPlan when the caller built one; a plain string still means "type
+     * this into the shop's search box". */
+    query: string | QueryPlan,
     host: string
-  ) => Promise<{ md: string; platform: string; picked: string | null; html?: string }>;
+  ) => Promise<{
+    md: string;
+    platform: string;
+    picked: string | null;
+    html?: string;
+    /* Candidates from the shop's storefront JSON, already ranked. */
+    products?: StructuredProduct[];
+    catalogueRead?: boolean;
+    decisive?: boolean;
+    /* HTTP status of the search URL, when one was read. */
+    searchStatus?: number;
+  }>;
   extract: (opts: {
     markdown: string;
     query: string;
@@ -130,6 +145,9 @@ export interface PipelineDeps {
     /* The page as served, carrying the structured price. */
     html?: string;
     url?: string;
+    products?: StructuredProduct[];
+    catalogueRead?: boolean;
+    decisive?: boolean;
   }) => Promise<PipelineResult>;
   /*
    * No longer used by runNurserySearch: neither surviving outcome shows a
@@ -144,8 +162,15 @@ export interface PipelineDeps {
     site: string
   ) => Promise<{ confidence: number; reasoning: string }>;
   resolvePhoto: (photoName: string) => Promise<string | undefined>;
+  /*
+   * Plant name -> how to ask every shop for it: which terms to send, and the
+   * tokens to rank their answers against. Called once per search, not once per
+   * site. Preferred over `translate`.
+   */
+  plan?: (plantName: string) => Promise<QueryPlan>;
   /* Plant name -> the term to type into a nursery's own search box. Israeli
-   * sites index in Hebrew. Called once per search, not once per site. */
+   * sites index in Hebrew. Superseded by `plan`, and kept because
+   * dashboard/server.ts and the older tests only ever wanted the string. */
   translate?: (plantName: string) => Promise<string>;
   /* Final sanity pass over the quoted prices, once for the whole search so the
    * model can compare nurseries against each other. See sanityCheckPrices. */
@@ -215,10 +240,13 @@ async function scrapeOne(
   input: SearchInput,
   deps: PipelineDeps,
   shipsToHome: boolean,
-  /* What to type into the shop's search box - Hebrew for Israeli sites. The
-   * user's original wording stays in `input.plantName` for the extractor, which
-   * matches either language. */
-  searchTerm: string = input.plantName
+  /*
+   * How to ask this shop for the plant - Hebrew for Israeli sites. A QueryPlan
+   * carries the ladder and the tokens ranking needs; a bare string still means
+   * "type exactly this". The user's original wording stays in
+   * `input.plantName` for the extractor, which matches either language.
+   */
+  searchTerm: string | QueryPlan = input.plantName
 ): Promise<NurseryResult> {
   const host = hostOf(n.website);
 
@@ -289,15 +317,30 @@ async function scrapeOne(
 
   async function readOneSite(): Promise<NurseryResult> {
   try {
-    const { md, html, picked } = await deps.search(n.website, searchTerm, host);
+    const { md, html, picked, products, catalogueRead, decisive, searchStatus } = await deps.search(
+      n.website,
+      searchTerm,
+      host
+    );
     const { plants, funnel } = await deps.extract({
       markdown: md,
       query: input.plantName,
       site: host,
       html,
       url: picked ?? n.website,
+      products,
+      catalogueRead,
+      decisive,
     });
-    noteSite(host, funnel?.stage ?? 'no_markdown');
+    /*
+     * A search URL that does not exist is its own failure, and naming it is the
+     * point: "we could not parse this shop's results page" and "this shop has
+     * no such page" look identical in every other signal we keep, and the
+     * second is the one that stays broken until someone notices.
+     */
+    const stage = funnel?.stage ?? 'no_markdown';
+    const refusedSearch = searchStatus === 404 || searchStatus === 410;
+    noteSite(host, refusedSearch && !readable(stage) ? 'no_search' : stage);
     if (plants.length > 0) {
       const best = cheapestMatch(plants);
       /*
@@ -378,13 +421,23 @@ export async function runNurserySearch(
   const radiusM = input.radiusM ?? 10000;
 
   /*
-   * 0. Translate ONCE, before any site is touched. Israeli nurseries index
+   * 0. Plan the query ONCE, before any site is touched. Israeli nurseries index
    * their catalogues in Hebrew, so "alocasia regal shield" matches nothing on
    * their search pages - the shop may well stock the plant, the string just
    * never appears. Per-search rather than per-site: the answer is identical for
    * every nursery in the fan-out.
+   *
+   * A plan rather than a single string, because one string is what broke this.
+   * Sending the whole name to a search engine that ANDs every word returned
+   * nothing on eight of nine shops; the plan carries the genus to ask for and
+   * the tokens to rank the answer with. `translate` remains for the callers
+   * that only ever wanted the Hebrew string.
    */
-  const searchTerm = deps.translate ? await deps.translate(input.plantName) : input.plantName;
+  const searchTerm: string | QueryPlan = deps.plan
+    ? await deps.plan(input.plantName)
+    : deps.translate
+      ? await deps.translate(input.plantName)
+      : input.plantName;
 
   // 1. Discover local nurseries (Places). Empty → fallback URL list.
   let discovered = await deps.discover(input.lat, input.lng, radiusM);

@@ -23,6 +23,20 @@ import {
   formatPrice,
   type StructuredProduct,
 } from './structuredPrice.ts';
+import {
+  probeApiRoute,
+  routeForPlatform,
+  shopifyCatalogue,
+  wooStoreSearch,
+  type ApiRoute,
+} from './platformApi.ts';
+import {
+  buildQueryPlan,
+  isDecisive,
+  ladderTerms,
+  rankCandidates,
+  type QueryPlan,
+} from './queryPlan.ts';
 
 export type Platform = 'shopify' | 'woo' | 'wix' | 'unknown';
 
@@ -557,21 +571,39 @@ export const RAW_HTML_TIMEOUT_MS = 8000;
 const BROWSER_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
-export async function fetchRawHtml(
+/*
+ * The same read, keeping the status.
+ *
+ * The status is the fact that tells a shop we cannot read apart from a search
+ * URL that does not exist. getzler.co.il and peer-nursery.co.il sat remembered
+ * as Shopify for a month, 404ing every single search, and nothing noticed -
+ * because a 404 page is a large non-empty body, so every "did we read
+ * anything" test passed on it. `status` is what makes that case nameable.
+ *
+ * `status: 0` means the request never completed (DNS, TLS, timeout).
+ */
+export async function fetchRawHtmlResult(
   url: string,
   fetchImpl: typeof fetch = fetch
-): Promise<string> {
+): Promise<{ html: string; status: number }> {
   try {
     const res = await fetchImpl(url, {
       headers: { 'User-Agent': BROWSER_UA, Accept: 'text/html,application/xhtml+xml' },
       signal: AbortSignal.timeout(RAW_HTML_TIMEOUT_MS),
     });
-    if (!res.ok) return '';
+    if (!res.ok) return { html: '', status: res.status };
     const body = await res.text();
-    return looksUnreadable(body) ? '' : body;
+    return { html: looksUnreadable(body) ? '' : body, status: res.status };
   } catch {
-    return '';
+    return { html: '', status: 0 };
   }
+}
+
+export async function fetchRawHtml(
+  url: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<string> {
+  return (await fetchRawHtmlResult(url, fetchImpl)).html;
 }
 
 // --- platform detection (pure) ---------------------------------------------
@@ -1085,6 +1117,22 @@ function coercePlants(items: any): Plant[] {
     });
 }
 
+/*
+ * A product the shop itself described, as a Plant.
+ *
+ * Used on the path where no model is involved at all: the storefront JSON gave
+ * the name, the price and the stock flag, and ranking already established that
+ * this row is the plant. Every field here is copied, none is inferred.
+ */
+export function plantFromStructured(p: StructuredProduct): Plant {
+  return {
+    name: p.name,
+    price: formatPrice(p),
+    availability: p.availability,
+    ...(p.url && /^https?:\/\//i.test(p.url) ? { url: p.url } : {}),
+  };
+}
+
 /* Extraction pass: the model reads the condensed markdown and returns the plant
  * JSON array matching the Plant schema. */
 export async function extractPlants(
@@ -1231,6 +1279,17 @@ export async function extractAndVerifyPlants(
     html?: string;
     /* The URL `html` came from, for resolving relative product links. */
     url?: string;
+    /*
+     * Candidates from the shop's storefront JSON, already ranked against the
+     * query. When present these REPLACE the HTML readers: they are the shop's
+     * own description of its own products, so there is nothing better to parse.
+     */
+    products?: StructuredProduct[];
+    /* We successfully read this shop's catalogue, so an empty list is evidence
+     * of absence rather than evidence of nothing. */
+    catalogueRead?: boolean;
+    /* Ranking alone identified the product; no model is needed. */
+    decisive?: boolean;
   },
   deps: ExtractDeps = {}
 ): Promise<PipelineResult> {
@@ -1244,7 +1303,7 @@ export async function extractAndVerifyPlants(
    * markdown excerpt instead hands the model an empty cart total and a
    * free-shipping threshold to reason about.
    */
-  const structured = extractStructuredProducts(html, url);
+  const structured = opts.products ?? extractStructuredProducts(html, url);
   const excerpt = structured.length ? structuredCatalog(structured) : priceFocusedExcerpt(markdown);
 
   const empty = (stage: ExtractStage, feedback: string): PipelineResult => ({
@@ -1259,6 +1318,46 @@ export async function extractAndVerifyPlants(
       kept: 0,
     },
   });
+
+  /*
+   * The shop answered in its own words, and ranking already read them.
+   *
+   * Two outcomes are settled before any model is involved:
+   *
+   *   nothing survived ranking, on a catalogue we READ → the shop does not
+   *     stock it. That is `no_match`, the same honest answer the model would
+   *     have given, for no tokens and no latency. Critically it is NOT
+   *     `no_markdown`: this shop was read, and the difference decides whether
+   *     the user is told "not stocked" or "we could not check".
+   *
+   *   one clearly-best candidate → that IS the product. Its name, price and
+   *     stock come from the shop's own JSON, so asking a model to read them
+   *     back could only introduce error. Both passes are skipped.
+   */
+  if (opts.catalogueRead) {
+    if (structured.length === 0) {
+      return empty('no_match', 'the shop catalogue was read and this plant was not in it');
+    }
+    if (opts.decisive) {
+      return {
+        plants: structured.map(plantFromStructured),
+        report: {
+          is_valid: true,
+          confidence_score: 100,
+          feedback: 'matched against the shop catalogue - no extraction needed',
+          corrected_output: [],
+        },
+        engines: { extractor: 'none', verifier: 'none' },
+        funnel: {
+          stage: 'ok',
+          mdChars: markdown.length,
+          excerptChars: excerpt.length,
+          extracted: structured.length,
+          kept: structured.length,
+        },
+      };
+    }
+  }
 
   if (!excerpt.trim()) {
     // Distinguish "nothing was scraped" from "plenty was scraped and none of it
@@ -1534,6 +1633,72 @@ Plant name: ${query}`;
   }
 }
 
+/*
+ * Plan a search: one LLM call, everything the ladder and the ranker need.
+ *
+ * This replaces translateQuery's single string, and the reason is the whole
+ * point of the change. A Hebrew transliteration is a guess - Israeli nurseries
+ * write the same plant as סנסוויריה and סנסיווריה, ריגל and רגל - and the old
+ * code bet an entire search on one spelling of one long phrase. Asking for the
+ * alternates costs nothing extra: it is the same call, the same token budget,
+ * and the model already had to decide between them.
+ *
+ * Never throws. On any failure the plan degrades to the plain input, which is
+ * exactly what translateQuery did.
+ */
+export async function planQuery(
+  name: string,
+  openaiKey: string,
+  classify: ClassifyFn = callOpenAIJson
+): Promise<QueryPlan> {
+  const query = (name || '').trim();
+  const bare = () =>
+    buildQueryPlan({
+      original: query,
+      hebrew: query,
+      latin: hasHebrew(query) ? '' : query,
+    });
+  if (!query || !openaiKey) return bare();
+
+  /* Already Hebrew: nothing to translate, but the alternates would still help.
+   * Not worth a call on its own - the shop's own spelling is what the user
+   * typed, which is the likeliest one to match. */
+  if (hasHebrew(query)) return bare();
+
+  /*
+   * `alt` asks for two different things on purpose, because shops do two
+   * different things. Most transliterate, and vary only in spelling. But some
+   * use the established Hebrew NAME instead, and that is not a spelling
+   * variant at all: h-shtilshop lists Ficus lyrata as "פיקוס כינורי", which no
+   * amount of folding will ever derive from "פיקוס ליראטה". A ladder that only
+   * knows transliterations cannot find those shops.
+   */
+  const prompt = `You prepare a plant search for Israeli plant nursery websites.
+Transliterate the genus and cultivar rather than translating them literally - Israeli nurseries write "Alocasia Regal Shield" as "אלוקסיה ריגל שילד", not as a description of a shield.
+Return ONLY JSON: { "hebrew": "<full Hebrew name>", "latin": "<Latin/botanical name>", "alt": ["<other Hebrew names this plant is sold under, 0-3 of them>"] }
+The Hebrew name must start with the genus.
+"alt" should include BOTH other spellings of the transliteration AND the established Hebrew common name if the plant has one - Israeli nurseries sell Ficus lyrata as "פיקוס כינורי" and Sansevieria as "לשון החמות". Never list a different plant.
+Plant name: ${query}`;
+
+  try {
+    // 1500: gpt-5.6-luna spends completion tokens on hidden reasoning first, so
+    // a tight cap returns empty content and the search silently runs in English
+    // against Hebrew catalogues, which matches nothing.
+    const out = await classify(prompt, openaiKey, 1500);
+    const hebrew = typeof out?.hebrew === 'string' ? out.hebrew.trim() : '';
+    const latin = typeof out?.latin === 'string' ? out.latin.trim() : query;
+    const alt = Array.isArray(out?.alt)
+      ? out.alt.filter((s: unknown): s is string => typeof s === 'string' && hasHebrew(s))
+      : [];
+    /* Guard against the model echoing the English back, or answering in prose -
+     * the same guard translateQuery had, for the same reason. */
+    if (!hebrew || !hasHebrew(hebrew)) return bare();
+    return buildQueryPlan({ original: query, hebrew, latin: latin || query, altSpellings: alt });
+  } catch {
+    return bare();
+  }
+}
+
 export interface AvailabilityEstimate {
   confidence: number; // 0–100: likelihood the nursery carries the queried plant
   reasoning: string; // one-line justification, or why no estimate was possible
@@ -1587,6 +1752,32 @@ export interface SearchResult {
   picked: string | null;
   /* The page as served, when we could read it. Carries the structured price. */
   html?: string;
+  /*
+   * Candidates from the shop's own storefront JSON, already ranked against the
+   * query (scraper/platformApi.ts + scraper/queryPlan.ts). Present only when a
+   * JSON route answered; the HTML path leaves this undefined and behaves
+   * exactly as it did before.
+   */
+  products?: StructuredProduct[];
+  retrieval?: 'api' | 'html';
+  /*
+   * Did we actually READ this shop's catalogue?
+   *
+   * The distinction the whole failure taxonomy rests on. An empty result from a
+   * catalogue we read means "this shop does not stock it"; an empty result from
+   * a catalogue we never got means nothing at all, and must not be reported as
+   * absence. A Shopify catalogue cut off at the page cap counts as NOT read,
+   * because a plant missing from a prefix proves nothing.
+   */
+  catalogueRead?: boolean;
+  /* Ranking alone settled which product this is, so no model is needed. */
+  decisive?: boolean;
+  /*
+   * HTTP status of the search URL we read. 404/410 means the URL does not
+   * exist, which is a different failure from a page we could not parse - and
+   * the one that was previously unnameable. See SiteStage.no_search.
+   */
+  searchStatus?: number;
 }
 
 export interface SearcherOpts {
@@ -1612,6 +1803,48 @@ export interface SearcherOpts {
   fetchHtml?: (url: string) => Promise<string>;
   /* Injectable clock for the TTL, tests only. */
   now?: () => number;
+  /*
+   * `fetch` for the storefront JSON routes. Injectable so the retrieval suite
+   * can replay captured fixtures offline, and so a test never reaches a real
+   * nursery.
+   */
+  fetchApi?: typeof fetch;
+  /*
+   * Opt in to the storefront JSON routes (server/index.ts reads RETRIEVAL_API).
+   * Leaving it off restores the HTML+LLM path byte for byte, which is what
+   * makes this change revertable without a deploy.
+   *
+   * OFF BY DEFAULT, and deliberately so: this is the only setting that can make
+   * a searcher reach the network on its own, without a `scrape` to intercept
+   * it. A test that forgot to inject `fetchApi` would otherwise quietly probe
+   * real nurseries - which is exactly what it did before this default was
+   * flipped.
+   */
+  apiEnabled?: boolean;
+}
+
+/*
+ * A Shopify catalogue is 2.5-5.5MB on the wire and the shop has no per-query
+ * search worth using, so we download it once and answer every plant from
+ * memory. Only the distilled products are kept - about 150 bytes a row against
+ * 20KB of JSON - so a 250-product shop costs ~40KB, not 5MB.
+ *
+ * Six hours because a nursery's catalogue turns over slowly; the one-hour
+ * SEARCH_MAX_AGE_MS next door is for a live results page, which is a stricter
+ * question than "what does this shop sell".
+ */
+export const CATALOGUE_TTL_MS = 6 * 60 * 60 * 1000;
+/* LRU bound. A fan-out touches a handful of Shopify shops; this exists so a
+ * long-lived process cannot accumulate catalogues without limit. */
+export const MAX_CATALOGUE_HOSTS = 8;
+/* Past this a "nursery" is a general marketplace and the catalogue route is the
+ * wrong tool - the cost stops being worth the exactness. */
+export const MAX_CATALOGUE_PRODUCTS = 2000;
+
+interface CachedCatalogue {
+  products: StructuredProduct[];
+  complete: boolean;
+  at: number;
 }
 
 
@@ -1630,7 +1863,26 @@ export const UNKNOWN_TTL_MS = 60 * 60 * 1000;
  * results page, for hosts whose platform we could not name. It turns the
  * three-request probe path into one request, like a known platform.
  */
-export type HostPlatforms = Record<string, { platform: string; at: number; template?: string }>;
+export type HostPlatforms = Record<
+  string,
+  {
+    platform: string;
+    at: number;
+    template?: string;
+    /*
+     * Which storefront JSON route this host exposes, remembered separately from
+     * the platform and for a shorter time: a shop can disable a plugin far
+     * faster than it migrates platform. 'none' is cached like a real answer,
+     * because re-probing a shop that has neither route on every search would
+     * spend exactly the latency the JSON path exists to save.
+     */
+    api?: ApiRoute;
+    apiAt?: number;
+  }
+>;
+
+/* See HostPlatforms.api. Shorter than HOST_PLATFORM_TTL_MS by design. */
+export const HOST_API_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function loadHostPlatforms(file: string): HostPlatforms {
   try {
@@ -1672,8 +1924,28 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
   const homeCache = new Map<string, string>();
   /* Per-host search URL templates learned from a confident probe hit. */
   const hostTemplates = new Map<string, string>();
+  /* Which storefront JSON route each host exposes; see HostPlatforms.api. */
+  const apiRouteCache = new Map<string, { route: ApiRoute; at: number }>();
+  /*
+   * Distilled Shopify catalogues, and the in-flight fetches for them.
+   *
+   * The promise is cached, not just the result: two searches starting at once
+   * against the same shop must not both pull 5.5MB, and storing only the
+   * settled value would let exactly that happen in the window between them.
+   */
+  const catalogueCache = new Map<string, CachedCatalogue>();
+  const catalogueInFlight = new Map<string, Promise<CachedCatalogue>>();
   const scrape: ScrapeFn = opts.scrape ?? scrapeUrl;
   const readHtml = opts.fetchHtml ?? ((u: string) => fetchRawHtml(u));
+  /* The same read with its status, for the self-heal below. An injected
+   * fetchHtml has no status to give, so a body it returns counts as 200 and an
+   * empty one as "never completed" - which is what the old code assumed. */
+  const readHtmlResult = opts.fetchHtml
+    ? async (u: string) => {
+        const html = await opts.fetchHtml!(u);
+        return { html, status: html ? 200 : 0 };
+      }
+    : (u: string) => fetchRawHtmlResult(u);
   const canRender = opts.firecrawlReady ?? firecrawlReady;
   const now = opts.now ?? Date.now;
   if (opts.learnedFile) loadLearnedPlatforms(opts.learnedFile);
@@ -1683,11 +1955,20 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
   for (const [host, entry] of Object.entries(persisted)) {
     const fresh = now() - entry.at < HOST_PLATFORM_TTL_MS;
     const known = entry.platform && entry.platform !== 'unknown';
+    /*
+     * The API route has its own, shorter lifetime, and survives the platform
+     * expiring: knowing a shop answers the Store API is useful even once we
+     * have stopped trusting what we called its platform - it is in fact the
+     * stronger of the two facts, because we observed it directly.
+     */
+    const apiFresh = entry.api && entry.apiAt !== undefined && now() - entry.apiAt < HOST_API_TTL_MS;
+    if (apiFresh) apiRouteCache.set(host, { route: entry.api!, at: entry.apiAt! });
+
     if (fresh && known) {
       platformCache.set(host, entry.platform);
     } else if (fresh && entry.template) {
       hostTemplates.set(host, entry.template);
-    } else {
+    } else if (!apiFresh) {
       delete persisted[host];
     }
   }
@@ -1761,13 +2042,224 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
     return homeCache.get(host) ?? '';
   }
 
+  function rememberApiRoute(host: string, route: ApiRoute): void {
+    apiRouteCache.set(host, { route, at: now() });
+    if (!opts.hostsFile) return;
+    const entry = persisted[host] ?? { platform: 'unknown', at: now() };
+    persisted[host] = { ...entry, api: route, apiAt: now() };
+    saveHostPlatforms(opts.hostsFile, persisted);
+  }
+
+  /*
+   * Which JSON route this host exposes.
+   *
+   * A remembered platform implies a route for free, so the common case costs
+   * nothing. Only a host we have never named pays the two-request probe -
+   * measured at under 3s, both fired together, and unmetered.
+   */
+  async function resolveApiRoute(
+    origin: string,
+    host: string,
+    platform: string,
+    /*
+     * Skip both the memory and the platform's implication and ask the shop.
+     * Used when a route we believed in produced nothing - see apiSearch.
+     */
+    reprobe = false
+  ): Promise<ApiRoute> {
+    if (!reprobe) {
+      const cached = apiRouteCache.get(host);
+      if (cached && now() - cached.at < HOST_API_TTL_MS) return cached.route;
+      const implied = routeForPlatform(platform);
+      if (implied) {
+        /* Remembered in memory only. An implication is not an observation, and
+         * writing it to disk would give a guess the same standing as a fact. */
+        apiRouteCache.set(host, { route: implied, at: now() });
+        return implied;
+      }
+    }
+    const route = await probeApiRoute(origin, { fetchImpl: opts.fetchApi });
+    /*
+     * A probe answered by the shop itself outranks whatever known-hosts.json
+     * says. peer-nursery.co.il was remembered as Shopify for a month while
+     * serving a working WooCommerce Store API; this is the line that would have
+     * corrected it on first contact instead of never.
+     */
+    rememberApiRoute(host, route);
+    if (route === 'woo-store') rememberHost(host, 'woo');
+    if (route === 'shopify-json') rememberHost(host, 'shopify');
+    return route;
+  }
+
+  /* Keep the map bounded, evicting whoever was used longest ago. Re-inserting
+   * on read is what makes Map insertion order an LRU. */
+  function evictCatalogues(): void {
+    while (catalogueCache.size > MAX_CATALOGUE_HOSTS) {
+      const oldest = catalogueCache.keys().next().value;
+      if (oldest === undefined) break;
+      catalogueCache.delete(oldest);
+    }
+  }
+
+  async function catalogueFor(origin: string, host: string): Promise<CachedCatalogue> {
+    const hit = catalogueCache.get(host);
+    if (hit && now() - hit.at < CATALOGUE_TTL_MS) {
+      catalogueCache.delete(host);
+      catalogueCache.set(host, hit); // touch: most recently used
+      return hit;
+    }
+    const flying = catalogueInFlight.get(host);
+    if (flying) return flying;
+
+    const job = (async () => {
+      const res = await shopifyCatalogue(origin, { fetchImpl: opts.fetchApi });
+      const entry: CachedCatalogue = {
+        products: res.products.slice(0, MAX_CATALOGUE_PRODUCTS),
+        /* Truncating makes the catalogue a prefix, and a prefix cannot prove a
+         * plant is absent - so say so rather than quietly keeping `complete`. */
+        complete: res.complete && res.products.length <= MAX_CATALOGUE_PRODUCTS,
+        at: now(),
+      };
+      if (entry.products.length) {
+        catalogueCache.set(host, entry);
+        evictCatalogues();
+      }
+      return entry;
+    })().finally(() => catalogueInFlight.delete(host));
+
+    catalogueInFlight.set(host, job);
+    return job;
+  }
+
+  /*
+   * Ask the shop's storefront JSON, and rank the answer ourselves.
+   *
+   * Returns null when this host has no JSON route, or when the route failed -
+   * the caller then falls through to the HTML path exactly as before, so this
+   * can only ever add shops we can read, never remove one.
+   */
+  async function apiSearch(
+    origin: string,
+    host: string,
+    plan: QueryPlan,
+    platform: string,
+    reprobe = false
+  ): Promise<SearchResult | null> {
+    const route = await resolveApiRoute(origin, host, platform, reprobe);
+    if (route === 'none') return null;
+
+    /*
+     * A route we only INFERRED from the remembered platform, and which then
+     * produced nothing, is evidence the platform is wrong - so ask the shop
+     * instead of falling all the way back to a scrape.
+     *
+     * This is the peer-nursery.co.il case end to end. It is remembered as
+     * Shopify, so we ask /products.json, which 404s; without this line the
+     * search then went down the HTML path and took 23 SECONDS for a shop whose
+     * WooCommerce Store API answers the same question in under one. The probe
+     * corrects known-hosts.json on the way past, so it happens once.
+     */
+    const giveUp = async (): Promise<SearchResult | null> => {
+      if (reprobe || !routeForPlatform(platform)) return null;
+      return apiSearch(origin, host, plan, platform, true);
+    };
+
+    let products: StructuredProduct[] = [];
+    let catalogueRead = false;
+    let picked: string | null = null;
+
+    if (route === 'shopify-json') {
+      /*
+       * Shopify shops have no per-query search worth using: on these themes
+       * /search?q= returns the same page whatever you ask, and suggest.json
+       * answers 417. So we hold the whole catalogue and every plant is a local
+       * lookup - which also means this route costs ZERO requests once warm.
+       */
+      const cat = await catalogueFor(origin, host);
+      if (!cat.products.length) return giveUp();
+      products = cat.products;
+      catalogueRead = cat.complete;
+      picked = `${origin}/products.json`;
+    } else {
+      /*
+       * The ladder, and the reason this whole change exists.
+       *
+       * The BROAD term goes first, not the precise one. The Store API ANDs
+       * every word, so "אלוקסיה ריגל שילד" returns nothing on eight of nine
+       * shops while "אלוקסיה" returns the genus shelf - and once we hold the
+       * shelf, picking the right cultivar off it is local string work we are
+       * better at than their search engine. One request, same as before.
+       */
+      const terms = ladderTerms(plan);
+      for (const term of terms) {
+        const res = await wooStoreSearch(origin, term, { fetchImpl: opts.fetchApi });
+        picked = `${origin}/?s=${encodeURIComponent(term)}&post_type=product`;
+        // The route is broken. Ask the shop what it really is before falling
+        // all the way back to a scrape.
+        if (res.status === 0 || res.status >= 400) return giveUp();
+        /* The server applied the query, so an empty answer here is evidence -
+         * we read their catalogue and this plant was not in it. */
+        catalogueRead = true;
+        products = res.products;
+        if (products.length) break;
+      }
+    }
+
+    const ranked = rankCandidates(products, plan);
+    return {
+      md: '',
+      platform,
+      picked,
+      products: ranked,
+      retrieval: 'api',
+      catalogueRead,
+      decisive: isDecisive(ranked),
+    };
+  }
+
   async function fetchSearchMarkdown(
     baseUrl: string,
-    query: string,
+    /*
+     * A QueryPlan when the caller has one, a plain string otherwise. The string
+     * form is what dashboard/server.ts and the older tests pass, and it still
+     * means exactly what it did: type this into the shop's search box.
+     */
+    query: string | QueryPlan,
     host: string
   ): Promise<SearchResult> {
+    const plan: QueryPlan =
+      typeof query === 'string' ? buildQueryPlan({ original: query, hebrew: query }) : query;
+    /* The single string the HTML path types into the search box. It is the
+     * BROAD term now, for the same reason the API ladder starts broad: a shop's
+     * search ANDs every word, and we would rather rank a shelf than be told no. */
+    const term = ladderTerms(plan)[0] ?? plan.hebrew;
+
     const { origin } = new URL(baseUrl);
     const platform = await resolvePlatform(origin, host);
+
+    /*
+     * The shop's own JSON first. On the ten of sixteen nurseries that publish
+     * one this answers exactly, for free, and - the part that matters for
+     * everyone else - it costs none of Firecrawl's ten requests a minute, so
+     * the shops that genuinely need a browser get the whole window.
+     */
+    if (opts.apiEnabled) {
+      try {
+        const viaApi = await apiSearch(origin, host, plan, platform);
+        if (viaApi) return viaApi;
+      } catch {
+        /* the HTML path below is the fallback, and it is the one we had before */
+      }
+    }
+    return fetchSearchHtml(origin, term, platform, host);
+  }
+
+  async function fetchSearchHtml(
+    origin: string,
+    query: string,
+    platform: string,
+    host: string
+  ): Promise<SearchResult> {
     const learned = platform === 'unknown' ? hostTemplates.get(host) : undefined;
     const urls = learned ? [applyTemplate(learned, origin, query)] : searchUrlsFor(origin, query, platform);
 
@@ -1798,7 +2290,7 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
        * nor a Firecrawl slot, so serialising it would add its latency to every
        * site in the fan-out for nothing.
        */
-      const htmlPromise = readHtml(url);
+      const htmlPromise = readHtmlResult(url);
       let md = '';
       try {
         md = await scrape(url, firecrawlKey, {
@@ -1823,11 +2315,23 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
           tavilyKey: opts.tavilyKey,
         });
       }
-      const html = await htmlPromise;
-      // A shop we could not read AT ALL is the signal that the remembered
-      // platform is stale - structured data counts as having read it.
-      if (!md && !html) forgetHost(host);
-      return { md, platform, picked: url, html };
+      const { html, status } = await htmlPromise;
+      /*
+       * Two different signals that the remembered platform is wrong, and both
+       * have to be here.
+       *
+       * A shop we could not read AT ALL is the old one - structured data counts
+       * as having read it.
+       *
+       * A search URL that does not EXIST is the new one, and it is the case
+       * that was silently unfixable: the shopify template on a WordPress shop
+       * returns a perfectly valid 404 page, which is neither empty nor
+       * unreadable, so the test above passed on it every time for thirty days.
+       * A 404 or 410 from a URL we built out of a remembered platform is that
+       * platform telling us it is wrong.
+       */
+      if ((!md && !html) || status === 404 || status === 410) forgetHost(host);
+      return { md, platform, picked: url, html, retrieval: 'html', searchStatus: status };
     }
 
     /*
@@ -1875,7 +2379,7 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
     }
     // Only the winning probe is worth a direct read; the others were rejected.
     const html = best.picked ? await readHtml(best.picked) : '';
-    return { md: best.md, platform, picked: best.picked, html };
+    return { md: best.md, platform, picked: best.picked, html, retrieval: 'html' };
   }
 
   return { fetchSearchMarkdown, resolvePlatform, cachedHomeMarkdown };

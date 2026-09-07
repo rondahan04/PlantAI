@@ -56,7 +56,10 @@
     "test": "node --test",
     "test:components": "jest",
     "test:all": "npm test && npm run test:components",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
+    "retrieval:score": "npx tsx scripts/retrieval-accuracy.ts",
+    "retrieval:capture": "npx tsx scripts/capture-retrieval-fixtures.ts",
+    "retrieval:label": "npx tsx scripts/label-retrieval-fixtures.ts"
   },
   "jest": {
     "preset": "jest-expo",

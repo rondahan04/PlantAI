@@ -1,15 +1,7 @@
 {
-  "getzler.co.il": {
-    "platform": "shopify",
-    "at": 1788359076673
-  },
   "ecolution.co.il": {
     "platform": "woo",
     "at": 1788359076790
-  },
-  "peer-nursery.co.il": {
-    "platform": "shopify",
-    "at": 1788359076869
   },
   "decogarden.co.il": {
     "platform": "shopify",
@@ -64,5 +56,9 @@
     "platform": "unknown",
     "at": 1788597078470,
     "template": "{origin}/?s={query}"
+  },
+  "peer-nursery.co.il": {
+    "platform": "woo",
+    "at": 1788809769457
   }
 }

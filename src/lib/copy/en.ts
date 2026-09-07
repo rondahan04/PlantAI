@@ -83,6 +83,7 @@ export const en = {
     inStock: (shipsToHome: boolean) =>
       `In stock now · ${shipsToHome ? 'ships to home' : 'local pickup'}`,
     notFound: "Didn't find the product",
+  couldNotCheck: "Couldn't check this shop",
     estimate: (bandLabel: string, confidence: number) => `${bandLabel} · ${confidence}%`,
     /* We found the product and its price; the page never stated stock. Says
      * what we know first - "Listed" is the evidence - and is honest about the

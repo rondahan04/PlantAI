@@ -7,6 +7,55 @@ the worst failure we have - it looks like the shop doesn't sell the plant.
 
 Everything below is grounded in the current code, with file:line.
 
+---
+
+## SUPERSEDED, 2026-09-07 evening: the price was never the problem
+
+This document's phases 0 and 1 shipped and its metric reads **100%**, and the
+product was still broken. That contradiction is the finding.
+
+`scripts/price-accuracy.ts` grades **price parsing of pages we already
+fetched**, for two easy queries. The failure Ron was describing happens one step
+earlier, in **retrieval**: asking al-haderech for `אלוקסיה ריגל שילד` returned a
+page with *no results at all*, so there were no prices to misread and nothing
+looked wrong anywhere.
+
+Measured live across all 16 hosts in `scraper/known-hosts.json`:
+
+| query sent to the 9 WooCommerce shops | shops returning a real grid |
+|---|---|
+| `אלוקסיה ריגל שילד` (what we sent) | **1 of 9** |
+| `אלוקסיה` (the genus alone) | **5 of 9** |
+
+WordPress `?s=` and the Woo Store API both AND every word. The shops were not
+missing the plant; we were asking a question their search engines cannot answer.
+
+Three more root causes, all verified rather than inferred:
+
+- **10 of 16 shops publish a free JSON product API** we were not using - the Woo
+  Store API (8 hosts) and Shopify `/products.json` (3). They return the exact
+  sale price, the stock flag and the product URL, with no LLM and no Firecrawl.
+  decogarden's catalogue contains `אלוקסיה ריגל שילד 10 ליטר` - the exact plant.
+- **Shopify HTML search ignores the query** on these themes (identical byte and
+  currency-token counts across completely different searches), so the extractor
+  saw whole catalogues and the 18000-char cap truncated them before the match.
+- **A wrong cached platform was permanent.** `getzler.co.il` and
+  `peer-nursery.co.il` were remembered as Shopify while serving WordPress; their
+  search URLs 404ed on every search for a month. `forgetHost` only fired when
+  *both* markdown and HTML were empty, and a 404 page is a large, readable body.
+  `peer-nursery` is in fact a WooCommerce shop whose Store API answers fine.
+
+And the reason nobody could see any of it: a retrieval miss became `no_match` →
+`not_sold` → **hidden from the UI** by `isWorthShowing` (`src/lib/availability.ts`).
+"We never managed to ask this shop" and "this shop does not stock it" rendered
+identically, as nothing at all.
+
+**The work that followed is in `RETRIEVAL.md`.** Phases 0-1 below remain correct
+and are still in the code; they were simply solving a smaller problem than the
+one that was hurting.
+
+---
+
 ## Status: Phases 0 and 1 are DONE (2026-09-07)
 
 Measured on 28 hand-labelled real nursery pages (`scraper/fixtures/`):
