@@ -102,13 +102,15 @@ async function handleScrape(query: string, urls: string[] = readUrls()): Promise
       const site = hostOf(url); // same key the searcher's per-host caches use
       const ts = Date.now();
       try {
-        const { md, platform, picked } = await searcher.fetchSearchMarkdown(url, query, site);
+        const { md, platform, picked, html } = await searcher.fetchSearchMarkdown(url, query, site);
         console.log(`   [${site}] platform=${platform} picked=${picked}`);
         const { plants, report, engines, funnel } = await extractAndVerifyPlants({
           markdown: md,
           query,
           site,
           openaiKey: OPENAI_KEY,
+          html,
+          url: picked ?? url,
         });
         // The funnel stage is the point of this line. "0 item(s)" alone cannot
         // tell a site that genuinely lacks the plant (no_match) from one whose

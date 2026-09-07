@@ -18,6 +18,11 @@
  */
 
 import * as fs from 'fs';
+import {
+  extractStructuredProducts,
+  formatPrice,
+  type StructuredProduct,
+} from './structuredPrice.ts';
 
 export type Platform = 'shopify' | 'woo' | 'wix' | 'unknown';
 
@@ -527,6 +532,46 @@ export async function scrapeUrl(
     primary: (u) => firecrawlScrape(u, firecrawlKey, fcOpts),
     fallback: (u, k) => tavilyExtract(u, k),
   });
+}
+
+/*
+ * The page as served, straight from the shop. Free, unmetered, and the only
+ * place the structured price survives.
+ *
+ * Neither provider can supply this. Tavily Extract returns markdown only, and
+ * Tavily LEADS on every server-rendered site (see tavilyLeads), which is most of
+ * them - so a Firecrawl-only `rawHtml` format would miss the majority path.
+ * Firecrawl could render it, but it is the scarce resource at ten requests a
+ * minute and this costs neither a credit nor a slot.
+ *
+ * Server-rendered is exactly where this works, and exactly where Tavily leads:
+ * the two conditions coincide, because both mean "the HTML as served already
+ * contains the grid". A JS-rendered shop returns a shell here and we fall back
+ * to the markdown path, same as before.
+ *
+ * Never throws: a failed read means "no structured data", which is a normal
+ * answer, not an error worth failing a search over.
+ */
+export const RAW_HTML_TIMEOUT_MS = 8000;
+
+const BROWSER_UA =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+
+export async function fetchRawHtml(
+  url: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<string> {
+  try {
+    const res = await fetchImpl(url, {
+      headers: { 'User-Agent': BROWSER_UA, Accept: 'text/html,application/xhtml+xml' },
+      signal: AbortSignal.timeout(RAW_HTML_TIMEOUT_MS),
+    });
+    if (!res.ok) return '';
+    const body = await res.text();
+    return looksUnreadable(body) ? '' : body;
+  } catch {
+    return '';
+  }
 }
 
 // --- platform detection (pure) ---------------------------------------------
@@ -1124,18 +1169,83 @@ export interface ExtractDeps {
   verify?: typeof verifyPlantsWithGPT;
 }
 
+/*
+ * A catalogue built from the page's own structured data, one product per line.
+ *
+ * This replaces priceFocusedExcerpt as the model's input whenever the page
+ * carried structured data, and it fixes both of the excerpt's failure modes at
+ * once. The excerpt keeps a markdown LINE if it looks product-ish, which means
+ * a name and its price can survive as two lines with fifty products in between,
+ * leaving the model to re-pair them - silently and sometimes wrongly. Here the
+ * pairing is already decided by the shop's own DOM and is not the model's job.
+ *
+ * It is also far smaller: azurflowers' catalogue page is 589KB of markdown and
+ * 577 products, which is roughly 30KB of lines here and gets truncated far less.
+ */
+export function structuredCatalog(products: StructuredProduct[], max = 18000): string {
+  return products
+    .map((p) => {
+      const stock =
+        p.availability === 'unknown' ? '' : ` | ${p.availability === 'in_stock' ? 'במלאי' : 'אזל'}`;
+      return `${p.name} | ${formatPrice(p)}${stock}${p.url ? ` | ${p.url}` : ''}`;
+    })
+    .join('\n')
+    .slice(0, max);
+}
+
+/*
+ * Force every returned price back to the number the page actually stated.
+ *
+ * The model is used here only to decide which products MATCH the query - a
+ * language judgement it is good at, across Hebrew and English. The price is not
+ * its to decide: we already read that from the shop's own markup. Matching by
+ * product URL first (exact) and name second, this replaces a transcribed price
+ * with the parsed one, so a misread digit cannot reach the user even when the
+ * model misreads a line it was handed.
+ */
+export function snapPricesToStructured(plants: Plant[], products: StructuredProduct[]): Plant[] {
+  if (products.length === 0) return plants;
+  const byUrl = new Map(products.filter((p) => p.url).map((p) => [p.url!, p]));
+  const byName = new Map(products.map((p) => [p.name.trim(), p]));
+  return plants.map((plant) => {
+    const match = (plant.url && byUrl.get(plant.url)) || byName.get(plant.name.trim());
+    if (!match) return plant;
+    return {
+      ...plant,
+      price: formatPrice(match),
+      // The page's own stock statement outranks the model's reading of it, but
+      // only when the page actually made one.
+      availability: match.availability !== 'unknown' ? match.availability : plant.availability,
+    };
+  });
+}
+
 export async function extractAndVerifyPlants(
   opts: {
     markdown: string;
     query: string;
     site: string;
     openaiKey?: string;
+    /* The page as served. When it carries structured data we read prices from
+     * it rather than asking the model to re-read them. */
+    html?: string;
+    /* The URL `html` came from, for resolving relative product links. */
+    url?: string;
   },
   deps: ExtractDeps = {}
 ): Promise<PipelineResult> {
-  const { markdown, query, site, openaiKey } = opts;
+  const { markdown, query, site, openaiKey, html = '', url = '' } = opts;
   const { extract = extractPlants, verify = verifyPlantsWithGPT } = deps;
-  const excerpt = priceFocusedExcerpt(markdown);
+
+  /*
+   * Structured data first (SCRAPE-ACCURACY-PLAN Phase 1). Measured on the 28
+   * labelled fixtures this reads every page that shows products (15/15) and
+   * stays correctly silent on every page that shows none (13/13) - where the
+   * markdown excerpt instead hands the model an empty cart total and a
+   * free-shipping threshold to reason about.
+   */
+  const structured = extractStructuredProducts(html, url);
+  const excerpt = structured.length ? structuredCatalog(structured) : priceFocusedExcerpt(markdown);
 
   const empty = (stage: ExtractStage, feedback: string): PipelineResult => ({
     plants: [],
@@ -1203,11 +1313,14 @@ export async function extractAndVerifyPlants(
    * verifyPlantsWithGPT throws when the LLM call itself fails, so reaching this
    * line means we have a real verdict, not a degraded one.
    */
-  const verified = report.is_valid
-    ? report.corrected_output.length
-      ? report.corrected_output
-      : extracted
-    : report.corrected_output;
+  const verified = snapPricesToStructured(
+    report.is_valid
+      ? report.corrected_output.length
+        ? report.corrected_output
+        : extracted
+      : report.corrected_output,
+    structured
+  );
 
   if (!report.is_valid) {
     // Self-correction loop: log the failure feedback for evaluation.
@@ -1472,6 +1585,8 @@ export interface SearchResult {
   md: string;
   platform: string;
   picked: string | null;
+  /* The page as served, when we could read it. Carries the structured price. */
+  html?: string;
 }
 
 export interface SearcherOpts {
@@ -1490,6 +1605,11 @@ export interface SearcherOpts {
   hostsFile?: string;
   /* Injectable for tests; defaults to the real Firecrawl + Tavily scrape. */
   scrape?: ScrapeFn;
+  /*
+   * Reads the page as served, for its structured price. Injectable for tests;
+   * pass a function returning '' to disable the direct read entirely.
+   */
+  fetchHtml?: (url: string) => Promise<string>;
   /* Injectable clock for the TTL, tests only. */
   now?: () => number;
 }
@@ -1553,6 +1673,7 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
   /* Per-host search URL templates learned from a confident probe hit. */
   const hostTemplates = new Map<string, string>();
   const scrape: ScrapeFn = opts.scrape ?? scrapeUrl;
+  const readHtml = opts.fetchHtml ?? ((u: string) => fetchRawHtml(u));
   const canRender = opts.firecrawlReady ?? firecrawlReady;
   const now = opts.now ?? Date.now;
   if (opts.learnedFile) loadLearnedPlatforms(opts.learnedFile);
@@ -1671,6 +1792,13 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
        */
       const url = urls[0];
       const quickWait = searchWaitFor(platform);
+      /*
+       * The direct HTML read runs alongside the provider scrape rather than
+       * after it. It is a plain request to the shop and costs neither a credit
+       * nor a Firecrawl slot, so serialising it would add its latency to every
+       * site in the fan-out for nothing.
+       */
+      const htmlPromise = readHtml(url);
       let md = '';
       try {
         md = await scrape(url, firecrawlKey, {
@@ -1695,8 +1823,11 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
           tavilyKey: opts.tavilyKey,
         });
       }
-      if (!md) forgetHost(host);
-      return { md, platform, picked: url };
+      const html = await htmlPromise;
+      // A shop we could not read AT ALL is the signal that the remembered
+      // platform is stale - structured data counts as having read it.
+      if (!md && !html) forgetHost(host);
+      return { md, platform, picked: url, html };
     }
 
     /*
@@ -1742,7 +1873,9 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
         /* keep best - neither provider could read this site */
       }
     }
-    return { md: best.md, platform, picked: best.picked };
+    // Only the winning probe is worth a direct read; the others were rejected.
+    const html = best.picked ? await readHtml(best.picked) : '';
+    return { md: best.md, platform, picked: best.picked, html };
   }
 
   return { fetchSearchMarkdown, resolvePlatform, cachedHomeMarkdown };
