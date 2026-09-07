@@ -911,7 +911,16 @@ function makeStyles(t: Theme) {
     // The row scrolls rather than wraps: three chips fit on a phone, but the
     // Hebrew labels are longer and a wrapped second line pushes the first card
     // off the screen for a control the user has already read.
-    chipRow: { flexDirection: 'row', gap: t.space.sm, paddingBottom: t.space.md },
+    /* paddingTop, not a margin on the row above: the chips follow either the
+     * bulk buttons or the progress row depending on whether a job is running,
+     * and the gap has to be the same under both. Without it the pills sat hard
+     * against the buttons and read as one crowded control block. */
+    chipRow: {
+      flexDirection: 'row',
+      gap: t.space.sm,
+      paddingTop: t.space.md,
+      paddingBottom: t.space.md,
+    },
     chip: {
       flexDirection: 'row',
       alignItems: 'center',

@@ -1,8 +1,9 @@
-import { readAsStringAsync } from 'expo-file-system/legacy';
+import { cacheDirectory, deleteAsync, downloadAsync, readAsStringAsync } from 'expo-file-system/legacy';
 import { PlantDiagnosis } from '../types';
 import { apiFetch, apiHeaders, readApiError } from '../lib/api';
 import { exceedsUploadLimit } from '../lib/uploadLimit';
 import { classifyDiagnosisFailure } from '../lib/diagnosisFailure';
+import { isRemoteUri } from '../lib/remoteUri';
 import { getLanguage } from './language';
 
 /*
@@ -122,10 +123,50 @@ function isDiagnosis(value: unknown): value is PlantDiagnosis {
   );
 }
 
+/*
+ * The photo's bytes, wherever the photo happens to live.
+ *
+ * A plant's `photoUri` is one of two things and the caller does not get to know
+ * which. Straight from the camera it is a local `file://`; read back from the
+ * cloud it is a SIGNED HTTPS URL, because `supabasePlantCloud.fetchAll` resolves
+ * every stored path to one so that <Image> can render it.
+ *
+ * `readAsStringAsync` reads local files only. Handed a signed URL it throws, and
+ * that is exactly what "Diagnose all" was doing for every plant of a logged-in
+ * user: the bulk runner caught the throw per plant, counted a failure and moved
+ * on, so the button spent nothing, said nothing and appeared dead.
+ *
+ * The remote file is downloaded to the cache and deleted again rather than kept:
+ * the phone already has this photo in the cloud, and a second copy per diagnosis
+ * would grow without bound for a file the app only needs for one upload.
+ */
+async function readImageBase64(imageUri: string): Promise<string> {
+  if (!isRemoteUri(imageUri)) return readAsStringAsync(imageUri, { encoding: 'base64' });
+
+  /* No cache directory means no way to stage the download. Treat it as the
+   * service being unusable rather than throwing a file-system error the user
+   * cannot act on. */
+  if (!cacheDirectory) throw new DiagnosisServiceError('no cache directory to stage the photo');
+
+  const staged = `${cacheDirectory}diagnose-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  try {
+    const { status } = await downloadAsync(imageUri, staged);
+    /* A signed URL expires. A 4xx here is not a broken plant and not a broken
+     * app - it is a stale link, and the next library read mints a fresh one. */
+    if (status < 200 || status >= 300) {
+      throw new DiagnosisServiceError(`photo download failed: ${status}`);
+    }
+    return await readAsStringAsync(staged, { encoding: 'base64' });
+  } finally {
+    // Never leave the staged copy behind, including on the failure paths above.
+    await deleteAsync(staged, { idempotent: true }).catch(() => {});
+  }
+}
+
 export async function diagnosePlant(imageUri: string): Promise<PlantDiagnosis> {
   if (!process.env.EXPO_PUBLIC_API_BASE_URL) throw new DiagnosisUnavailableError();
 
-  const imageBase64 = await readAsStringAsync(imageUri, { encoding: 'base64' });
+  const imageBase64 = await readImageBase64(imageUri);
 
   /*
    * Refuse the upload rather than start one that cannot finish. React Native
