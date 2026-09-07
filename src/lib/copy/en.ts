@@ -791,6 +791,23 @@ export const en = {
     actionA11y: (title: string, action: string, label: string) =>
       `${title}: ${action}.${label ? ` ${label}` : ''}`,
     earlyHint: (title: string) => `Double tap and hold to log an early ${title.toLowerCase()}`,
+    /*
+     * The VISIBLE twin of `earlyHint` above. It lived as a template literal
+     * inside ScheduleCard until 2026-09-07, which meant Hebrew rendered
+     * "hold הושקה to log an early one" - the a11y label beside it had been
+     * translated, the sentence on screen had not.
+     *
+     * `title` is unused here and carries the whole line in Hebrew, where
+     * naming the action ("watering") reads better than naming the button
+     * ("Watered"). Both are passed so neither language has to bend to the
+     * other's grammar.
+     */
+    earlyNote: (done: string, title: string) => `hold ${done} to log an early one`,
+    /*
+     * Proof the OS reminder actually exists. Shown only when one does - see the
+     * note in ScheduleCard on why silence is the right answer otherwise.
+     */
+    reminderSet: 'Reminder set',
   },
   importBanner: {
     title: (n: number) => `Import your ${n} saved plant${n === 1 ? '' : 's'}?`,

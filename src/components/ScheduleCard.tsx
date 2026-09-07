@@ -44,6 +44,17 @@ export interface ScheduleCardProps {
   /* ISO-8601 of the last time this kind of care was logged. */
   lastAt: string | undefined;
   busy?: boolean;
+  /*
+   * One extra line of reassurance under the footer, for the kind that has
+   * something extra to say. Only watering passes it, and only to confirm that
+   * an OS reminder exists - the one bit of feedback proving the notification
+   * was really scheduled, which PR #5 dropped when three hand-built cards
+   * became this one (Trello #77).
+   *
+   * A string rather than a boolean flag, so this component never has to learn
+   * what a reminder is; the caller owns the fact and the wording.
+   */
+  note?: string;
   onLog: () => void;
   onHistory: () => void;
 }
@@ -104,6 +115,7 @@ export default function ScheduleCard({
   soilPlan,
   lastAt,
   busy = false,
+  note,
   onLog,
   onHistory,
 }: ScheduleCardProps) {
@@ -254,9 +266,31 @@ export default function ScheduleCard({
         once the button has gone quiet.
       */}
       {settled && (
-        <Text style={s.note}>
-          {[state.label, `hold ${k.done} to log an early one`].filter(Boolean).join(' · ')}
-        </Text>
+        <>
+          <Text style={s.note}>
+            {[state.label, copy.scheduleCard.earlyNote(k.done, k.title)].filter(Boolean).join(' · ')}
+          </Text>
+
+          {/*
+            Its own line rather than a third segment above, because it answers a
+            different question: that row is about this plant's schedule, this is
+            about whether the phone will actually say so.
+
+            GATED ON `settled` AS WELL AS ON `note`. The caller knows a reminder
+            id is stored, but a stored id outlives the notification it names -
+            once the due date passes the reminder has already fired, and the
+            card is showing `due` or `overdue` precisely then. Printing
+            "reminder set" over an overdue plant would be the app vouching for a
+            notification that is spent.
+
+            Nothing is said when there is no reminder. That is the same rule
+            wateringReminder.ts already follows for a declined permission: the
+            in-app countdown is unaffected, so an absent nudge is not news, and
+            a line explaining the absence would read as an error on a screen
+            where nothing is broken.
+          */}
+          {!!note && <Text style={s.note}>{note}</Text>}
+        </>
       )}
     </View>
   );

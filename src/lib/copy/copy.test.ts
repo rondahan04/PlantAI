@@ -47,6 +47,38 @@ test('no Hebrew string was left as its English original', () => {
   walk(TREES.en, TREES.he, 'copy');
 });
 
+/*
+ * The walk above only compares STRINGS. A function-valued key falls through
+ * both branches and is never checked, which is how an untranslated sentence can
+ * live in the tree unnoticed - and the schedule card's footer was worse than
+ * that, hardcoded in the component where the tree could not see it at all
+ * (Trello #77). These assert the two keys that footer now reads.
+ */
+test('the schedule card footer is translated, not left in English', () => {
+  const en = TREES.en.scheduleCard.earlyNote('Watered', 'Watering');
+  const he = TREES.he.scheduleCard.earlyNote('הושקה', 'השקיה');
+  assert.match(en, /hold/i);
+  assert.match(he, /[א-ת]/);
+  assert.doesNotMatch(he, /hold|log an early/i, 'the Hebrew footer still contains English');
+  assert.notEqual(he, en);
+});
+
+test('the reminder confirmation is translated', () => {
+  assert.match(TREES.he.scheduleCard.reminderSet, /[א-ת]/);
+  assert.notEqual(TREES.he.scheduleCard.reminderSet, TREES.en.scheduleCard.reminderSet);
+});
+
+/*
+ * The Hebrew footer names the ACTION, the English one names the BUTTON. That is
+ * deliberate (see the note in he.ts), and this pins it: threading the button's
+ * past-tense label through the Hebrew sentence is exactly the bug that shipped.
+ */
+test('the Hebrew footer names the action rather than the button label', () => {
+  const he = TREES.he.scheduleCard.earlyNote('הושקה', 'השקיה');
+  assert.match(he, /השקיה/);
+  assert.doesNotMatch(he, /הושקה/);
+});
+
 test('every growing medium has copy in both languages', () => {
   // The overlay is keyed by soilMedia.ts's ids, and this is what stops a ninth
   // medium being added there and silently rendering English - or undefined.
