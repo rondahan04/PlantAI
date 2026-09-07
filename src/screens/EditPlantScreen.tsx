@@ -32,6 +32,7 @@ import {
   Alert,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
+import { photoCacheKey } from '../lib/photoCacheKey';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -145,6 +146,21 @@ export default function EditPlantScreen({ navigation, route }: Props) {
     if (nextPhoto !== null) {
       const result = await plantRepo.setPhoto(plant.id, nextPhoto);
       if (!result.ok) return fail(result.reason);
+
+      /*
+       * The photo cache is keyed on the object PATH so that re-signing a URL
+       * does not re-download it (see lib/photoCacheKey). Replacing a photo
+       * overwrites that same path, so the cached copy is now the OLD picture
+       * under the right key - and expo-image has no per-key eviction, only a
+       * global clear.
+       *
+       * Clearing everything for one replaced photo is blunt, and it is the
+       * right trade: this happens when a user deliberately changes a picture,
+       * perhaps a handful of times ever, and the cost is one re-download of
+       * the other photos. A plant still showing the picture the user just
+       * replaced reads as the edit having silently failed.
+       */
+      await Promise.all([ExpoImage.clearMemoryCache(), ExpoImage.clearDiskCache()]);
     }
 
     setSaving(false);
@@ -207,7 +223,7 @@ export default function EditPlantScreen({ navigation, route }: Props) {
           <Text style={s.cardTitle}>{copy.editPlant.photo}</Text>
           {shownPhoto ? (
             <ExpoImage
-              source={{ uri: shownPhoto }}
+              source={{ uri: shownPhoto, cacheKey: photoCacheKey(shownPhoto) }}
               style={s.preview}
               contentFit="cover"
               cachePolicy="memory-disk"

@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Image } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
+import { photoCacheKey } from '../lib/photoCacheKey';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -198,7 +199,7 @@ export default function HomeScreen({ navigation }: Props) {
           </View>
           {heroPhoto !== undefined && (
             <ExpoImage
-              source={{ uri: heroPhoto }}
+              source={{ uri: heroPhoto, cacheKey: photoCacheKey(heroPhoto) }}
               style={s.heroPhoto}
               contentFit="cover"
               cachePolicy="memory-disk"
@@ -271,11 +272,18 @@ export default function HomeScreen({ navigation }: Props) {
           ) : (
             <>
               <View style={s.faces}>
+                {/* ExpoImage rather than RN's Image: this strip was the last
+                    place still using the platform one, which has no disk cache
+                    of its own, so these faces were re-fetched from the network
+                    on every launch even after the rest of the app stopped. */}
                 {shown.map((p, i) => (
-                  <Image
+                  <ExpoImage
                     key={p.id}
-                    source={{ uri: p.photoUri }}
+                    source={{ uri: p.photoUri, cacheKey: photoCacheKey(p.photoUri) }}
                     style={[s.face, i > 0 && s.faceOverlap]}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    recyclingKey={p.id}
                     accessibilityLabel={plantDisplayName(p)}
                   />
                 ))}

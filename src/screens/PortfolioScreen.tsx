@@ -138,6 +138,9 @@ export default function PortfolioScreen({ navigation }: Props) {
    * lets a returning user see a job that started before they left.
    */
   const [bulk, setBulk] = useState<BulkProgress>(() => bulkDiagnose.get());
+  /* Collapsed by default: the cap is what keeps the plant list itself above
+   * the fold. Opening is the user asking for the whole watering round. */
+  const [dueExpanded, setDueExpanded] = useState(false);
   useEffect(() => bulkDiagnose.subscribe(setBulk), []);
 
   /* Refresh the cards as findings land, so a diagnosed plant stops looking
@@ -596,11 +599,36 @@ export default function PortfolioScreen({ navigation }: Props) {
               {due.length > 0 && (
                 <View style={s.dueCard}>
                   <Text style={s.dueTitle}>{copy.portfolio.dueThisWeek}</Text>
-                  {due.slice(0, DUE_ROW_CAP).map(renderDueRow)}
+                  {(dueExpanded ? due : due.slice(0, DUE_ROW_CAP)).map(renderDueRow)}
                   {due.length > DUE_ROW_CAP && (
-                    <Text style={s.dueMore}>
-                      {copy.portfolio.dueMore(due.length - DUE_ROW_CAP)}
-                    </Text>
+                    /*
+                     * The overflow line was a statement; it is now the control
+                     * that acts on it. The cap exists so a library where
+                     * everything came due at once cannot push the portfolio
+                     * below the fold - but a user who WANTS the whole watering
+                     * list had no way to ask for it, and "+8 more in your
+                     * plants below" sent them scrolling to reassemble by hand
+                     * a list the screen had already computed.
+                     */
+                    <Pressable
+                      onPress={() => setDueExpanded((open) => !open)}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityState={{ expanded: dueExpanded }}
+                      accessibilityLabel={
+                        dueExpanded
+                          ? copy.portfolio.dueLessA11y
+                          : copy.portfolio.dueMoreA11y(due.length - DUE_ROW_CAP)
+                      }
+                    >
+                      {({ pressed }) => (
+                        <Text style={[s.dueMore, pressed && { opacity: 0.6 }]}>
+                          {dueExpanded
+                            ? copy.portfolio.dueLess
+                            : copy.portfolio.dueMore(due.length - DUE_ROW_CAP)}
+                        </Text>
+                      )}
+                    </Pressable>
                   )}
                 </View>
               )}

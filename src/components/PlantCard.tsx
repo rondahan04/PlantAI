@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
+import { photoCacheKey } from '../lib/photoCacheKey';
 import { Theme, useTheme } from '../theme';
 import { copy } from '../services/language';
 import { directionalIconStyle } from '../lib/rtl';
@@ -167,7 +168,7 @@ function PlantCard({ plant, slots = EMPTY_SLOTS, onPress, onEdit }: PlantCardPro
       <View style={s.thumbWrap}>
         <Image source={LOGO_GLYPH} style={[s.thumbGlyph, { tintColor: t.color.textMuted }]} />
         <ExpoImage
-          source={{ uri: plant.photoUri }}
+          source={{ uri: plant.photoUri, cacheKey: photoCacheKey(plant.photoUri) }}
           style={s.thumb}
           /* The reason this component switched away from RN's Image: a saved
            * photo is full resolution, and RN decoded all of it to paint a
