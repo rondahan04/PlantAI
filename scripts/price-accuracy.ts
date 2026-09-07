@@ -49,7 +49,9 @@ function main(): void {
     const found = extractStructuredProducts(html, f.url ?? '');
 
     let verdict: string;
-    if (f.pricedProducts > 0) {
+    // labelledFixtures() only returns fixtures that carry ground truth, so this
+    // is always set; the default keeps the compiler honest without a cast.
+    if ((f.pricedProducts ?? 0) > 0) {
       withProducts++;
       if (found.length > 0) recalled++;
       verdict = found.length > 0 ? 'ok' : 'MISS';
