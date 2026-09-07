@@ -40,8 +40,11 @@ export const he: Copy = {
     dueNow: 'הגיע הזמן',
     nextTomorrow: (kind: 'repot' | 'fertilizer') =>
       kind === 'repot' ? 'ההחלפה הבאה מחר' : 'הדישון הבא מחר',
-    nextInDays: (kind: 'repot' | 'fertilizer', days: number) =>
-      kind === 'repot' ? `ההחלפה הבאה בעוד ${days} ימים` : `הדישון הבא בעוד ${days} ימים`,
+    /* The interval arrives already formatted and already in Hebrew, so the
+     * unit word and its agreement are `months`/`weeks`/`days` below rather
+     * than being hardcoded to ימים here. */
+    nextInDays: (kind: 'repot' | 'fertilizer', interval: string) =>
+      kind === 'repot' ? `ההחלפה הבאה בעוד ${interval}` : `הדישון הבא בעוד ${interval}`,
     months: (n: number) => (n === 1 ? 'חודש' : `${n} חודשים`),
     weeks: (n: number) => (n === 1 ? 'שבוע' : `${n} שבועות`),
     days: (n: number) => (n === 1 ? 'יום' : `${n} ימים`),

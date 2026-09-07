@@ -100,6 +100,34 @@ test('a freshly repotted plant is settled, which is what lets the row collapse',
   assert.equal(state.status, 'ok');
 });
 
+/*
+ * The countdown speaks in the same units the interval does (Trello #94).
+ *
+ * "Next repot in 510 days" was a real answer nobody reads, and it sat next to
+ * "Every 18 months" on the same card - the schedule already knew how to say
+ * this, the countdown just was not asking. `monthsish` owns the units, so both
+ * halves now agree and every language gets its own agreement for free.
+ */
+test('a long countdown reads in months, not in hundreds of days', () => {
+  const state = careState('repot', plan(7), daysAgo(30), NOW);
+  assert.match(state.label, /months/, `expected months, got: ${state.label}`);
+  assert.doesNotMatch(state.label, /\d{3} days/, 'a three-digit day count is the bug this fixes');
+});
+
+test('a short countdown still reads in days', () => {
+  // Feeding at 21-28 days is a routine someone is actually running, and "in 12
+  // days" is exactly how they think about it. Converting this to weeks would
+  // trade a precise answer for a rounded one.
+  const state = careState('fertilizer', plan(7), daysAgo(9), NOW);
+  assert.match(state.label, /12 days/);
+});
+
+test('watering is untouched by any of this', () => {
+  // Water has its own copy in lib/watering.ts and never goes through relabel.
+  const state = careState('water', plan(7), daysAgo(2), NOW);
+  assert.match(state.label, /5 days/);
+});
+
 test('water is passed through untouched - same interval, same words', () => {
   const range: CarePlan = { ...plan(7), waterEveryDaysMax: 10 };
   const state = careState('water', range, daysAgo(3), NOW);
