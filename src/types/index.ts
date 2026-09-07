@@ -118,7 +118,7 @@ export interface Nursery {
   priceNote?: string;
   /* Structured availability - see src/lib/availability.ts for presentation. */
   availability?: {
-    kind: 'estimate' | 'unreadable' | 'error' | 'stock_unknown' | 'no_catalogue';
+    kind: 'estimate' | 'unreadable' | 'error' | 'stock_unknown' | 'no_catalogue' | 'no_website';
     confidence?: number;
     detail: string;
   };

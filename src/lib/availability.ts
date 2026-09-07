@@ -52,8 +52,9 @@ export interface AvailabilityCopy {
   /* We never managed to read this shop, so we are not claiming anything about
    * what it stocks. Distinct from notFound, which says we looked. */
   couldNotCheck: string;
-  /* The shop was read and sells nothing online. Not a failure on our side, and
-   * not a claim about the shelf - a nursery you phone. */
+  /* The shop was read and sells nothing online, or there was never a site to
+   * read at all. Not a failure on our side, and not a claim about the shelf -
+   * a nursery you phone. */
   noOnlineShop: string;
   estimate: (band: string, confidence: number) => string;
   /* Found the product and its price; the page never says whether it is in
@@ -132,9 +133,12 @@ export function availabilityBadge(
   if (n.outcome === 'not_found') {
     const kind = n.availability?.kind;
     const unread = kind === 'unreadable' || kind === 'error';
+    /* Two ways to have no shop to read: a site with no catalogue, and no site
+     * at all. Neither is a failure of ours or a claim about their shelf - what
+     * the user can do in both is ring them, so both rows say so. */
+    const noShop = kind === 'no_catalogue' || kind === 'no_website';
     return {
-      text:
-        kind === 'no_catalogue' ? words.noOnlineShop : unread ? words.couldNotCheck : words.notFound,
+      text: noShop ? words.noOnlineShop : unread ? words.couldNotCheck : words.notFound,
       tone: 'unknown',
       detail: n.availability?.detail ?? '',
       hasDetail: Boolean(n.availability?.detail),

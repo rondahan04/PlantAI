@@ -50,7 +50,7 @@ interface NurseryResultJSON {
   inStockKnown: boolean;
   availabilityNote?: string;
   availability?: {
-    kind: 'estimate' | 'unreadable' | 'error' | 'stock_unknown' | 'no_catalogue';
+    kind: 'estimate' | 'unreadable' | 'error' | 'stock_unknown' | 'no_catalogue' | 'no_website';
     confidence?: number;
     detail: string;
   };

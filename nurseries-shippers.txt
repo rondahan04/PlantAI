@@ -1,0 +1,10 @@
+# The nurseries confirmed to ship nationally. Every line starting with http is
+# scraped on every Deliver-tab search, so a shop that does not actually deliver
+# costs a scrape and shows a row the user cannot buy from. Add one only after
+# confirming delivery on their site.
+#
+# All four are WooCommerce and answer the Store API, so each costs one request.
+https://al-haderech.co.il/
+https://rootine.co.il/
+https://netaplants.co.il/
+https://www.plantit.co.il/

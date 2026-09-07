@@ -28,6 +28,7 @@ RUN npm ci --omit=dev --ignore-scripts
 COPY server ./server
 COPY scraper ./scraper
 COPY nurseries-fallback.txt ./nurseries-fallback.txt
+COPY nurseries-shippers.txt ./nurseries-shippers.txt
 
 # Drop root. The process only needs to read its own source and write
 # scraper/learned-platforms.json, which is a cache the container regenerates.
