@@ -33,6 +33,19 @@ const base = (over: Partial<Nursery> = {}): Nursery => ({
   ...over,
 });
 
+test('a nursery with no online shop is told as a phone call, not a failed check', () => {
+  const badge = availabilityBadge({
+    inStockKnown: false,
+    hasPlant: false,
+    shipsToHome: false,
+    outcome: 'not_found',
+    availability: { kind: 'no_catalogue', detail: 'This nursery does not sell online.' },
+  } as any);
+  assert.equal(badge.text, EN_AVAILABILITY_COPY.noOnlineShop);
+  assert.equal(badge.tone, 'unknown');
+  assert.equal(badge.hasDetail, true);
+});
+
 test('an exact listing outranks every estimate', () => {
   const b = availabilityBadge(base({ inStockKnown: true, hasPlant: true }));
   assert.equal(b.text, 'In stock now · local pickup');

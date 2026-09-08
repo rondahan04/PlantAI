@@ -588,7 +588,14 @@ const BROWSER_UA =
  */
 export async function fetchRawHtmlResult(
   url: string,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  /*
+   * Keep a page even when it reads as a wall. For EXTRACTION such a page is
+   * worthless, which is why it is dropped by default. For COMPARING two reads
+   * of the same site it is exactly as good as any other page - and the compare
+   * is how we find out that a shop ignores our query. See answeredQuery.
+   */
+  keepUnreadable = false
 ): Promise<{ html: string; status: number }> {
   try {
     const res = await fetchImpl(url, {
@@ -597,10 +604,33 @@ export async function fetchRawHtmlResult(
     });
     if (!res.ok) return { html: '', status: res.status };
     const body = await res.text();
-    return { html: looksUnreadable(body) ? '' : body, status: res.status };
+    return { html: !keepUnreadable && looksUnreadable(body) ? '' : body, status: res.status };
   } catch {
     return { html: '', status: 0 };
   }
+}
+
+/*
+ * Retry a dead https over http.
+ *
+ * Small Israeli nurseries outlive their certificates: yahalomr.co.il refuses
+ * every https connection and serves fine on http, and Places hands us whichever
+ * scheme the owner typed. A connection that never happened (status 0) is the
+ * only case worth retrying - an http 404 is a real answer, and a page that
+ * loaded is not improved by fetching it again insecurely.
+ *
+ * This downgrade is for reading a public shop catalogue, and nothing is sent:
+ * no credentials, no cookies, no user data. The alternative is reporting a shop
+ * as unreachable when it is simply old.
+ */
+export async function fetchRawHtmlWithSchemeFallback(
+  url: string,
+  fetchImpl: typeof fetch = fetch,
+  keepUnreadable = false
+): Promise<{ html: string; status: number }> {
+  const first = await fetchRawHtmlResult(url, fetchImpl, keepUnreadable);
+  if (first.status !== 0 || !url.startsWith('https://')) return first;
+  return fetchRawHtmlResult(`http://${url.slice('https://'.length)}`, fetchImpl, keepUnreadable);
 }
 
 export async function fetchRawHtml(
@@ -916,7 +946,146 @@ export function searchUrlsFor(origin: string, query: string, platform: string): 
     `${origin}/?s=${q}&post_type=product`,
     `${origin}/search?q=${q}`,
     `${origin}/?s=${q}`,
+    /*
+     * Joomla/VirtueMart, which is not a rounding error among Israeli nurseries:
+     * mashtela-urbanit.co.il runs it, was remembered as WooCommerce, and every
+     * `?s=` search returned its homepage - which has product markup, so the
+     * extractor dutifully found products, none matched, and the shop was
+     * reported as not stocking plants it sells.
+     */
+    `${origin}/component/virtuemart/?search=true&keyword=${q}`,
   ];
+}
+
+/*
+ * Did this page actually answer the question we asked it?
+ *
+ * A search URL built from the wrong template does not fail. It 200s, and most
+ * shops answer it with their homepage - which carries product markup, prices
+ * and links, so every downstream signal says "we read a catalogue and the plant
+ * was not in it". That is how two of seven Tel Aviv pickup shops were reported
+ * as not stocking Monstera while selling it.
+ *
+ * Evidence, in order - and the ORDER is the fix. Echoing the term looks like
+ * the obvious signal and is the weaker one: a nursery's homepage lists plants,
+ * so "מונסטרה" appears on it whether or not anything was searched. Both shops
+ * this was written for passed the echo test while serving their front page.
+ *
+ *   it IS the homepage        → it ignored us, whatever words are on it.
+ *                               Compared by size and opening text, both of
+ *                               which a real results page moves.
+ *   the page echoes the term  → and it is NOT the homepage, so the shop put our
+ *                               query somewhere: a title, a breadcrumb, the
+ *                               search box's own value.
+ *   anything else             → no evidence either way, so no claim: the caller
+ *                               keeps the behaviour it had before.
+ */
+/* Below this a page is a stub, not a catalogue - see answeredQuery. */
+const MIN_JUDGEABLE_CHARS = 2000;
+
+/*
+ * A plant no nursery stocks, sent to a shop's own search URL to see whether it
+ * searches at all. Latin-script and meaningless on purpose: a Hebrew word risks
+ * matching something, and a match would make a working search look broken.
+ */
+export const CONTROL_QUERY = 'zzqxwvplant';
+
+/* Share of lines two reads must have in common to be called the same page. */
+const SAME_PAGE_OVERLAP = 0.85;
+
+/*
+ * Two reads of the same site that are, for our purposes, the same page.
+ *
+ * Not string equality: a page carries a cart count, a rotating banner, a
+ * timestamp, and two reads seconds apart differ by a little. A results page
+ * differs by a lot - it is a different shelf, or an empty-state line where the
+ * shelf was.
+ */
+type PageMatch = 'same' | 'different' | 'unknown';
+
+function comparePages(a: string, b: string): PageMatch {
+  /*
+   * Too little text to conclude anything. A parked domain, an error stub or a
+   * bot wall serves the same short page for every URL, and "identical" there is
+   * evidence about the stub, not about the shop's search. A real Israeli
+   * nursery page is tens of kilobytes.
+   */
+  if (Math.max(a.length, b.length) < MIN_JUDGEABLE_CHARS) return 'unknown';
+
+  /*
+   * Overlap of lines, not similarity of length.
+   *
+   * Length was the first attempt and it does not survive contact with a real
+   * site: two reads of mashtela-urbanit's front page, seconds apart through the
+   * same provider, came back 13% apart - carousels, cart counts, "recently
+   * viewed". What does not change is WHICH lines are on the page. A results page
+   * replaces the shelf, so it loses a large share of them; a front page served
+   * twice keeps nearly all.
+   */
+  const lines = (t: string) =>
+    new Set(
+      t
+        .split('\n')
+        .map((l) => l.replace(/\s+/g, ' ').trim())
+        .filter((l) => l.length > 2)
+    );
+  const x = lines(a);
+  const y = lines(b);
+  /* A handful of distinct lines is a stub, an error page or a redirect notice -
+   * nothing whose sameness says anything about a shop's search. */
+  if (x.size < 20 || y.size < 20) return 'unknown';
+  let shared = 0;
+  for (const line of x) if (y.has(line)) shared += 1;
+  const union = x.size + y.size - shared;
+  if (union === 0) return 'unknown';
+  return shared / union >= SAME_PAGE_OVERLAP ? 'same' : 'different';
+}
+
+export function answeredQuery(opts: {
+  searchText: string;
+  /* The same URL asked for a plant nobody stocks. The decisive comparison. */
+  controlText?: string;
+  /* The shop's front page, when we happen to hold it. */
+  homeText?: string;
+  query: string;
+}): boolean | undefined {
+  const { searchText, controlText = '', homeText = '', query } = opts;
+  if (!searchText.trim()) return undefined;
+  /*
+   * The control read settles it. Ask the same URL for a plant that does not
+   * exist and compare:
+   *
+   *   a different page          → it searched. Nothing else explains two
+   *                               different answers to two different terms.
+   *   the same page, EMPTY      → it searched, and it has neither plant. A
+   *                               shop's "no products matched" page is the same
+   *                               page whatever you fail to find on it, which
+   *                               is exactly what perahvagan.co.il returns.
+   *   the same page, FULL       → it ignored us. mashtela-urbanit hands back the
+   *                               same nine products for "מונסטרה" and for
+   *                               "zzqxwvplant"; yifrach hands back its whole
+   *                               front page. Neither is an answer.
+   *
+   * Note what is NOT used: the query echo. All three of those shops print the
+   * term back in their search box, including the two that never searched it.
+   */
+  if (controlText.trim()) {
+    const match = comparePages(searchText, controlText);
+    if (match === 'different') return true;
+    if (match === 'same') return hasProducts(controlText) ? false : true;
+    /* 'unknown' - too little to read on one side. Fall through rather than
+     * claim anything; a stub proves nothing about a search. */
+  }
+  /* No usable control read. The homepage can only convict: agreeing with it
+   * proves the query was ignored, disagreeing proves nothing. */
+  if (homeText.trim() && comparePages(searchText, homeText) === 'same') return false;
+  return undefined;
+}
+
+/* Does this page show a shelf at all? Prices or product permalinks - the same
+ * two signals scoreMarkdown counts, asked as a yes/no. */
+export function hasProducts(text: string): boolean {
+  return countPrices(text) > 0 || new RegExp(PRODUCT_LINK_RE.source).test(text);
 }
 
 /*
@@ -1982,6 +2151,23 @@ export interface SearchResult {
    * the one that was previously unnameable. See SiteStage.no_search.
    */
   searchStatus?: number;
+  /*
+   * Did the shop apply our query, or hand back a page that ignores it?
+   *
+   * FALSE is the only load-bearing value: it means an empty result proves
+   * nothing, so the user must be told we could not check rather than that the
+   * plant is not stocked. `undefined` means no evidence either way, which is
+   * every path that has always worked. See answeredQuery.
+   */
+  answered?: boolean;
+  /*
+   * FALSE when nothing we read from this site looks like a shop: no prices, no
+   * product links, on the search page or the front page. Some nurseries simply
+   * have a phone number and a brochure - yahalomr.co.il is 8KB of one - and
+   * telling that user "we couldn't check" invites them to wait for a check that
+   * will never succeed. "Call them" is the useful answer.
+   */
+  storefront?: boolean;
 }
 
 export interface SearcherOpts {
@@ -2140,7 +2326,8 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
   const catalogueCache = new Map<string, CachedCatalogue>();
   const catalogueInFlight = new Map<string, Promise<CachedCatalogue>>();
   const scrape: ScrapeFn = opts.scrape ?? scrapeUrl;
-  const readHtml = opts.fetchHtml ?? ((u: string) => fetchRawHtml(u));
+  const readHtml =
+    opts.fetchHtml ?? (async (u: string) => (await fetchRawHtmlWithSchemeFallback(u)).html);
   /* The same read with its status, for the self-heal below. An injected
    * fetchHtml has no status to give, so a body it returns counts as 200 and an
    * empty one as "never completed" - which is what the old code assumed. */
@@ -2149,7 +2336,7 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
         const html = await opts.fetchHtml!(u);
         return { html, status: html ? 200 : 0 };
       }
-    : (u: string) => fetchRawHtmlResult(u);
+    : (u: string) => fetchRawHtmlWithSchemeFallback(u);
   const canRender = opts.firecrawlReady ?? firecrawlReady;
   const now = opts.now ?? Date.now;
   if (opts.learnedFile) loadLearnedPlatforms(opts.learnedFile);
@@ -2458,6 +2645,81 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
     return fetchSearchHtml(origin, term, platform, host);
   }
 
+  /*
+   * Did this shop apply our query, or hand back a page that ignores it?
+   *
+   * Cheapest evidence first: the front page, if identification already fetched
+   * it. Then the control read - the same URL asked for a plant nobody stocks -
+   * preferring the RAW HTML on both sides, which is free and byte-stable.
+   * Markdown is the fallback, and it is noisy: two reads of the same page
+   * through the same provider seconds apart came back 13% different.
+   */
+  async function judgeAnswered(a: {
+    url: string;
+    md: string;
+    html: string;
+    query: string;
+    host: string;
+    origin: string;
+  }): Promise<boolean | undefined> {
+    /*
+     * The homepage can only ever CONVICT here. Its agreement is not evidence
+     * that a search happened - two reads of one page differ enough that
+     * "not the homepage" is the default answer - and taking it as a positive
+     * let yifrach.co.il pass while serving its front page to every query.
+     */
+    const vsHome = answeredQuery({
+      searchText: a.md || a.html,
+      homeText: a.md ? cachedHomeMarkdown(a.host) : '',
+      query: a.query,
+    });
+    if (vsHome === false) return false;
+
+    const controlUrl = applyTemplate(
+      a.url.replace(encodeURIComponent(a.query), '{query}'),
+      a.origin,
+      CONTROL_QUERY
+    );
+    if (controlUrl === a.url) return vsHome;
+
+    /*
+     * Raw HTML on both sides when we can get it: free, and stable byte for byte
+     * in a way a re-rendered markdown extraction is not. `keepUnreadable`
+     * because a page that reads as a wall still compares perfectly well - and
+     * yifrach's 357KB page is one of those.
+     */
+    const search = await rawForCompare(a.url);
+    /* A 404 is not an empty results page. The probe path can settle on one -
+     * yifrach.co.il has no /search endpoint, so /search?q= returns the same
+     * error page for every term, which reads exactly like a shop that searched
+     * and found nothing. */
+    if (search.status >= 400) return false;
+    const searchRaw = a.html || search.html;
+    if (searchRaw) {
+      const control = await rawForCompare(controlUrl);
+      const byHtml = answeredQuery({
+        searchText: searchRaw,
+        controlText: control.html,
+        query: a.query,
+      });
+      if (byHtml !== undefined) return byHtml;
+    }
+    /*
+     * Deliberately NOT falling back to a provider read of the control URL. This
+     * check runs for every site on the HTML path, and a second Firecrawl/Tavily
+     * read per site per search is a real cost to buy one bit of information.
+     * The raw GET above is free; when a site refuses it, we simply make no
+     * claim and behave exactly as before.
+     */
+    return vsHome;
+  }
+
+  /* A read used only to compare two pages of the same site, never to extract
+   * from - so it keeps pages the extractor would refuse. Costs no credits. */
+  async function rawForCompare(url: string): Promise<{ html: string; status: number }> {
+    return fetchRawHtmlWithSchemeFallback(url, fetch, true);
+  }
+
   async function fetchSearchHtml(
     origin: string,
     query: string,
@@ -2535,7 +2797,39 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
        * platform telling us it is wrong.
        */
       if ((!md && !html) || status === 404 || status === 410) forgetHost(host);
-      return { md, platform, picked: url, html, retrieval: 'html', searchStatus: status };
+
+      /*
+       * The third signal that the template is wrong, and the quiet one.
+       *
+       * A 404 announces itself. A shop that ignores the query parameter and
+       * serves its homepage does not: the read succeeds, the page is full of
+       * products, and the only thing missing is any connection to what we
+       * asked. Checking costs one free direct GET of the homepage, and only for
+       * pages that did not echo the term in the first place.
+       */
+      const confirmed = await judgeAnswered({ url, md, html, query, host, origin });
+
+      if (confirmed === false) {
+        /*
+         * Forget the platform and ask the shop properly. The probe path scores
+         * candidates by whether they look like a results page, so it can find
+         * the template this site actually uses - and remembers it, which is
+         * what stops the next search paying for this discovery again.
+         */
+        forgetHost(host);
+        return fetchSearchHtml(origin, query, 'unknown', host);
+      }
+
+      return {
+        md,
+        platform,
+        picked: url,
+        html,
+        retrieval: 'html',
+        searchStatus: status,
+        answered: confirmed,
+        storefront: hasProducts(md || html) || hasProducts(cachedHomeMarkdown(host)),
+      };
     }
 
     /*
@@ -2548,6 +2842,11 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
      * three probes cost about what one rendered Firecrawl read used to.
      */
     let best: SearchResult & { score: number } = { md: '', platform, picked: null, score: -1 };
+    /* At least one candidate answered with the shop's front page. Remembered
+     * because "every URL we know returns the homepage" is itself the finding:
+     * this shop has no search we can reach, and its silence is not evidence
+     * that it does not stock the plant. */
+    let servedHomepage = false;
     for (const u of urls) {
       let md = '';
       try {
@@ -2557,6 +2856,17 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
           tavilyKey: opts.tavilyKey,
         });
       } catch {
+        continue;
+      }
+      /*
+       * A homepage is the best-scoring page on most shops: it is wall-to-wall
+       * products and prices, which is exactly what scoreMarkdown rewards. So a
+       * candidate that merely returns the front page would beat the shop's real
+       * search results and be remembered as its template. Reject those first,
+       * whatever they score.
+       */
+      if (answeredQuery({ searchText: md, homeText: cachedHomeMarkdown(host), query }) === false) {
+        servedHomepage = true;
         continue;
       }
       const score = scoreMarkdown(md, query);
@@ -2576,14 +2886,39 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
     if (best.score <= 0 && canRender()) {
       try {
         const md = await scrape(urls[0], firecrawlKey, { waitFor: RENDER_WAIT_MS, maxAge: 0 });
-        if (md) best = { md, platform, picked: urls[0], score: scoreMarkdown(md, query) };
+        /* The same guard the probes get: a rendered homepage is still a
+         * homepage, and it scores higher than most real results pages. */
+        const isHome =
+          answeredQuery({ searchText: md, homeText: cachedHomeMarkdown(host), query }) === false;
+        if (md && !isHome) best = { md, platform, picked: urls[0], score: scoreMarkdown(md, query) };
       } catch {
         /* keep best - neither provider could read this site */
       }
     }
     // Only the winning probe is worth a direct read; the others were rejected.
     const html = best.picked ? await readHtml(best.picked) : '';
-    return { md: best.md, platform, picked: best.picked, html, retrieval: 'html' };
+    /*
+     * Every candidate came back looking like a page that had not searched. We
+     * have no reading of this shop's catalogue, and saying "not stocked" from
+     * here is the failure this whole path exists to stop.
+     */
+    const answered =
+      best.score >= PROBE_CONFIDENT_SCORE
+        ? true
+        : best.picked
+          ? await judgeAnswered({ url: best.picked, md: best.md, html, query, host, origin })
+          : servedHomepage
+            ? false
+            : undefined;
+    return {
+      md: best.md,
+      platform,
+      picked: best.picked,
+      html,
+      retrieval: 'html',
+      answered,
+      storefront: hasProducts(best.md || html) || hasProducts(cachedHomeMarkdown(host)),
+    };
   }
 
   return { fetchSearchMarkdown, resolvePlatform, cachedHomeMarkdown };

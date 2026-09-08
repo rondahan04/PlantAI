@@ -98,6 +98,84 @@ test('a shop we read that does not list the plant is classified not_sold', async
 });
 
 
+/*
+ * The other half of that rule, and a correction to it.
+ *
+ * "We read a catalogue and it was not there" is only true if the shop actually
+ * searched. mashtela-urbanit.co.il (Joomla/VirtueMart, remembered as Woo) and
+ * yifrach.co.il (ASP.NET) both answer our search URL with their homepage: full
+ * of products, none matching, funnel closes at no_match - and the user was told
+ * a shop does not stock a plant nobody ever asked it about.
+ */
+test('a search the shop never applied is not evidence of absence', async () => {
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      search: async () => ({
+        md: 'the homepage, again',
+        platform: 'woo',
+        picked: 'u',
+        answered: false,
+      }),
+      extract: async () => ({
+        plants: [],
+        report: { is_valid: false, confidence_score: 0, feedback: '', corrected_output: [] },
+        engines: { extractor: 'none', verifier: 'none' },
+        funnel: funnel({ stage: 'no_match' }),
+      }),
+    })
+  );
+
+  assert.equal(out[0].outcome, 'not_found', 'not_sold would be a confident wrong answer');
+  assert.equal(out[0].availability?.kind, 'unreadable');
+});
+
+/*
+ * yahalomr.co.il: eight kilobytes of brochure, a phone number, and no shop.
+ * "We couldn't check" invites the user to wait for a check that will never
+ * succeed - the useful answer is that this one takes a phone call.
+ */
+test('a nursery with no shop on its site is a phone call, not a failed read', async () => {
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      search: async () => ({
+        md: 'משתלת יהלום רוני - שעות פתיחה וטלפון',
+        platform: 'unknown',
+        picked: 'u',
+        storefront: false,
+      }),
+      extract: async () => ({
+        plants: [],
+        report: { is_valid: false, confidence_score: 0, feedback: '', corrected_output: [] },
+        engines: { extractor: 'none', verifier: 'none' },
+        funnel: funnel({ stage: 'no_excerpt' }),
+      }),
+    })
+  );
+
+  assert.equal(out[0].outcome, 'not_found');
+  assert.equal(out[0].availability?.kind, 'no_catalogue');
+});
+
+test('a shop we simply could not read is still reported as unread', async () => {
+  // storefront is only load-bearing when it is FALSE; a site we could not read
+  // tells us nothing about whether it has a shop.
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      search: async () => ({ md: '', platform: 'unknown', picked: 'u' }),
+      extract: async () => ({
+        plants: [],
+        report: { is_valid: false, confidence_score: 0, feedback: '', corrected_output: [] },
+        engines: { extractor: 'none', verifier: 'none' },
+        funnel: funnel({ stage: 'no_markdown' }),
+      }),
+    })
+  );
+  assert.equal(out[0].availability?.kind, 'unreadable');
+});
+
 test('empty Places discovery falls back to the testing URL list', async () => {
   let usedFallback = false;
   const out = await runNurserySearch(

@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { discoverNurseries, resolvePhotoUrl, isNonStoreHost } from './places.ts';
+import { discoverNurseries, resolvePhotoUrl, isNonStoreHost, PLACES_PAGE_SIZE } from './places.ts';
 
 // Build a fake fetch returning a fixed status + JSON body, capturing the request.
 const fakeFetch = (
@@ -79,6 +79,29 @@ test('discoverNurseries: dedups chains by website host (www / branch variants)',
   const out = await discoverNurseries(32.08, 34.78, 'KEY', {}, fakeFetch(200, { places }));
   assert.equal(out.length, 2);
   assert.equal(out[0].address, 'branch A'); // first branch wins
+});
+
+/*
+ * Measured live: a 10km search around Tel Aviv returned seven usable shops
+ * where the same single request contained eleven. `maxResults` caps how many
+ * sites we SCRAPE; applying it to the request threw away candidates before the
+ * website and social-page filters had run, and a page of Places results is
+ * mostly places with no website.
+ */
+test('discoverNurseries: asks for a full page, then caps what it keeps', async () => {
+  let sent: any;
+  const fetchImpl = (async (_url: string, init: any) => {
+    sent = JSON.parse(init.body);
+    const places = [
+      ...Array.from({ length: 8 }, (_, i) => place({ websiteUri: '' })),
+      ...Array.from({ length: 6 }, (_, i) => place({ websiteUri: `https://n${i}.co.il` })),
+    ];
+    return { ok: true, status: 200, json: async () => ({ places }) } as any;
+  }) as unknown as typeof fetch;
+
+  const out = await discoverNurseries(32.08, 34.78, 'KEY', { maxResults: 5 }, fetchImpl);
+  assert.equal(sent.pageSize, PLACES_PAGE_SIZE, 'a small cap must not shrink the request');
+  assert.equal(out.length, 5, 'the cap still applies, after the filtering');
 });
 
 test('discoverNurseries: caps results at maxResults', async () => {

@@ -75,6 +75,10 @@ export interface DiscoverOpts {
   richFields?: boolean; // widen field mask: rating, reviews, hours, phone, photo
 }
 
+/* The most Places returns for one Text Search request. Filtering happens after
+ * the response, so asking for fewer only throws away candidates unseen. */
+export const PLACES_PAGE_SIZE = 20;
+
 const PLACES_SEARCH_URL = 'https://places.googleapis.com/v1/places:searchText';
 const PLACES_PHOTO_BASE = 'https://places.googleapis.com/v1/';
 
@@ -134,7 +138,16 @@ export async function discoverNurseries(
       textQuery,
       languageCode,
       regionCode,
-      pageSize: Math.min(20, Math.max(1, maxResults)),
+      /*
+       * Ask for the page Places will give us, not for the number we intend to
+       * keep. `maxResults` is a cap on shops to SCRAPE, and it was being applied
+       * to the request - so Places returned 10 places, six of which had no
+       * website or only a Facebook page, and a 10km search around Tel Aviv came
+       * back with seven shops instead of the eleven the same single request
+       * contains. One Text Search call costs the same at any page size, and the
+       * cap still applies below, after the filtering.
+       */
+      pageSize: PLACES_PAGE_SIZE,
       locationBias: { circle: { center: { latitude: lat, longitude: lng }, radius: radiusM } },
     }),
   });
