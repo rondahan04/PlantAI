@@ -197,7 +197,21 @@ export function wooProduct(row: any, origin: string): StructuredProduct | null {
 
   const prices = row?.prices ?? {};
   const minorUnit = Number(prices.currency_minor_unit);
-  const raw = prices.price;
+  /*
+   * A variable product has no single price, and some shops say so by setting
+   * `price` to "0" and putting the real numbers in `price_range`. netaplants
+   * does this for every plant it sells - each is offered in several pot sizes -
+   * so reading `price` alone made a shop with a full catalogue look like a shop
+   * with nothing in it: every row priced 0 and dropped by the guard below.
+   *
+   * The MINIMUM of the range is the right number to take. It is what the plant
+   * actually costs in its cheapest form, which is the number the app already
+   * shows ("from ₪42"), and it is the same choice cheapestMatch makes across
+   * separate listings.
+   */
+  const range = prices.price_range ?? {};
+  const stated = parsePriceNumber(prices.price);
+  const raw = stated !== null && stated > 0 ? prices.price : (range.min_amount ?? prices.price);
   /*
    * The spec says integer minor units. A dot means the shop deviates from it,
    * and dividing such a value would be the same hundredfold error in the other

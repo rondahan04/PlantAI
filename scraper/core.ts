@@ -1466,8 +1466,25 @@ export async function extractAndVerifyPlants(
       return empty('no_match', 'the shop catalogue was read and this plant was not in it');
     }
     if (opts.decisive) {
+      /*
+       * Decisive means ranking identified THE product - not that every row it
+       * was handed is that product. The rows below the strong band are the
+       * shelf around it, and they must not travel: `cheapestMatch` takes the
+       * lowest price in this list, so a single weak row is enough to replace
+       * the answer with a cheaper different plant. Live, netaplants answered a
+       * Ficus lyrata search with its "פיקוס כינורי" at ₪118 ranked 1.00 and its
+       * "פיקוס גומי" - a rubber plant - at ₪35 ranked 0.30, and the ₪35 is what
+       * went out.
+       *
+       * Ranking used to cut at WEAK_MATCH, so this list arrived clean and the
+       * bug could not exist; the cut is at the genus now, and the filter that
+       * used to be implicit has to be stated.
+       */
+      const decided = plan
+        ? structured.filter((p) => scoreCandidate(p.name, plan) >= STRONG_MATCH)
+        : structured;
       return {
-        plants: structured.map(plantFromStructured),
+        plants: decided.map(plantFromStructured),
         report: {
           is_valid: true,
           confidence_score: 100,
@@ -1480,7 +1497,7 @@ export async function extractAndVerifyPlants(
           mdChars: markdown.length,
           excerptChars: excerpt.length,
           extracted: structured.length,
-          kept: structured.length,
+          kept: decided.length,
         },
       };
     }

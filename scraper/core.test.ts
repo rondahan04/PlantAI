@@ -47,7 +47,7 @@ import {
   snapPricesToStructured,
 } from './core.ts';
 import type { ScrapeFn, ClassifyFn, Plant, VerificationReport } from './core.ts';
-import { extractStructuredProducts } from './structuredPrice.ts';
+import { extractStructuredProducts, type StructuredProduct } from './structuredPrice.ts';
 import { buildQueryPlan } from './queryPlan.ts';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -505,6 +505,54 @@ test('extractAndVerifyPlants: the guard keeps the right cultivar', async () => {
 
   assert.equal(out.plants.length, 1);
   assert.equal(out.funnel.stage, 'ok');
+});
+
+/*
+ * Found live at netaplants.co.il, which stocks both plants.
+ *
+ * "Decisive" says ranking identified the product, not that every row handed to
+ * it is that product - and `cheapestMatch` downstream takes the lowest price in
+ * whatever list comes back. A Ficus lyrata search returned "פיקוס כינורי" at
+ * ₪118 scoring 1.00 alongside "פיקוס גומי" (a rubber plant) at ₪35 scoring
+ * 0.30, and the ₪35 rubber plant is what the user was shown.
+ */
+test('extractAndVerifyPlants: a decisive answer carries only the plant, not the shelf', async () => {
+  const plan = buildQueryPlan({
+    original: 'Ficus lyrata',
+    hebrew: 'פיקוס ליראטה',
+    latin: 'Ficus lyrata',
+    altSpellings: ['פיקוס כינורי'],
+  });
+
+  const shelf: StructuredProduct[] = [
+    { name: 'פיקוס כינורי', price: 118, currency: 'ILS', availability: 'in_stock', source: 'api' },
+    { name: 'פיקוס גומי', price: 35, currency: 'ILS', availability: 'in_stock', source: 'api' },
+  ];
+
+  const out = await extractAndVerifyPlants(
+    {
+      markdown: '',
+      query: 'Ficus lyrata',
+      site: 'netaplants.co.il',
+      openaiKey: 'k',
+      plan,
+      products: shelf,
+      catalogueRead: true,
+      decisive: true,
+    },
+    {
+      extract: async () => {
+        throw new Error('a decisive answer must cost no model call');
+      },
+      verify: async () => verdict(),
+    }
+  );
+
+  assert.deepEqual(
+    out.plants.map((p) => p.name),
+    ['פיקוס כינורי'],
+    'a rubber plant must not ride along on a lyrata match and undercut it'
+  );
 });
 
 /*

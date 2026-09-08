@@ -107,11 +107,22 @@ const CORS_ORIGIN = env('CORS_ORIGIN');
  * content of the Deliver tab - a user who opens it wants delivery whether or
  * not a local shop happened to have the plant.
  *
- * Kept to the two confirmed shippers. The others on this list were general
- * nurseries with no delivery, so including them padded the tab with rows that
- * could not be delivered and cost a scrape each.
+ * Kept to CONFIRMED shippers. General nurseries with no delivery used to sit on
+ * this list, which padded the tab with rows that could not be delivered and cost
+ * a scrape each.
+ *
+ * All four are WooCommerce and answer the Store API, so each costs one request.
+ * netaplants prices every plant as a variable product with `price: "0"` and the
+ * real number in `price_range` - see wooProduct, which reads the range minimum,
+ * without which this shop returns a full catalogue that all prices at zero and
+ * is dropped row by row.
  */
-const NATIONAL_NURSERIES = ['https://al-haderech.co.il/', 'https://rootine.co.il/'];
+const NATIONAL_NURSERIES = [
+  'https://al-haderech.co.il/',
+  'https://rootine.co.il/',
+  'https://netaplants.co.il/',
+  'https://www.plantit.co.il/',
+];
 
 const searcher = createSearcher(FIRECRAWL_KEY, {
   openaiKey: OPENAI_KEY,
