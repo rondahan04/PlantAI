@@ -40,7 +40,7 @@ test('the fixture set exists and carries hand-judged truth', () => {
 test('we retrieve the plant from at least 80% of shops that list it', () => {
   assert.ok(
     m.retrieval >= 0.8,
-    `retrieval ${pct(m.retrieval)} (${m.hits}/${m.listed}) - run: npm run retrieval:score -- --verbose`
+    `retrieval ${pct(m.retrieval)} (${m.found}/${m.listed}) - run: npm run retrieval:score -- --verbose`
   );
 });
 
@@ -93,12 +93,34 @@ test('pickup shops clear the 80% bar this change was commissioned against', () =
  * production, so a change that "holds retrieval" while pushing everything into
  * the model has made the system slower and more expensive, and this is the only
  * place that would show it.
+ *
+ * The floor is 0.85 rather than 0.9 because the candidate bar was deliberately
+ * lowered to the genus: rows that a threshold used to discard silently - and
+ * wrongly, when a shop spelled the cultivar differently - are now asked about
+ * instead. That trade is the point of the change, and its price is roughly one
+ * extra call per shop that stocks the genus. It is not a licence to keep
+ * pushing work into the model: this floor is what stops the next change doing
+ * it by accident.
  */
 test('most rows are settled without an LLM call at all', () => {
   const settled = 1 - m.undecided / m.rows.length;
   assert.ok(
-    settled >= 0.9,
+    settled >= 0.85,
     `only ${pct(settled)} of rows settled locally; ${m.undecided} would each cost an LLM call`
+  );
+});
+
+/*
+ * The other half of the trade. Deferring a row to the model is only defensible
+ * because the right product is IN the list the model is handed - a candidate
+ * set that has already lost the plant cannot be rescued by any adjudication.
+ */
+test('a deferred row still carries the right product into the model call', () => {
+  const lost = m.rows.filter((r) => r.listed && !r.retrieved);
+  assert.equal(
+    lost.length,
+    0,
+    `ranking dropped the right product entirely for: ${lost.map((r) => `${r.host}/${r.plantId}`).join('; ')}`
   );
 });
 

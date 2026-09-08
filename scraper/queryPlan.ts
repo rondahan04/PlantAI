@@ -35,9 +35,22 @@ import type { StructuredProduct } from './structuredPrice.ts';
 /* Full cultivar coverage and nothing foreign: we are sure, and the LLM has
  * nothing to add that the shop's own catalogue has not already said. */
 export const STRONG_MATCH = 0.85;
-/* Below this a row is not a candidate at all - not shown, not sent to a model.
- * This is the threshold that stops "any Alocasia" answering for "Regal Shield". */
+/* Below this a row is not shown on ranking alone. It is still a CANDIDATE: the
+ * rows between PLAUSIBLE_MATCH and here are what the adjudicating model is
+ * asked about, which is what stops "any Alocasia" answering for "Regal Shield"
+ * without also throwing away a shop that spells the cultivar differently. */
 export const WEAK_MATCH = 0.45;
+/*
+ * The candidate floor: the genus matched, and nothing more is claimed.
+ *
+ * Every score above zero means the title carries the genus we asked for, so
+ * this bar admits exactly those rows and rejects the rest. It is deliberately
+ * far below WEAK_MATCH - a hard cut here was reporting shops as not stocking
+ * plants they had on the shelf ("מונסטרה בכלי קרמיקה" for Monstera deliciosa,
+ * dropped at 0.10). What separates a real answer from a wrong cultivar is a
+ * judgement about words, so it is asked of a model rather than of a threshold.
+ */
+export const PLAUSIBLE_MATCH = 0.05;
 
 export interface QueryTokens {
   /* The genus. Required in a title for it to be a candidate at all. */
@@ -233,7 +246,25 @@ export function buildQueryPlan(opts: {
     });
 
   const altNames = (opts.altSpellings ?? []).map((s) => s.trim()).filter(Boolean);
-  const altTokens = altNames.map(splitTokens).filter((t) => t.core.length > 0);
+  /*
+   * A bare genus is a fine thing to SEARCH for and a ruinous thing to score by.
+   *
+   * planQuery routinely returns "מונסטרה" among the alternate names for
+   * Monstera deliciosa, which is true - shops do sell it under that name - but
+   * scoring takes the best match across every name, and a genus-only name is
+   * fully answered by every cultivar on the shelf. That is how a search for
+   * Monstera deliciosa scored "מונסטרה מאנקי" (adansonii) at 1.00 and offered
+   * it as an exact match, at al-haderech's cheapest price, with no model asked.
+   *
+   * So it stays in `altNames`, where it is a search term, and is kept out of
+   * `altTokens`, which is the plant's identity - unless the plant has no
+   * cultivar to lose, in which case the genus IS the identity.
+   */
+  const asksForCultivar = hebrewTokens.cultivar.length > 0 || latinTokens.cultivar.length > 0;
+  const altTokens = altNames
+    .map(splitTokens)
+    .filter((t) => t.core.length > 0)
+    .filter((t) => !asksForCultivar || t.cultivar.length > 0);
 
   return { original, hebrew, latin, terms, hebrewTokens, latinTokens, altTokens, altNames };
 }
@@ -278,10 +309,69 @@ export function ladderTerms(plan: QueryPlan, max = 2): string[] {
 
 // --- scoring -----------------------------------------------------------------
 
-/* A token counts as present if it appears as a word OR inside one: shops write
- * "ריגל-שילד" and "רגלשילד" as often as they write two clean words. */
-function hits(token: string, titleTokens: string[], titleJoined: string): boolean {
-  return titleTokens.includes(token) || titleJoined.includes(token);
+/*
+ * Levenshtein distance, capped: we only ever ask "are these two spellings of
+ * the same word", so a distance beyond `max` needs no exact answer.
+ */
+function editDistance(a: string, b: string, max: number): number {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    let best = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + cost);
+      best = Math.min(best, row[j]);
+    }
+    if (best > max) return max + 1;
+    prev = row;
+  }
+  return prev[b.length];
+}
+
+/*
+ * Two tokens that are the same word spelled differently.
+ *
+ * TRANSLITERATION IS NOT STABLE. There is no single Hebrew spelling of a Latin
+ * species name: al-haderech files Monstera deliciosa as both "דליסיוסה" and
+ * "דלסיוסה", the planning call may produce "דלישיוזה", and mashtelatramatgan
+ * writes Ficus lyrata's "כינורי" as "כינור". Exact-token matching scored the
+ * literally-correct product at 0.30 and reported the shop as not stocking a
+ * plant it had on the shelf, which is the failure this exists to stop.
+ *
+ * Guarded on length, because short tokens are where a one-character slip
+ * changes the word rather than its spelling.
+ */
+const FUZZY_MIN_LEN = 4;
+const FUZZY_RATIO = 0.7;
+function nearlyEqual(a: string, b: string): boolean {
+  const len = Math.max(a.length, b.length);
+  if (len < FUZZY_MIN_LEN) return false;
+  const budget = Math.floor(len * (1 - FUZZY_RATIO));
+  if (budget < 1) return false;
+  return editDistance(a, b, budget) <= budget;
+}
+
+/*
+ * A token counts as present if it appears as a word OR inside one - shops write
+ * "ריגל-שילד" and "רגלשילד" as often as they write two clean words.
+ *
+ * `fuzzy` is for CULTIVAR words only, and the asymmetry is deliberate. A
+ * cultivar is a transliteration nobody spells the same way twice, so a near
+ * miss there is almost always the same plant. The genus is the one word that
+ * says which plant this is at all, and one letter of slack in it matched
+ * wlovep's "פיקטוס סינדפסוס" - a Scindapsus - to a Ficus lyrata query, which
+ * then went out as a found product at ₪85.
+ */
+function hits(
+  token: string,
+  titleTokens: string[],
+  titleJoined: string,
+  fuzzy = false
+): boolean {
+  if (titleTokens.includes(token) || titleJoined.includes(token)) return true;
+  return fuzzy && titleTokens.some((t) => nearlyEqual(t, token));
 }
 
 /*
@@ -334,7 +424,7 @@ function scoreAgainst(titleTokens: string[], tokens: QueryTokens): number {
     return 1;
   }
 
-  const matched = tokens.cultivar.filter((t) => hits(t, titleTokens, joined));
+  const matched = tokens.cultivar.filter((t) => hits(t, titleTokens, joined, true));
   const coverage = matched.length / tokens.cultivar.length;
   const base = 0.5 + 0.5 * coverage;
 
@@ -364,18 +454,21 @@ export interface RankedProduct extends StructuredProduct {
 
 /*
  * Rank a shop's candidates against the plan, dropping everything below
- * WEAK_MATCH.
+ * PLAUSIBLE_MATCH - that is, everything that is not even the right genus.
  *
- * The cut is not an optimization. Whatever survives is what the user may be
- * told this shop sells, and what the model - if it is asked at all - is allowed
- * to choose from. A row that is not this plant must not be in that list.
+ * The cut used to be WEAK_MATCH, which is the bar for showing a row on ranking
+ * alone. Using it here conflated two different questions: "is this row worth
+ * considering" and "are we sure enough to display it without asking anyone".
+ * The second still holds; the first now admits any row of the right genus and
+ * leaves the middle to the adjudicating model. A row that is not this plant
+ * must still not reach the user - see judgeMatches in scraper/core.ts.
  */
 export function rankCandidates(
   products: StructuredProduct[],
   plan: QueryPlan,
   opts: { limit?: number; threshold?: number } = {}
 ): RankedProduct[] {
-  const threshold = opts.threshold ?? WEAK_MATCH;
+  const threshold = opts.threshold ?? PLAUSIBLE_MATCH;
   const ranked = products
     .map((p) => ({ ...p, score: scoreCandidate(p.name, plan) }))
     .filter((p) => p.score >= threshold)

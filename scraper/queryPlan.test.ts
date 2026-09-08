@@ -172,6 +172,43 @@ test('an alternate name is a second rung on the ladder, not just a scoring aid',
   assert.deepEqual(ladderTerms(plan), ['סנסוויריה', 'לשון החמות']);
 });
 
+/*
+ * Found live, not in a fixture. planQuery returns "מונסטרה" among the alternate
+ * names for Monstera deliciosa - correct, shops do sell it that way - and
+ * scoring takes the best match across every name, so a bare genus made every
+ * cultivar on the shelf an exact match. al-haderech duly offered "מונסטרה
+ * מאנקי" (adansonii) at 1.00, its cheapest row, with no model asked.
+ */
+test('a genus-only alternate name does not make every cultivar an exact match', () => {
+  const plan = buildQueryPlan({
+    original: 'Monstera deliciosa',
+    hebrew: 'מונסטרה דליסיוזה',
+    latin: 'Monstera deliciosa',
+    altSpellings: ['מונסטרה דליסיוסה', 'מונסטרה'],
+  });
+  assert.ok(
+    scoreCandidate('מונסטרה מאנקי', plan) < WEAK_MATCH,
+    'an adansonii is not a deliciosa, whatever the shop calls the genus'
+  );
+  // The real spelling variant is still an exact match, which is the whole point
+  // of keeping alternate names at all.
+  assert.equal(scoreCandidate('מונסטרה דליסיוסה ע׳ 12', plan), 1);
+  // And the bare genus is still a search term, because shops do file it so.
+  assert.ok(plan.altNames.includes('מונסטרה'));
+});
+
+test('a genus-only query keeps its genus-only alternates', () => {
+  // Nothing is lost by dropping a bare genus from a query that asks for a
+  // cultivar; a query that asks for none has only the genus to match with.
+  const plan = buildQueryPlan({
+    original: 'Zamioculcas',
+    hebrew: 'זמיוקולקס',
+    latin: 'Zamioculcas',
+    altSpellings: ['זמיה'],
+  });
+  assert.equal(scoreCandidate('זמיה', plan), 1);
+});
+
 test('an alternate name never overrides a genuine mismatch', () => {
   const plan = buildQueryPlan({
     original: 'Ficus lyrata',
@@ -184,7 +221,13 @@ test('an alternate name never overrides a genuine mismatch', () => {
 
 // --- ranking ----------------------------------------------------------------
 
-test('ranking drops everything that is not this plant', () => {
+/*
+ * Ranking's job is now the genus bar and the ORDER, not the final cut. A
+ * sibling cultivar stays in the list - the adjudicating model is asked about it
+ * - but it must sit below WEAK_MATCH, which is the bar for reaching a user with
+ * no model asked, and it must never outrank the plant itself.
+ */
+test('ranking drops everything that is not even this genus', () => {
   const shelf = [
     product('אלוקסיה זברינה', 385),
     product('אלוקסיה ריגל שילד 10 ליטר', 249),
@@ -192,8 +235,45 @@ test('ranking drops everything that is not this plant', () => {
     product('מונסטרה דליסיוזה', 120),
   ];
   const ranked = rankCandidates(shelf, REGAL);
-  assert.equal(ranked.length, 1);
+  assert.ok(!ranked.some((r) => r.name.includes('מונסטרה')), 'a Monstera is not an Alocasia');
   assert.equal(ranked[0].name, 'אלוקסיה ריגל שילד 10 ליטר');
+  for (const sibling of ranked.slice(1)) {
+    assert.ok(
+      sibling.score < WEAK_MATCH,
+      `"${sibling.name}" scored ${sibling.score} - a sibling cultivar must never be shown on ranking alone`
+    );
+  }
+});
+
+/*
+ * The failure this change was made for: there is no single Hebrew spelling of a
+ * Latin species name, and an exact-token cut reported shops as not stocking
+ * plants they had on the shelf.
+ */
+test('a differently transliterated cultivar is still the same plant', () => {
+  const plan = buildQueryPlan({
+    original: 'Monstera deliciosa',
+    hebrew: 'מונסטרה דלישיוזה',
+    latin: 'Monstera deliciosa',
+  });
+  const ranked = rankCandidates([product('מונסטרה דליסיוסה ע׳ 12', 39)], plan);
+  assert.equal(ranked.length, 1);
+  assert.ok(
+    ranked[0].score >= WEAK_MATCH,
+    `spelling variant scored ${ranked[0].score} - it is the plant that was asked for`
+  );
+});
+
+test('a plain species listing is a candidate for a species query', () => {
+  // "מונסטרה בכלי קרמיקה" is a Monstera deliciosa in a pot. It named no
+  // cultivar, so it cannot be excluded on the strength of one it does not have.
+  const plan = buildQueryPlan({
+    original: 'Monstera deliciosa',
+    hebrew: 'מונסטרה דליסיוסה',
+    latin: 'Monstera deliciosa',
+  });
+  const ranked = rankCandidates([product('מונסטרה בכלי קרמיקה', 99)], plan);
+  assert.equal(ranked.length, 1, 'a plain genus listing must reach the adjudicating model');
 });
 
 test('equal scores break by price, because the cheapest is the answer asked for', () => {

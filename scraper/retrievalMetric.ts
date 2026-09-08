@@ -22,7 +22,17 @@ import { buildQueryPlan, rankCandidates, isDecisive, canonical } from './queryPl
  * higher bar than a nursery that merely happens to be nearby. */
 export const NATIONAL_HOSTS = new Set(['al-haderech.co.il', 'rootine.co.il']);
 
-export type Outcome = 'hit' | 'miss' | 'wrong' | 'quiet' | 'noisy' | 'unread';
+/*
+ * `undecided` is a real outcome now, not a footnote.
+ *
+ * Ranking admits any row of the right genus and settles only the ends: a row it
+ * is sure about is shown with no model, a row that is not the genus never
+ * became a candidate. Everything between is put to the adjudicating model in
+ * production (see judgeMatches in scraper/core.ts), which this replay cannot
+ * call - so it is reported as what it is, deferred, rather than being scored as
+ * though ranking had decided it.
+ */
+export type Outcome = 'hit' | 'miss' | 'wrong' | 'quiet' | 'noisy' | 'unread' | 'undecided';
 
 export interface MetricRow {
   host: string;
@@ -30,7 +40,13 @@ export interface MetricRow {
   national: boolean;
   listed: boolean;
   expected: string[];
+  /* What ranking alone would show. Undefined when it deferred to the model. */
   got?: string;
+  /* The best candidate, shown or deferred - what the model would be asked about. */
+  candidate?: string;
+  /* An expected product survived ranking, whoever decides in the end. This is
+   * the retrieval question, and it is the one the whole change is about. */
+  retrieved: boolean;
   decisive: boolean;
   outcome: Outcome;
 }
@@ -40,6 +56,8 @@ export interface MetricSummary {
   capturedAt: string;
   listed: number;
   hits: number;
+  /* Listed pairs where the right product survived ranking. */
+  found: number;
   wrong: number;
   offered: number;
   absent: number;
@@ -152,8 +170,12 @@ export function scoreRetrieval(strategy: Strategy = 'broad'): MetricSummary {
 
       const { plan, products, read } = retrieve(forHost, plant.id, strategy);
       const ranked = rankCandidates(products, plan);
-      const got = ranked[0]?.name;
       const decisive = isDecisive(ranked);
+      const candidate = ranked[0]?.name;
+      /* Only a decisive ranking reaches a user untouched; anything else is a
+       * question for the model, and this replay must not answer it for free. */
+      const got = decisive ? candidate : undefined;
+      const retrieved = ranked.some((r) => expected.some((e) => sameProduct(r.name, e)));
 
       /*
        * The outcome is about CORRECTNESS only. Whether ranking could settle it
@@ -166,11 +188,20 @@ export function scoreRetrieval(strategy: Strategy = 'broad'): MetricSummary {
       if (listed) {
         /* Any judged title is a correct answer - the same plant in a different
          * pot is not a different plant. */
-        outcome = !got ? 'miss' : expected.some((e) => sameProduct(got, e)) ? 'hit' : 'wrong';
+        outcome = got
+          ? expected.some((e) => sameProduct(got, e))
+            ? 'hit'
+            : 'wrong'
+          : candidate
+            ? 'undecided'
+            : 'miss';
       } else if (!read) {
         outcome = 'unread';
       } else {
-        outcome = got ? 'noisy' : 'quiet';
+        /* A shop that does not stock the plant: showing something is `noisy`,
+         * asking the model about a shelf of the same genus is a cost, and
+         * saying nothing at all is free and right. */
+        outcome = got ? 'noisy' : candidate ? 'undecided' : 'quiet';
       }
 
       rows.push({
@@ -180,6 +211,8 @@ export function scoreRetrieval(strategy: Strategy = 'broad'): MetricSummary {
         listed,
         expected,
         got,
+        candidate,
+        retrieved,
         decisive,
         outcome,
       });
@@ -188,13 +221,15 @@ export function scoreRetrieval(strategy: Strategy = 'broad'): MetricSummary {
 
   const rate = (a: number, b: number) => (b === 0 ? 1 : a / b);
   const listedRows = rows.filter((r) => r.listed);
+  /* The retrieval question: did the right product survive ranking at all. */
+  const found = listedRows.filter((r) => r.retrieved);
+  /* The narrower question: did ranking settle on it with no model involved. */
   const hits = listedRows.filter((r) => r.outcome === 'hit');
   const absent = rows.filter((r) => !r.listed);
-  /* Everything we would put in front of a user. */
+  /* Everything we would put in front of a user with no model asked. */
   const offered = rows.filter((r) => r.got);
-  /* Of those, the ones ranking settled on its own. The rest each cost an LLM
-   * call in production - a cost, not an error. */
-  const undecided = offered.filter((r) => !r.decisive);
+  /* Rows handed to the adjudicating model. A cost, not an error. */
+  const undecided = rows.filter((r) => r.outcome === 'undecided');
   const quiet = absent.filter((r) => r.outcome !== 'noisy');
   const nat = listedRows.filter((r) => r.national);
   const pick = listedRows.filter((r) => !r.national);
@@ -204,15 +239,16 @@ export function scoreRetrieval(strategy: Strategy = 'broad'): MetricSummary {
     capturedAt: manifest.capturedAt,
     listed: listedRows.length,
     hits: hits.length,
+    found: found.length,
     wrong: listedRows.filter((r) => r.outcome === 'wrong').length,
     offered: offered.length,
     absent: absent.length,
     quiet: quiet.length,
     undecided: undecided.length,
-    retrieval: rate(hits.length, listedRows.length),
+    retrieval: rate(found.length, listedRows.length),
     precision: rate(hits.length, offered.length),
     quietRate: rate(quiet.length, absent.length),
-    nationalRetrieval: rate(nat.filter((r) => r.outcome === 'hit').length, nat.length),
-    pickupRetrieval: rate(pick.filter((r) => r.outcome === 'hit').length, pick.length),
+    nationalRetrieval: rate(nat.filter((r) => r.retrieved).length, nat.length),
+    pickupRetrieval: rate(pick.filter((r) => r.retrieved).length, pick.length),
   };
 }

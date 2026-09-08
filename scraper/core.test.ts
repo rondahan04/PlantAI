@@ -472,6 +472,8 @@ test('extractAndVerifyPlants: the model may not return a different cultivar', as
         { name: 'אלוקסיה וונטי – קוטר 24', price: '₪60', availability: 'in_stock' },
       ],
       verify: async () => verdict(),
+      /* The adjudicator, asked exactly what a person would be asked. */
+      judge: async (_q, names) => names.map((name) => ({ name, matches: false, reason: 'a Venti is not a Regal Shield' })),
     }
   );
 
@@ -495,6 +497,9 @@ test('extractAndVerifyPlants: the guard keeps the right cultivar', async () => {
         { name: 'אלוקסיה ריגל שילד 10 ליטר', price: '₪149', availability: 'in_stock' },
       ],
       verify: async () => verdict(),
+      judge: async () => {
+        throw new Error('an exact match must never cost a model call');
+      },
     }
   );
 
@@ -502,12 +507,77 @@ test('extractAndVerifyPlants: the guard keeps the right cultivar', async () => {
   assert.equal(out.funnel.stage, 'ok');
 });
 
+/*
+ * The other half of the trade, and the failure that prompted it.
+ *
+ * A threshold cannot tell "the same plant, spelled differently" from "a
+ * different plant of the same genus" - the two score in the same band. Live,
+ * that meant al-haderech was reported as not stocking Monstera deliciosa while
+ * listing "מונסטרה דליסיוסה ע' 12" at ₪39. Ranking now hands the middle band to
+ * the model, so a row it approves is kept even though ranking alone would not
+ * have shown it.
+ */
+test('extractAndVerifyPlants: a row the model approves is kept, whatever it scored', async () => {
+  const plan = buildQueryPlan({
+    original: 'Monstera deliciosa',
+    /* The transliteration the planning call produced; the shop uses another. */
+    hebrew: 'מונסטרה דלישיוזה',
+    latin: 'Monstera deliciosa',
+  });
+
+  let asked: string[] = [];
+  const out = await extractAndVerifyPlants(
+    { markdown: PRICED_MD, query: 'Monstera deliciosa', site: 'al-haderech.co.il', openaiKey: 'k', plan },
+    {
+      extract: async () => [
+        { name: 'מונסטרה בכלי קרמיקה', price: '₪99', availability: 'in_stock' },
+      ],
+      verify: async () => verdict(),
+      judge: async (_q, names) => {
+        asked = names;
+        return names.map((name) => ({ name, matches: true, reason: 'a plain Monstera deliciosa' }));
+      },
+    }
+  );
+
+  assert.deepEqual(asked, ['מונסטרה בכלי קרמיקה'], 'the uncertain row is the one asked about');
+  assert.equal(out.plants.length, 1);
+  assert.equal(out.funnel.stage, 'ok');
+});
+
+test('extractAndVerifyPlants: an adjudicator that fails falls back to ranking, not to trust', async () => {
+  const plan = buildQueryPlan({
+    original: 'Alocasia Regal Shield',
+    hebrew: 'אלוקסיה ריגל שילד',
+    latin: 'Alocasia Regal Shield',
+  });
+
+  const out = await extractAndVerifyPlants(
+    { markdown: PRICED_MD, query: 'Alocasia Regal Shield', site: 'x.co.il', openaiKey: 'k', plan },
+    {
+      extract: async () => [{ name: 'אלוקסיה זברינה', price: '₪385', availability: 'in_stock' }],
+      verify: async () => verdict(),
+      judge: async () => {
+        throw new Error('OpenAI 500');
+      },
+    }
+  );
+
+  assert.deepEqual(out.plants, [], 'the model being down is not a reason to offer a Zebrina');
+});
+
 test('extractAndVerifyPlants: with no plan the guard is off, as it was before', async () => {
   // dashboard/server.ts and the older callers pass a plain string and get the
   // old behaviour rather than a silently stricter one.
   const out = await extractAndVerifyPlants(
     { markdown: PRICED_MD, query: 'Alocasia Regal Shield', site: 'x.co.il', openaiKey: 'k' },
-    { extract: async () => [plant('אלוקסיה וונטי')], verify: async () => verdict() }
+    {
+      extract: async () => [plant('אלוקסיה וונטי')],
+      verify: async () => verdict(),
+      judge: async () => {
+        throw new Error('no plan means no adjudication');
+      },
+    }
   );
   assert.equal(out.plants.length, 1);
 });

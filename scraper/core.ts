@@ -34,8 +34,10 @@ import {
   buildQueryPlan,
   isDecisive,
   ladderTerms,
+  normalizeHebrew,
   rankCandidates,
   scoreCandidate,
+  STRONG_MATCH,
   WEAK_MATCH,
   type QueryPlan,
 } from './queryPlan.ts';
@@ -1210,6 +1212,57 @@ ${excerpt}`;
   };
 }
 
+/*
+ * Adjudication pass: is this listing a reasonable answer to what was asked?
+ *
+ * WHY A MODEL AND NOT A THRESHOLD. Ranking answers "how many of the words we
+ * asked for are in this title", which is a proxy for the real question and a
+ * bad one at the edges. It scored "מונסטרה דליסיוסה" at 0.30 against a query
+ * spelled "מונסטרה דלישיוזה" and dropped it, and it would score "אלוקסיה
+ * זברינה" for a Regal Shield query at roughly the same place. No cut through
+ * that number separates the two - one is the plant under another spelling, the
+ * other is a different plant of the same genus, and telling them apart is a
+ * judgement about words. So the genus bar is all ranking enforces now, and the
+ * middle is put to the model in the plainest possible terms.
+ *
+ * Asked once per shop with every uncertain row, so a fan-out pays at most one
+ * extra call per nursery that returned something of the right genus.
+ */
+export interface MatchVerdict {
+  name: string;
+  matches: boolean;
+  reason: string;
+}
+
+export async function judgeMatches(
+  query: string,
+  names: string[],
+  site: string,
+  openaiKey: string
+): Promise<MatchVerdict[]> {
+  const prompt = `A user searched a plant nursery (${site}) for: "${query}".
+The shop's catalogue returned the product titles below. They are mostly Hebrew, and Hebrew transliterations of Latin plant names vary between shops - "דליסיוסה", "דלסיוסה" and "דלישיוזה" are all Monstera deliciosa, and a title may add a pot size, a colour, or the word מבצע (sale).
+For EACH title, decide one thing: is this product the SAME PLANT the user asked for?
+Say true when the title names the same plant, allowing for: a different transliteration, a different pot size or container, a sale prefix, a colour or size word, or the plain species with no cultivar or variety named at all.
+Say false when the title names a DIFFERENT plant. This is the common case and the one that matters: a different species or cultivar of the same genus is NOT a match, however close the name looks and however much cheaper it is. Monstera adansonii (also sold as "מונסטרה מאנקי" / Monkey Mask) is not Monstera deliciosa. Alocasia Zebrina is not Alocasia Regal Shield. Ficus elastica is not Ficus lyrata.
+When - and only when - the user's query names a genus with no species or cultivar ("Monstera", "אלוקסיה"), any member of that genus is a match.
+A title that names ONLY the genus and no cultivar ("מונסטרה בכלי קרמיקה") is a match when the plant asked for is the one ordinarily sold under that bare name - a plain "מונסטרה" in an Israeli nursery is a Monstera deliciosa - and not a match when the genus covers several equally common cultivars and the title picks none.
+Being unsure is a false: showing someone the wrong plant is worse than showing them nothing.
+Return ONLY valid JSON in exactly this shape, one entry per title, echoing each title back verbatim:
+{ "verdicts": [ { "name": "<the title, unchanged>", "matches": true, "reason": "<a few words>" } ] }
+
+TITLES:
+${names.map((n) => `- ${n}`).join('\n')}`;
+
+  const parsed = await callOpenAIJson(prompt, openaiKey, 4000);
+  const rows = Array.isArray(parsed?.verdicts) ? parsed.verdicts : [];
+  return rows.map((r: any) => ({
+    name: String(r?.name ?? ''),
+    matches: Boolean(r?.matches),
+    reason: String(r?.reason ?? ''),
+  }));
+}
+
 /* Orchestrate the two-pass pipeline: the model extracts, then audits itself.
  * Returns the verified plants plus the auditor's report. Per the workflow: on
  * is_valid the verified data is returned; on a rejection the failure feedback
@@ -1217,6 +1270,9 @@ ${excerpt}`;
 export interface ExtractDeps {
   extract?: typeof extractPlants;
   verify?: typeof verifyPlantsWithGPT;
+  /* The adjudicator. Injected so tests can settle the middle band without a
+   * network call, the same way extraction and verification are. */
+  judge?: typeof judgeMatches;
 }
 
 /*
@@ -1270,6 +1326,68 @@ export function snapPricesToStructured(plants: Plant[], products: StructuredProd
   });
 }
 
+/*
+ * Hold a list of listings to the question "is this what the user asked for?".
+ *
+ * Ranking settles the two ends for nothing: a STRONG_MATCH row carries every
+ * word we asked for and no cultivar word we did not, and a row that is not even
+ * the right genus scored zero and never became a candidate. Everything between
+ * those is a question about words, so it is asked of the model - once, with the
+ * whole list, and only when there is something uncertain to ask about.
+ *
+ * A failed or unavailable adjudication falls back to the old threshold rather
+ * than to "show everything": the model being down is not a reason to start
+ * telling users a shop stocks a plant it does not.
+ */
+async function adjudicate(
+  plants: Plant[],
+  plan: QueryPlan,
+  query: string,
+  site: string,
+  openaiKey: string | undefined,
+  judge: typeof judgeMatches
+): Promise<Plant[]> {
+  const scored = plants.map((p) => ({ plant: p, score: scoreCandidate(p.name, plan) }));
+  const sure = scored.filter((s) => s.score >= STRONG_MATCH);
+  const uncertain = scored.filter((s) => s.score < STRONG_MATCH);
+  if (uncertain.length === 0) return sure.map((s) => s.plant);
+
+  let verdicts: MatchVerdict[] = [];
+  if (openaiKey) {
+    try {
+      verdicts = await judge(
+        query,
+        uncertain.map((s) => s.plant.name),
+        site,
+        openaiKey
+      );
+    } catch (err: any) {
+      console.log(`   [${site}] ⚠️  match adjudication failed (${err?.message}); using ranking`);
+    }
+  }
+
+  /* Match verdicts back by name. The model echoes the title, but it may
+   * normalise whitespace or entities on the way, so compare canonically. */
+  const said = new Map(verdicts.map((v) => [normalizeHebrew(v.name).trim(), v]));
+  const kept = uncertain.filter(({ plant, score }) => {
+    const v = said.get(normalizeHebrew(plant.name).trim());
+    if (!v) {
+      /* Not adjudicated - either the call failed or the model skipped the row.
+       * Fall back to the ranking bar that protected this path before. */
+      const ok = score >= WEAK_MATCH;
+      if (!ok) console.log(`   [${site}] ✂️  dropped "${plant.name}" (relevance ${score.toFixed(2)})`);
+      return ok;
+    }
+    if (!v.matches) {
+      console.log(`   [${site}] ✂️  dropped "${plant.name}" - not a match: ${v.reason}`);
+      return false;
+    }
+    return true;
+  });
+
+  return [...sure.map((s) => s.plant), ...kept.map((k) => k.plant)];
+}
+
 export async function extractAndVerifyPlants(
   opts: {
     markdown: string;
@@ -1303,7 +1421,7 @@ export async function extractAndVerifyPlants(
   deps: ExtractDeps = {}
 ): Promise<PipelineResult> {
   const { markdown, query, site, openaiKey, html = '', url = '', plan } = opts;
-  const { extract = extractPlants, verify = verifyPlantsWithGPT } = deps;
+  const { extract = extractPlants, verify = verifyPlantsWithGPT, judge = judgeMatches } = deps;
 
   /*
    * Structured data first (SCRAPE-ACCURACY-PLAN Phase 1). Measured on the 28
@@ -1363,6 +1481,42 @@ export async function extractAndVerifyPlants(
           excerptChars: excerpt.length,
           extracted: structured.length,
           kept: structured.length,
+        },
+      };
+    }
+    /*
+     * Candidates of the right genus, but ranking cannot say which - if any - is
+     * the plant. This used to mean the extraction and verification passes, which
+     * is two model calls spent re-reading names and prices we already hold from
+     * the shop's own JSON. The only open question is whether these listings
+     * answer the query, so that is the only question asked, once.
+     */
+    if (opts.products && plan) {
+      const relevant = await adjudicate(
+        structured.map(plantFromStructured),
+        plan,
+        query,
+        site,
+        openaiKey,
+        judge
+      );
+      return {
+        plants: relevant,
+        report: {
+          is_valid: true,
+          confidence_score: relevant.length ? 90 : 0,
+          feedback: relevant.length
+            ? 'shop catalogue rows judged a reasonable match for the query'
+            : 'shop catalogue rows judged not to be this plant',
+          corrected_output: [],
+        },
+        engines: { extractor: 'none', verifier: relevant.length || openaiKey ? OPENAI_MODEL : 'none' },
+        funnel: {
+          stage: relevant.length ? 'ok' : 'rejected',
+          mdChars: markdown.length,
+          excerptChars: excerpt.length,
+          extracted: structured.length,
+          kept: relevant.length,
         },
       };
     }
@@ -1446,21 +1600,16 @@ export async function extractAndVerifyPlants(
    * came back from dizi-garden as "אלוקסיה וונטי" at ₪60. An Alocasia Venti is
    * not a Regal Shield, and the user has no way to tell.
    *
-   * `scoreCandidate` rejects it on the same rule that protects the API path:
-   * the genus matches, but the title carries a cultivar word we never asked
-   * for. Dropping the row costs us a shop; keeping it tells someone a plant is
-   * in stock somewhere it is not, and this codebase already decided a
+   * The guard is no longer a threshold. A cut at WEAK_MATCH stopped the Venti,
+   * and it also stopped "מונסטרה דליסיוסה" from answering a query spelled
+   * "מונסטרה דלישיוזה" - the right plant, dropped over a transliteration. Rows
+   * ranking is sure about are still kept for free; the rest go to `judge`,
+   * which is asked the question directly. Keeping a wrong row tells someone a
+   * plant is in stock somewhere it is not, and this codebase already decided a
    * confidently wrong answer is worse than none.
    */
   const relevant = plan
-    ? verified.filter((p) => {
-        const score = scoreCandidate(p.name, plan);
-        if (score < WEAK_MATCH) {
-          console.log(`   [${site}] ✂️  dropped "${p.name}" (relevance ${score.toFixed(2)})`);
-          return false;
-        }
-        return true;
-      })
+    ? await adjudicate(verified, plan, query, site, openaiKey, judge)
     : verified;
 
   return {
