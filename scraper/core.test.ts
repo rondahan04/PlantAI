@@ -9,6 +9,7 @@ import {
   identifyPlatform,
   searchUrlsFor,
   scoreMarkdown,
+  answeredQuery,
   priceFocusedExcerpt,
   normalizePlatform,
   templateFor,
@@ -47,7 +48,7 @@ import {
   snapPricesToStructured,
 } from './core.ts';
 import type { ScrapeFn, ClassifyFn, Plant, VerificationReport } from './core.ts';
-import { extractStructuredProducts } from './structuredPrice.ts';
+import { extractStructuredProducts, type StructuredProduct } from './structuredPrice.ts';
 import { buildQueryPlan } from './queryPlan.ts';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -167,7 +168,7 @@ test('registerPlatform: learned template is usable by searchUrlsFor', () => {
 });
 
 test('searchUrlsFor: still probes for genuinely unknown platform', () => {
-  assert.equal(searchUrlsFor('https://x.co.il', 'mint', 'unknown').length, 3);
+  assert.equal(searchUrlsFor('https://x.co.il', 'mint', 'unknown').length, 4);
 });
 
 // --- LLM classification (Layer 4) -----------------------------------------
@@ -236,9 +237,80 @@ test('searchUrlsFor: known platforms return exactly one URL', () => {
 
 test('searchUrlsFor: unknown returns an ordered probe list', () => {
   const urls = searchUrlsFor('https://x.co.il', 'mint', 'unknown');
-  assert.equal(urls.length, 3);
+  assert.equal(urls.length, 4);
   assert.ok(urls[0].includes('post_type=product'));
   assert.ok(urls.some((u) => u.includes('/search?q=')));
+  // Joomla/VirtueMart: mashtela-urbanit.co.il runs it and answers nothing else.
+  assert.ok(urls.some((u) => u.includes('/component/virtuemart/')));
+});
+
+// --- answeredQuery: did the shop apply our query? --------------------------
+
+/*
+ * The failure this exists for. A search URL built from the wrong template does
+ * not 404 - it 200s with the shop's homepage, which is full of products and
+ * prices, so every downstream signal says "we read a catalogue and the plant
+ * was not in it". Live, that reported two of seven Tel Aviv pickup shops as not
+ * stocking Monstera while both sell it.
+ */
+const HOMEPAGE = Array.from(
+  { length: 60 },
+  (_, i) => `משתלה אורבנית - הבית של הצמחים - שורה ${i} | קטגוריה ${i}`
+).join('\n');
+
+/* A shelf: prices and product links, the two things a results page has. */
+const SHELF = Array.from(
+  { length: 60 },
+  (_, i) => `מונסטרה מספר ${i} [קנה](https://x.co.il/product/monstera-${i}/) ₪${90 + i}`
+).join('\n');
+/* The same shop's "nothing matched" page - no prices, no products. */
+const EMPTY_RESULTS = [
+  'לא נמצאו מוצרים התואמים את בחירתך',
+  ...Array.from({ length: 60 }, (_, i) => `שורת תפריט ${i} | אודות | צור קשר | משלוחים`),
+].join('\n');
+
+test('answeredQuery: a different answer to a different term means it searched', () => {
+  assert.equal(answeredQuery({ searchText: SHELF, controlText: EMPTY_RESULTS, query: 'מונסטרה' }), true);
+});
+
+test('answeredQuery: the same EMPTY page for both terms is an honest "no"', () => {
+  // perahvagan.co.il: its "no products matched" page is the same page whatever
+  // you fail to find on it. The shop searched; it has neither plant.
+  assert.equal(
+    answeredQuery({ searchText: EMPTY_RESULTS, controlText: EMPTY_RESULTS, query: 'מונסטרה' }),
+    true
+  );
+});
+
+test('answeredQuery: the same FULL page for both terms means the query was ignored', () => {
+  // mashtela-urbanit returns the same nine products for "מונסטרה" and for a
+  // plant that does not exist; yifrach returns its whole front page.
+  assert.equal(answeredQuery({ searchText: SHELF, controlText: SHELF, query: 'מונסטרה' }), false);
+});
+
+test('answeredQuery: the echo is not evidence - the shops that ignore us echo too', () => {
+  // All three shops print the term back in their search box, including the two
+  // that never searched it. Only the control read separates them.
+  const echoedShelf = `תוצאות עבור מונסטרה\n${SHELF}`;
+  assert.equal(answeredQuery({ searchText: echoedShelf, controlText: SHELF, query: 'מונסטרה' }), false);
+});
+
+test('answeredQuery: the homepage can convict but not acquit', () => {
+  assert.equal(answeredQuery({ searchText: HOMEPAGE, homeText: HOMEPAGE, query: 'מונסטרה' }), false);
+  const results =
+    'לא נמצאו מוצרים\n' +
+    Array.from({ length: 60 }, (_, i) => `שורה אחרת לגמרי ${i}`).join('\n');
+  assert.equal(answeredQuery({ searchText: results, homeText: HOMEPAGE, query: 'מונסטרה' }), undefined);
+});
+
+test('answeredQuery: too little text to judge makes no claim', () => {
+  // A parked domain or an error stub serves one short page for every URL.
+  // "Identical" there says something about the stub, not about the shop.
+  assert.equal(answeredQuery({ searchText: 'stub', controlText: 'stub', query: 'x' }), undefined);
+});
+
+test('answeredQuery: with nothing to compare against, no claim', () => {
+  assert.equal(answeredQuery({ searchText: HOMEPAGE, query: 'מונסטרה' }), undefined);
 });
 
 test('searchUrlsFor: query is URL-encoded (no injection / spaces)', () => {
@@ -472,6 +544,8 @@ test('extractAndVerifyPlants: the model may not return a different cultivar', as
         { name: 'אלוקסיה וונטי – קוטר 24', price: '₪60', availability: 'in_stock' },
       ],
       verify: async () => verdict(),
+      /* The adjudicator, asked exactly what a person would be asked. */
+      judge: async (_q, names) => names.map((name) => ({ name, matches: false, reason: 'a Venti is not a Regal Shield' })),
     }
   );
 
@@ -495,6 +569,9 @@ test('extractAndVerifyPlants: the guard keeps the right cultivar', async () => {
         { name: 'אלוקסיה ריגל שילד 10 ליטר', price: '₪149', availability: 'in_stock' },
       ],
       verify: async () => verdict(),
+      judge: async () => {
+        throw new Error('an exact match must never cost a model call');
+      },
     }
   );
 
@@ -502,12 +579,125 @@ test('extractAndVerifyPlants: the guard keeps the right cultivar', async () => {
   assert.equal(out.funnel.stage, 'ok');
 });
 
+/*
+ * Found live at netaplants.co.il, which stocks both plants.
+ *
+ * "Decisive" says ranking identified the product, not that every row handed to
+ * it is that product - and `cheapestMatch` downstream takes the lowest price in
+ * whatever list comes back. A Ficus lyrata search returned "פיקוס כינורי" at
+ * ₪118 scoring 1.00 alongside "פיקוס גומי" (a rubber plant) at ₪35 scoring
+ * 0.30, and the ₪35 rubber plant is what the user was shown.
+ */
+test('extractAndVerifyPlants: a decisive answer carries only the plant, not the shelf', async () => {
+  const plan = buildQueryPlan({
+    original: 'Ficus lyrata',
+    hebrew: 'פיקוס ליראטה',
+    latin: 'Ficus lyrata',
+    altSpellings: ['פיקוס כינורי'],
+  });
+
+  const shelf: StructuredProduct[] = [
+    { name: 'פיקוס כינורי', price: 118, currency: 'ILS', availability: 'in_stock', source: 'api' },
+    { name: 'פיקוס גומי', price: 35, currency: 'ILS', availability: 'in_stock', source: 'api' },
+  ];
+
+  const out = await extractAndVerifyPlants(
+    {
+      markdown: '',
+      query: 'Ficus lyrata',
+      site: 'netaplants.co.il',
+      openaiKey: 'k',
+      plan,
+      products: shelf,
+      catalogueRead: true,
+      decisive: true,
+    },
+    {
+      extract: async () => {
+        throw new Error('a decisive answer must cost no model call');
+      },
+      verify: async () => verdict(),
+    }
+  );
+
+  assert.deepEqual(
+    out.plants.map((p) => p.name),
+    ['פיקוס כינורי'],
+    'a rubber plant must not ride along on a lyrata match and undercut it'
+  );
+});
+
+/*
+ * The other half of the trade, and the failure that prompted it.
+ *
+ * A threshold cannot tell "the same plant, spelled differently" from "a
+ * different plant of the same genus" - the two score in the same band. Live,
+ * that meant al-haderech was reported as not stocking Monstera deliciosa while
+ * listing "מונסטרה דליסיוסה ע' 12" at ₪39. Ranking now hands the middle band to
+ * the model, so a row it approves is kept even though ranking alone would not
+ * have shown it.
+ */
+test('extractAndVerifyPlants: a row the model approves is kept, whatever it scored', async () => {
+  const plan = buildQueryPlan({
+    original: 'Monstera deliciosa',
+    /* The transliteration the planning call produced; the shop uses another. */
+    hebrew: 'מונסטרה דלישיוזה',
+    latin: 'Monstera deliciosa',
+  });
+
+  let asked: string[] = [];
+  const out = await extractAndVerifyPlants(
+    { markdown: PRICED_MD, query: 'Monstera deliciosa', site: 'al-haderech.co.il', openaiKey: 'k', plan },
+    {
+      extract: async () => [
+        { name: 'מונסטרה בכלי קרמיקה', price: '₪99', availability: 'in_stock' },
+      ],
+      verify: async () => verdict(),
+      judge: async (_q, names) => {
+        asked = names;
+        return names.map((name) => ({ name, matches: true, reason: 'a plain Monstera deliciosa' }));
+      },
+    }
+  );
+
+  assert.deepEqual(asked, ['מונסטרה בכלי קרמיקה'], 'the uncertain row is the one asked about');
+  assert.equal(out.plants.length, 1);
+  assert.equal(out.funnel.stage, 'ok');
+});
+
+test('extractAndVerifyPlants: an adjudicator that fails falls back to ranking, not to trust', async () => {
+  const plan = buildQueryPlan({
+    original: 'Alocasia Regal Shield',
+    hebrew: 'אלוקסיה ריגל שילד',
+    latin: 'Alocasia Regal Shield',
+  });
+
+  const out = await extractAndVerifyPlants(
+    { markdown: PRICED_MD, query: 'Alocasia Regal Shield', site: 'x.co.il', openaiKey: 'k', plan },
+    {
+      extract: async () => [{ name: 'אלוקסיה זברינה', price: '₪385', availability: 'in_stock' }],
+      verify: async () => verdict(),
+      judge: async () => {
+        throw new Error('OpenAI 500');
+      },
+    }
+  );
+
+  assert.deepEqual(out.plants, [], 'the model being down is not a reason to offer a Zebrina');
+});
+
 test('extractAndVerifyPlants: with no plan the guard is off, as it was before', async () => {
   // dashboard/server.ts and the older callers pass a plain string and get the
   // old behaviour rather than a silently stricter one.
   const out = await extractAndVerifyPlants(
     { markdown: PRICED_MD, query: 'Alocasia Regal Shield', site: 'x.co.il', openaiKey: 'k' },
-    { extract: async () => [plant('אלוקסיה וונטי')], verify: async () => verdict() }
+    {
+      extract: async () => [plant('אלוקסיה וונטי')],
+      verify: async () => verdict(),
+      judge: async () => {
+        throw new Error('no plan means no adjudication');
+      },
+    }
   );
   assert.equal(out.plants.length, 1);
 });
@@ -1306,6 +1496,58 @@ test('fetchSearchMarkdown: an unconfident probe does not end the search - all pr
   assert.ok(calls.filter((u) => u.includes('%D7%9E')).length >= 2);
 });
 
+/*
+ * The self-heal for a template that answers without searching.
+ *
+ * mashtela-urbanit.co.il was remembered as WooCommerce and is Joomla/VirtueMart:
+ * `?s=` returns its homepage, 200 OK, product markup and all. A 404 would have
+ * triggered forgetHost; a homepage never did, so the shop reported "not
+ * stocked" for everything it sells, every search, indefinitely.
+ */
+test('createSearcher: a template that returns the homepage is forgotten and re-probed', async () => {
+  /* Identifies as WooCommerce - which is exactly the wrong memory, and how the
+   * real shop ended up in known-hosts.json as `woo`. */
+  const home =
+    'woocommerce wc-block\n' +
+    Array.from({ length: 60 }, (_, i) => `משתלה אורבנית - קטגוריה ${i} | צמח ${i} ₪${20 + i}`).join('\n');
+  const results =
+    'תוצאות עבור מרווה\n' +
+    Array.from({ length: 40 }, (_, i) => `[מרווה ${i}](https://x2.co.il/products/sage-${i}) ₪${40 + i}`).join('\n');
+  const asked: string[] = [];
+  const scrape: ScrapeFn = async (url) => {
+    asked.push(url);
+    if (url.includes('component/virtuemart')) return results;
+    return home; // the Woo template and the homepage are the same page here
+  };
+
+  const s = createSearcher('k', { scrape });
+  const r = await s.fetchSearchMarkdown('https://x2.co.il', 'מרווה', 'x2.co.il');
+
+  assert.equal(r.md, results, 'the probe found the search this shop actually has');
+  assert.match(r.picked ?? '', /component\/virtuemart/);
+  assert.ok(
+    asked.some((u) => u.includes('post_type=product')),
+    'the remembered Woo template is tried first - this is the self-heal, not a bypass'
+  );
+  assert.notEqual(r.answered, false, 'a real results page is not reported as unanswered');
+  assert.ok(
+    asked.some((u) => u.includes('component/virtuemart')),
+    `never probed VirtueMart: ${asked.join(' ')}`
+  );
+});
+
+test('createSearcher: when no template searches, the shop is reported as unanswered', async () => {
+  // Nothing here can find a catalogue. The load-bearing part is that we say so
+  // rather than letting the homepage stand in for "this plant is not stocked".
+  const home = Array.from(
+    { length: 60 },
+    (_, i) => `יפרח משתלה - עמוד הבית - שורה ${i} | [צמח ${i}](https://x3.co.il/products/p${i}) ₪${30 + i}`
+  ).join('\n');
+  const s = createSearcher('k', { scrape: async () => home });
+  const r = await s.fetchSearchMarkdown('https://x3.co.il', 'מרווה', 'x3.co.il');
+  assert.equal(r.answered, false);
+});
+
 test('createSearcher: an unknown verdict expires after an hour and the host is re-identified', async () => {
   const c = fakeClock();
   let home = '';
@@ -1446,7 +1688,7 @@ test('fetchSearchMarkdown: probes read as served, then one rendered attempt when
   const r = await s.fetchSearchMarkdown('https://x.co.il', 'מרווה', 'x.co.il');
   assert.equal(r.md, RESULTS);
   const probes = seen.filter((c) => c.url.includes('%D7%9E') && c.waitFor === 0);
-  assert.equal(probes.length, 3);
+  assert.equal(probes.length, 4); // ?s=&post_type, /search?q=, ?s=, VirtueMart
   for (const p of probes) assert.equal(p.tavilyKey, 't');
   const renderedRescue = seen.filter((c) => c.url.includes('%D7%9E') && c.waitFor === RENDER_WAIT_MS);
   assert.equal(renderedRescue.length, 1);

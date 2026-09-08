@@ -66,7 +66,7 @@ function main(): void {
 
   console.log('-'.repeat(76));
   console.log(
-    `retrieval  ${m.hits}/${m.listed} plants retrieved where the shop lists them (${pct(m.retrieval)})`
+    `retrieval  ${m.found}/${m.listed} plants retrieved where the shop lists them (${pct(m.retrieval)})`
   );
   console.log(
     `precision  ${m.hits}/${m.offered} of what we would show a user is the right plant (${pct(m.precision)})`
@@ -74,7 +74,10 @@ function main(): void {
   console.log(
     `quiet      ${m.quiet}/${m.absent} shops correctly reported as not stocking it (${pct(m.quietRate)})`
   );
-  console.log(`undecided  ${m.undecided}/${m.rows.length} rows ranking could not settle - these cost an LLM call`);
+  console.log(
+    `settled    ${m.hits}/${m.listed} of those settled by ranking alone, no model asked (${pct(m.hits / (m.listed || 1))})`
+  );
+  console.log(`undecided  ${m.undecided}/${m.rows.length} rows put to the adjudicating model - these cost an LLM call`);
   if (m.wrong) {
     console.log(
       `\n⚠  ${m.wrong} WRONG products offered without a model - see --verbose. This is the number that must be zero.`
@@ -92,7 +95,7 @@ function main(): void {
    */
   const before = scoreRetrieval('full');
   console.log(
-    `\nfull-phrase search (the old behaviour, same fixtures): retrieval ${pct(before.retrieval)} (${before.hits}/${before.listed})`
+    `\nfull-phrase search (the old behaviour, same fixtures): retrieval ${pct(before.retrieval)} (${before.found}/${before.listed})`
   );
   console.log(`\ncaptured ${m.capturedAt.slice(0, 10)}; ${m.rows.length} labelled shop/plant pairs`);
 }

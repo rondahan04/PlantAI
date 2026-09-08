@@ -89,7 +89,13 @@ export interface Availability {
    *                likelihood: there is no number to honestly report.
    * `error`      - the scrape itself failed.
    */
-  kind: 'estimate' | 'unreadable' | 'error' | 'stock_unknown';
+  /*
+   * `estimate`     - we read the site and the model judged a likelihood.
+   * `unreadable`   - the site was a bot wall or returned nothing.
+   * `error`        - the scrape itself failed.
+   * `no_catalogue` - we read the site and it has no shop at all.
+   */
+  kind: 'estimate' | 'unreadable' | 'error' | 'stock_unknown' | 'no_catalogue';
   confidence?: number; // `estimate` only
   detail: string; // full reasoning / error text, shown on demand
 }
@@ -137,6 +143,13 @@ export interface PipelineDeps {
     decisive?: boolean;
     /* HTTP status of the search URL, when one was read. */
     searchStatus?: number;
+    /* False when the shop ignored the query and served a page that answers
+     * nothing - see answeredQuery in scraper/core.ts. Absence of evidence is
+     * `undefined`, and behaves exactly as before. */
+    answered?: boolean;
+    /* False when the site is a brochure, not a shop: no prices and no product
+     * links anywhere we read. */
+    storefront?: boolean;
   }>;
   extract: (opts: {
     markdown: string;
@@ -319,11 +332,8 @@ async function scrapeOne(
 
   async function readOneSite(): Promise<NurseryResult> {
   try {
-    const { md, html, picked, products, catalogueRead, decisive, searchStatus } = await deps.search(
-      n.website,
-      searchTerm,
-      host
-    );
+    const { md, html, picked, products, catalogueRead, decisive, searchStatus, answered, storefront } =
+      await deps.search(n.website, searchTerm, host);
     const { plants, funnel } = await deps.extract({
       markdown: md,
       query: input.plantName,
@@ -391,7 +401,35 @@ async function scrapeOne(
      * estimate had no consumer - and it cost a full page fetch plus a model call
      * for every nursery that did not match, which is most of them.
      */
-    const readCatalogue = funnel?.stage === 'no_match' || funnel?.stage === 'rejected';
+    /*
+     * `answered === false` means the shop handed back a page that ignores the
+     * query - its homepage, usually, because the search URL we built is not the
+     * one it uses. Such a page is full of products, so every other signal here
+     * says "we read the catalogue": the extractor ran, matched nothing, and the
+     * funnel closed at no_match. Saying "not stocked" on that basis is a
+     * confident wrong answer about a shop that may well have the plant on the
+     * shelf, and it is what mashtela-urbanit and yifrach were getting.
+     */
+    const readCatalogue =
+      (funnel?.stage === 'no_match' || funnel?.stage === 'rejected') && answered !== false;
+    /*
+     * A nursery with no shop on its website. Not a failure to read - we read it
+     * fine, and it sells nothing online. "We could not check" invites the user
+     * to wait for a check that will never succeed; the useful thing to say is
+     * that this one takes a phone call. yahalomr.co.il is eight kilobytes of
+     * exactly this.
+     */
+    if (!readCatalogue && storefront === false) {
+      return {
+        ...base,
+        outcome: 'not_found',
+        availability: {
+          kind: 'no_catalogue',
+          detail: 'This nursery does not sell online, so call them to check what they have.',
+        },
+      };
+    }
+
     return {
       ...base,
       outcome: readCatalogue ? 'not_sold' : 'not_found',

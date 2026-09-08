@@ -84,6 +84,34 @@ test('the Store API always states stock, so this route never answers unknown', (
   assert.equal(wooProduct(wooRow({ is_in_stock: false }), ORIGIN)!.availability, 'out_of_stock');
 });
 
+/*
+ * netaplants.co.il sells every plant in several pot sizes, so every row is a
+ * variable product priced "0" with the real numbers in `price_range`. Reading
+ * `price` alone made a full catalogue look like an empty one - each row priced
+ * zero and dropped by the guard below.
+ */
+test('a variable product is priced from its range, not dropped as free', () => {
+  const row = wooRow({
+    prices: {
+      price: '0',
+      currency_minor_unit: 2,
+      price_range: { min_amount: '4200', max_amount: '49800' },
+    },
+  });
+  assert.equal(wooProduct(row, ORIGIN)!.price, 42);
+});
+
+test('a stated price still outranks the range it sits in', () => {
+  const row = wooRow({
+    prices: {
+      price: '5500',
+      currency_minor_unit: 2,
+      price_range: { min_amount: '4200', max_amount: '49800' },
+    },
+  });
+  assert.equal(wooProduct(row, ORIGIN)!.price, 55);
+});
+
 test('a row with no usable price is dropped, not priced at zero', () => {
   assert.equal(wooProduct(wooRow({ prices: { price: '0', currency_minor_unit: 2 } }), ORIGIN), null);
   assert.equal(wooProduct(wooRow({ name: '  ' }), ORIGIN), null);
