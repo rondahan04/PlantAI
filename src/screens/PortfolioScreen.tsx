@@ -35,7 +35,7 @@ import {
   type DueItem,
   type PortfolioFilter,
 } from '../lib/portfolio';
-import { directionalIconStyle } from '../lib/rtl';
+import { directionalIconStyle, iconRow, isRTL } from '../lib/rtl';
 import type { CareKind, StoredPlant } from '../services/plantStore';
 import { APP_LOGO } from '../brand';
 import { FEATURES } from '../content/features';
@@ -471,6 +471,34 @@ export default function PortfolioScreen({ navigation }: Props) {
     const kind = KIND_ICON[item.kind];
     const tint = t.color[kind.tint];
     const name = plantDisplayName(item.plant);
+
+    /* Thunks rather than elements, so each is built once in the order the
+     * direction actually needs and React still sees a stable key per slot. */
+    const icon = () => (
+      <View key="icon" style={[s.dueIcon, { backgroundColor: t.color.surfaceMuted }]}>
+        <Ionicons name={kind.icon} size={14} color={tint} />
+      </View>
+    );
+    const plantName = () => (
+      <Text key="name" style={s.dueName} numberOfLines={1}>
+        {name}
+      </Text>
+    );
+    const label = () => (
+      <Text key="label" style={[s.dueLabel, { color: tint }]} numberOfLines={1}>
+        {item.label}
+      </Text>
+    );
+    const chevron = () => (
+      <Ionicons
+        key="chevron"
+        name="chevron-forward"
+        size={14}
+        color={t.color.textMuted}
+        style={directionalIconStyle}
+      />
+    );
+
     return (
       <Pressable
         key={`${item.plant.id}:${item.kind}`}
@@ -479,21 +507,23 @@ export default function PortfolioScreen({ navigation }: Props) {
         accessibilityRole="button"
         accessibilityLabel={`${name}, ${item.label}`}
       >
-        <View style={[s.dueIcon, { backgroundColor: t.color.surfaceMuted }]}>
-          <Ionicons name={kind.icon} size={14} color={tint} />
-        </View>
-        <Text style={s.dueName} numberOfLines={1}>
-          {name}
-        </Text>
-        <Text style={[s.dueLabel, { color: tint }]} numberOfLines={1}>
-          {item.label}
-        </Text>
-        <Ionicons
-          name="chevron-forward"
-          size={14}
-          color={t.color.textMuted}
-          style={directionalIconStyle}
-        />
+        {/*
+          The one row in the app whose order is not the same in both
+          directions, so it is written out rather than mirrored.
+
+          Yoga puts the first child on the LEADING edge, which in Hebrew is the
+          right - so the plain order below reads icon, name, label, chevron
+          left-to-right in English and mirrors cleanly. In Hebrew that pushed
+          the droplet to the right, where it sat between the card edge and the
+          plant's name and split the two lines of text the row is actually
+          made of. Listing the name FIRST under RTL puts it on that leading
+          right edge, the label follows it inward, and the two glyphs land
+          together on the left with the chevron outermost - still the "go here"
+          affordance on the edge the user swipes from.
+        */}
+        {(isRTL
+          ? [plantName(), label(), icon(), chevron()]
+          : [icon(), plantName(), label(), chevron()])}
       </Pressable>
     );
   };
@@ -865,7 +895,11 @@ function makeStyles(t: Theme) {
     libScroll: { paddingBottom: t.space['3xl'] + TAB_BAR_CLEARANCE, paddingHorizontal: t.space.xl },
     libHeader: {
       flexDirection: 'row',
-      alignItems: 'flex-start',
+      /* Centre, not flex-start: the buttons belong to the masthead as a whole.
+       * Pinned to the top they lined up with the eyebrow - the smallest line
+       * on the screen - and read as floating above the title rather than
+       * sitting beside it. */
+      alignItems: 'center',
       gap: t.space.sm,
       paddingTop: t.space.lg,
       paddingBottom: t.space.lg,
@@ -884,7 +918,7 @@ function makeStyles(t: Theme) {
       ...t.elevation.card,
     },
     addBtn: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       gap: t.space.xs,
       backgroundColor: t.color.primary,
@@ -909,7 +943,7 @@ function makeStyles(t: Theme) {
     bulkRow: { flexDirection: 'row', gap: t.space.md, marginTop: t.space.lg },
     bulkBtn: {
       flex: 1,
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       justifyContent: 'center',
       gap: t.space.sm,
@@ -950,7 +984,7 @@ function makeStyles(t: Theme) {
       paddingBottom: t.space.md,
     },
     chip: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       gap: 6,
       paddingHorizontal: t.space.lg,
@@ -1066,7 +1100,7 @@ function makeStyles(t: Theme) {
 
     ctaWrap: { marginBottom: t.space.md },
     ctaBtn: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       justifyContent: 'center',
       gap: t.space.sm,
@@ -1081,7 +1115,7 @@ function makeStyles(t: Theme) {
 
     secondaryWrap: { marginBottom: t.space['2xl'] },
     secondaryBtn: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       justifyContent: 'center',
       gap: t.space.sm,

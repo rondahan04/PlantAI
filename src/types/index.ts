@@ -87,6 +87,20 @@ export interface Treatment {
    * before this field existed. Only the last falls through to the parser.
    */
   product?: string;
+  /*
+   * The SAME product, written for a human in the app's language.
+   *
+   * `product` is a search term that gets typed into an Israeli nursery's site,
+   * so it stays English on purpose - translating it is how the buy button
+   * stops finding anything. But it was also the button's LABEL, which is how a
+   * Hebrew treatment card ended up reading "למצוא Balanced aroid fertilizer
+   * בסביבה". Two jobs, two fields: this one is read, that one is searched.
+   *
+   * Absent on every record written before the split, and on any English
+   * diagnosis, where the two would be identical anyway - callers fall back to
+   * `product`.
+   */
+  productLabel?: string;
 }
 
 export interface Nursery {

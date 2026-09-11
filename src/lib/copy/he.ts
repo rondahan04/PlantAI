@@ -26,7 +26,7 @@ export const he: Copy = {
     everyNDays: (min: number) => `כל ${min} ימים`,
     everyRange: (min: number, max: number) => `כל ${min}-${max} ימים`,
     everyDay: 'כל יום',
-    tapToStart: (interval: string) => `${interval} · הקישו כדי להתחיל`,
+    tapToStart: (interval: string) => `הקישו כדי להתחיל · ${interval}`,
     overdue: (days: number) => (days === 1 ? 'באיחור של יום' : `באיחור של ${days} ימים`),
     dueNowRange: 'הגיע הזמן - בדקו את האדמה',
     dueToday: 'להשקות היום',
@@ -35,7 +35,7 @@ export const he: Copy = {
       days === 1 ? 'ההשקיה הבאה בעוד יום' : `ההשקיה הבאה בעוד ${days} ימים`,
   },
   care: {
-    tapToStart: (interval: string) => `כל ${interval} · הקישו כדי להתחיל`,
+    tapToStart: (interval: string) => `הקישו כדי להתחיל · כל ${interval}`,
     dueNowRepot: 'הגיע הזמן - בדקו את השורשים',
     dueNow: 'הגיע הזמן',
     nextTomorrow: (kind: 'repot' | 'fertilizer') =>
@@ -70,6 +70,13 @@ export const he: Copy = {
       hours === 1 ? 'המלאי נבדק לפני שעה' : `המלאי נבדק לפני ${hours} שעות`,
     yesterday: 'המלאי נבדק אתמול',
     daysAgo: (days: number) => `המלאי נבדק לפני ${days} ימים`,
+  },
+  condition: {
+    healthy: 'בריא',
+    mild: 'בעיה קלה',
+    moderate: 'הידרדרות בינונית',
+    severe: 'הידרדרות חמורה',
+    critical: 'מצב קריטי',
   },
   triage: {
     attention: 'דורשים טיפול',
@@ -286,8 +293,8 @@ export const he: Copy = {
     editA11y: (name: string) => `עריכת ${name}`,
   },
   bulkCare: {
-    diagnoseAll: 'אבחון הכול',
-    waterAll: 'השקיית הכול',
+    diagnoseAll: 'אבחן הכל',
+    waterAll: 'השקה הכל',
     diagnoseConfirmTitle: 'לאבחן את כל הצמחים?',
     diagnoseConfirmBody: (n: number, skipped: number) =>
       skipped === 0
@@ -477,7 +484,7 @@ export const he: Copy = {
     findProduct: (product: string) => `למצוא ${product} בסביבה`,
     findProductA11y: (product: string) => `למצוא ${product} במשתלות בסביבתכם`,
     careSchedule: 'לוח טיפול',
-    findAtNursery: 'למצוא את הצמח במשתלה',
+    findAtNursery: 'חפש לי את הצמח הזה במשתלה קרובה',
     findingNurseries: 'מחפשים משתלות...',
     findAtNurseryA11y: (name: string) => `למצוא משתלות שמוכרות ${name}`,
     replacementTitle: 'למצוא תחליף בריא',
@@ -506,8 +513,8 @@ export const he: Copy = {
     leca: { label: 'לקה', description: 'כדורי חרס עם מאגר מים' },
     pon: { label: 'פון', description: 'פומיס, זאוליט ולבה עם דשן בשחרור איטי' },
     sphagnum: { label: 'ספגנום', description: 'טחב סיבי שמחזיק הרבה מים' },
-    bark: { label: 'קליפות לסחלבים', description: 'קליפות גסות, מאווררת מאוד, מתייבשת מהר' },
-    perlite_mix: { label: 'עתיר פרלית', description: 'רובה פרלית, כמעט הידרופוני' },
+    bark: { label: 'מצע סחלבים', description: 'קליפות גסות, מאווררת מאוד, מתייבשת מהר' },
+    perlite_mix: { label: 'פרלייט', description: 'רובה פרלית, כמעט הידרופוני' },
     water: { label: 'מים', description: 'השרשה או גידול במים בלבד' },
   },
   carePlan: {

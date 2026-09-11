@@ -43,6 +43,7 @@ import type { RootStackParamList } from '../types';
 import { plantRepo } from '../services/plantRepoInstance';
 import { plantDisplayName } from '../lib/portfolio';
 import { copy } from '../services/language';
+import { iconRow } from '../lib/rtl';
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList, 'EditPlant'>;
@@ -338,7 +339,7 @@ function makeStyles(t: Theme) {
     photoButtons: { flexDirection: 'row', gap: t.space.md },
     photoBtn: {
       flex: 1,
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       justifyContent: 'center',
       gap: t.space.sm,

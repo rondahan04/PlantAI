@@ -6,7 +6,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
-import { directionalIconStyle } from '../lib/rtl';
+import { directionalIconStyle, iconRow } from '../lib/rtl';
 import { plantRepo } from '../services/plantRepoInstance';
 import { careHistory, type CareKind } from '../services/plantStore';
 import { dayKey, dayKeySet, monthView, shiftMonth, weekdayLabels } from '../lib/calendar';
@@ -497,7 +497,7 @@ const makeStyles = (t: Theme) =>
     recent: { marginTop: t.space.xl },
     recentTitle: { ...t.type.heading, color: t.color.foreground, marginBottom: t.space.sm },
     recentRow: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       gap: t.space.sm,
       paddingVertical: t.space.sm,

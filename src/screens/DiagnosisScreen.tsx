@@ -17,13 +17,14 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, DeliveryMode } from '../types';
 import { Theme, useTheme } from '../theme';
-import { directionalIconStyle } from '../lib/rtl';
+import { directionalIconStyle, iconRow } from '../lib/rtl';
+import { conditionLabel } from '../lib/conditionLabel';
 import { useNurserySearch } from '../hooks/useNurserySearch';
 import { plantRepo } from '../services/plantRepoInstance';
 import { plantLibrary } from '../services/plantLibrary';
 import { plantPhotos } from '../services/photos';
 import { identityConfidence } from '../lib/confidence';
-import { treatmentProduct } from '../lib/treatments';
+import { treatmentProduct, treatmentProductLabel } from '../lib/treatments';
 import { useSession } from '../hooks/useSession';
 import { getSessionHint } from '../services/sessionHint';
 import { copy } from '../services/language';
@@ -239,7 +240,9 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
           />
             <View style={s.conditionBadge}>
               <Ionicons name={condition.icon} size={16} color={condition.color} />
-              <Text style={[s.conditionBadgeText, { color: condition.color }]}>{diagnosis.conditionLabel}</Text>
+              <Text style={[s.conditionBadgeText, { color: condition.color }]}>
+                {conditionLabel(diagnosis.condition, diagnosis.conditionLabel, copy.condition)}
+              </Text>
             </View>
           </View>
         </Animated.View>
@@ -355,6 +358,9 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
             </View>
             {diagnosis.treatments.map((tr, i) => {
               const product = treatmentProduct(tr);
+              /* Read on the button, searched for in the shop - see the note on
+               * `productLabel` in src/types/index.ts. */
+              const productName = product ? treatmentProductLabel(tr, product) : '';
               return (
                 <View key={i} style={[s.treatmentCard, tr.urgent && s.treatmentUrgent]}>
                   {tr.urgent && (
@@ -369,10 +375,10 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
                       style={({ pressed }) => [s.shopBtn, pressed && s.shopBtnPressed]}
                       onPress={() => handleFindTreatment(product)}
                       accessibilityRole="button"
-                      accessibilityLabel={copy.diagnosis.findProductA11y(product)}
+                      accessibilityLabel={copy.diagnosis.findProductA11y(productName)}
                     >
                       <Ionicons name="storefront-outline" size={16} color={t.color.primary} />
-                      <Text style={s.shopBtnText}>{copy.diagnosis.findProduct(product)}</Text>
+                      <Text style={s.shopBtnText}>{copy.diagnosis.findProduct(productName)}</Text>
                     </Pressable>
                   )}
                 </View>
@@ -453,7 +459,7 @@ function makeStyles(t: Theme) {
     backText: { ...t.type.label, color: t.color.primary },
     // Mirrors backBtn's 44pt target and width so the title stays centred.
     saveBtn: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       justifyContent: 'flex-end',
       minWidth: 60,
@@ -469,7 +475,7 @@ function makeStyles(t: Theme) {
       position: 'absolute',
       bottom: t.space.md,
       start: t.space.md,
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       gap: t.space.xs,
       paddingHorizontal: t.space.md,
@@ -489,11 +495,11 @@ function makeStyles(t: Theme) {
       padding: t.space.lg,
       marginTop: t.space.lg,
     },
-    caveatHeader: { flexDirection: 'row', alignItems: 'center', gap: t.space.sm, marginBottom: t.space.sm },
+    caveatHeader: { ...iconRow, alignItems: 'center', gap: t.space.sm, marginBottom: t.space.sm },
     caveatTitle: { ...t.type.bodyStrong, color: t.color.foreground, flex: 1 },
     caveatBody: { ...t.type.label, color: t.color.textSecondary, fontWeight: '400', marginBottom: t.space.lg },
     caveatBtn: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       justifyContent: 'center',
       gap: t.space.sm,
@@ -521,7 +527,7 @@ function makeStyles(t: Theme) {
     },
     descText: { ...t.type.body, fontSize: 14, lineHeight: 21, color: t.color.textSecondary, writingDirection: 'auto' },
     section: { marginTop: t.space.xl },
-    sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: t.space.sm, marginBottom: t.space.md },
+    sectionTitleRow: { ...iconRow, alignItems: 'center', gap: t.space.sm, marginBottom: t.space.md },
     sectionTitle: { ...t.type.heading, fontSize: 16, color: t.color.foreground },
     issueRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: t.space.sm, gap: t.space.md },
     issueDot: { width: 8, height: 8, borderRadius: 4, marginTop: 7 },
@@ -554,7 +560,7 @@ function makeStyles(t: Theme) {
      * a treatment must not compete with it visually.
      */
     shopBtn: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       alignSelf: 'flex-start',
       gap: t.space.xs,
@@ -605,7 +611,7 @@ function makeStyles(t: Theme) {
     btnPressed: { backgroundColor: t.color.primaryPressed, transform: [{ scale: 0.98 }] },
     findBtnText: { ...t.type.bodyStrong, color: t.color.onPrimary, fontWeight: '700' },
     scanAgainBtn: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       justifyContent: 'center',
       gap: t.space.sm,

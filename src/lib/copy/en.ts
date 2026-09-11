@@ -100,6 +100,19 @@ export const en = {
     yesterday: 'Stock checked yesterday',
     daysAgo: (days: number) => `Stock checked ${days} days ago`,
   },
+  /*
+   * Injected into `conditionLabel` (lib/conditionLabel.ts). Keyed on the health
+   * enum rather than on the model's own sentence, so a plant diagnosed before
+   * the language was switched still shows a badge the reader can read. The copy
+   * test asserts these agree with EN_CONDITION_COPY in that module.
+   */
+  condition: {
+    healthy: 'Healthy',
+    mild: 'Mild concern',
+    moderate: 'Moderate decline',
+    severe: 'Serious decline',
+    critical: 'Critical',
+  },
   triage: {
     attention: 'Needs attention',
     watching: 'Watching',

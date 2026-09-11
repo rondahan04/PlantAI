@@ -29,6 +29,14 @@ export interface Treatment {
   title: string;
   description: string;
   urgent: boolean;
+  /* What to search a nursery for. English in every language - it is typed into
+   * an Israeli shop's search box. Optional: the model may say there is nothing
+   * to buy, and older responses predate the field. */
+  product?: string;
+  /* The same product named for a reader, in the response's own language. The
+   * button's words, where `product` is the button's query. See the note in
+   * src/types/index.ts. */
+  productLabel?: string;
 }
 
 export type Condition = 'healthy' | 'mild' | 'moderate' | 'severe' | 'critical';
@@ -871,12 +879,12 @@ export async function stubAssessHealth(
 function languageRule(lang: Lang): string {
   if (lang !== 'he') return '';
   return `
-LANGUAGE: write every piece of human-readable text in Hebrew - "conditionLabel", "issues", "description", every treatment "title" and "description", and every "carePlan" sentence.
+LANGUAGE: write every piece of human-readable text in Hebrew - "conditionLabel", "issues", "description", every treatment "title", "description" and "productLabel", and every "carePlan" sentence.
 DO NOT TRANSLATE, and return these exactly as specified in English:
 - the JSON field names
 - "condition", which must stay one of: healthy, mild, moderate, severe, critical
 - "scientificName" and the botanical name in "variety", which are Latin
-- "product", which is a search term typed into a shop
+- "product", which is a search term typed into a shop (its readable twin, "productLabel", IS translated)
 Numbers and booleans stay as they are.
 `;
 }
@@ -888,7 +896,7 @@ function prompt(id: Identification, lang: Lang = 'en'): string {
   "conditionLabel": "Healthy",
   "issues": ["short sentence naming one visible problem", "another one"],
   "treatments": [
-    { "title": "string", "description": "string (max 100 chars)", "urgent": false, "product": "string" }
+    { "title": "string", "description": "string (max 100 chars)", "urgent": false, "product": "string", "productLabel": "string" }
   ],
   "description": "string (max 180 chars)",
   "canBeSaved": true,
@@ -902,6 +910,8 @@ function prompt(id: Identification, lang: Lang = 'en'): string {
   }
 }
 Each treatment's "product" is what to search a nursery for - a substance or brand name, IN ENGLISH, e.g. "Neem oil" or "Confidor". Use an EMPTY STRING when the treatment is an action rather than something to buy ("wipe the scale off by hand"). This drives a shop link, so never put a verb or a sentence in it.
+
+"productLabel" is the SAME product named for a person to read, in the language of this response. It is what the button says; "product" is what gets typed into the shop. In English the two are identical - just repeat it. Use an empty string whenever "product" is empty.
 
 condition must be one of: healthy, mild, moderate, severe, critical, reflecting what you see in the photo. "issues" must be an array of PLAIN STRINGS - one short sentence per visible problem, never objects. Use [] if the plant is healthy. Provide 2-3 treatments targeting those problems (or general care tips if healthy).
 
@@ -925,7 +935,8 @@ function isTreatment(value: unknown): value is Treatment {
     typeof t.urgent === 'boolean' &&
     /* Optional: an older model response has no opinion, and the client falls
      * back to parsing the title for those. */
-    (t.product === undefined || typeof t.product === 'string')
+    (t.product === undefined || typeof t.product === 'string') &&
+    (t.productLabel === undefined || typeof t.productLabel === 'string')
   );
 }
 

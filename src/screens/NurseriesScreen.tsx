@@ -9,7 +9,7 @@ import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, Nursery, DeliveryMode } from '../types';
 import { Theme, useTheme } from '../theme';
 import { copy } from '../services/language';
-import { directionalIconStyle } from '../lib/rtl';
+import { directionalIconStyle, iconRow } from '../lib/rtl';
 import { fetchNearbyNurseries } from '../services/nurseryService';
 import { stockAgeLabel } from '../lib/freshness';
 import { waMeLink } from '../lib/whatsapp';
@@ -544,7 +544,7 @@ function makeStyles(t: Theme) {
     headerSub: { ...t.type.caption, color: t.color.textMuted, marginTop: 1 },
 
     freshRow: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       gap: t.space.xs,
       paddingHorizontal: t.space.xl,
@@ -574,7 +574,7 @@ function makeStyles(t: Theme) {
     },
     modeBtn: {
       flex: 1,
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       justifyContent: 'center',
       gap: t.space.xs,
@@ -620,7 +620,7 @@ function makeStyles(t: Theme) {
       position: 'absolute',
       bottom: t.space.sm,
       end: t.space.sm,
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       gap: t.space.xs,
       backgroundColor: t.color.surface,
@@ -643,7 +643,7 @@ function makeStyles(t: Theme) {
     priceTagMuted: { backgroundColor: t.color.surfaceMuted },
     priceTextMuted: { color: t.color.textSecondary },
     priceText: { ...t.type.bodyStrong, fontSize: 16, fontWeight: '800', color: t.color.primary },
-    metaRow: { flexDirection: 'row', alignItems: 'center', gap: t.space.xs, marginBottom: t.space.xs },
+    metaRow: { ...iconRow, alignItems: 'center', gap: t.space.xs, marginBottom: t.space.xs },
     metaText: { ...t.type.label, fontWeight: '400', fontSize: 13, color: t.color.textSecondary, flex: 1, writingDirection: 'auto' },
     infoPill: {
       flexDirection: 'row',
@@ -663,7 +663,7 @@ function makeStyles(t: Theme) {
     actionRow: { flexDirection: 'row', gap: t.space.sm },
     actionSecondary: {
       flex: 1,
-      flexDirection: 'row',
+      ...iconRow,
       gap: t.space.xs,
       paddingVertical: t.space.md,
       borderRadius: t.radius.md,
@@ -689,7 +689,7 @@ function makeStyles(t: Theme) {
     actionPrimaryText: { ...t.type.label, fontWeight: '700', fontSize: 13, color: t.color.onPrimary },
     map: { flex: 1 },
     scanMoreBtn: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       justifyContent: 'center',
       gap: t.space.sm,

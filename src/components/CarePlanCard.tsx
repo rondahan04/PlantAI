@@ -6,6 +6,7 @@ import type { CarePlan } from '../types';
 import type { SoilCarePlan } from '../lib/genusCarePlan';
 import { soilMediumById, type SoilMediumId } from '../lib/soilMedia';
 import { copy } from '../services/language';
+import { iconRow } from '../lib/rtl';
 
 /*
  * The standing care advice, and WHOSE advice it is.
@@ -203,7 +204,7 @@ const makeStyles = (t: Theme) =>
        * warning is the common case. */
       gap: t.space.sm,
     },
-    warnRow: { flexDirection: 'row', alignItems: 'flex-start', gap: t.space.sm },
+    warnRow: { ...iconRow, alignItems: 'flex-start', gap: t.space.sm },
     warnText: {
       ...t.type.body,
       color: t.color.foreground,
