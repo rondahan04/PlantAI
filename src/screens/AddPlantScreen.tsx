@@ -48,6 +48,7 @@ import { copy, getLanguage } from '../services/language';
 import { getSessionHint } from '../services/sessionHint';
 import { plantPhotos } from '../services/photos';
 import { genusCarePlans } from '../services/genusCarePlans';
+import { iconRow } from '../lib/rtl';
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AddPlant'>;
@@ -412,7 +413,7 @@ function makeStyles(t: Theme) {
     photoButtons: { flexDirection: 'row', gap: t.space.md },
     photoBtn: {
       flex: 1,
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       justifyContent: 'center',
       gap: t.space.sm,

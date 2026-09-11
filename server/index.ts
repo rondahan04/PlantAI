@@ -6,6 +6,7 @@
  *   GET  /health                    → liveness + gate/job counters (O1, O3)
  *   POST /api/diagnose              → PlantDiagnosis            (A3, billable)
  *   POST /api/care-plan             → { bySoil } per genus      (billable)
+ *   POST /api/translate-diagnosis   → the same prose, translated  (billable)
  *   POST /api/nurseries             → { jobId }                 (E12, billable)
  *   GET  /api/nurseries/job/:id     → job state / result        (E12, free)
  *
@@ -38,6 +39,13 @@ import { runNurserySearch, type PipelineDeps, type NurseryResult } from '../scra
 import { clientIp, createGate, readGateConfig } from './gate.ts';
 import { createJobStore } from './jobs.ts';
 import { createNurseryCache, searchKey } from './nurseryCache.ts';
+import {
+  translateDiagnosis,
+  openAiTranslate,
+  tooLarge,
+  TranslateError,
+  type TranslatableFields,
+} from './translateDiagnosis.ts';
 import { createScrapeHealth } from './scrapeHealth.ts';
 import {
   DiagnosisServiceError,
@@ -292,6 +300,44 @@ function readLang(value: unknown): Lang {
   return value === 'he' ? 'he' : 'en';
 }
 
+/*
+ * A saved diagnosis, read defensively into the shape the translator accepts.
+ *
+ * Coerced rather than validated: every field is optional on the wire because
+ * an older installed build, or a record written before a field existed, is a
+ * normal thing to be handed. A missing list becomes an empty one and a missing
+ * string becomes '', which translate to nothing and cost nothing - whereas a
+ * 400 here would strand exactly the oldest records this endpoint exists to
+ * repair.
+ */
+function readFields(value: unknown): TranslatableFields {
+  const d = (value ?? {}) as Record<string, any>;
+  const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+  const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+  const plan = d.carePlan;
+
+  return {
+    description: str(d.description),
+    issues: list(d.issues).map(str),
+    treatments: list(d.treatments).map((t: any) => ({
+      title: str(t?.title),
+      description: str(t?.description),
+      productLabel: str(t?.productLabel),
+    })),
+    ...(plan && typeof plan === 'object'
+      ? {
+          carePlan: {
+            light: str(plan.light),
+            water: str(plan.water),
+            humidity: str(plan.humidity),
+            soil: str(plan.soil),
+            warnings: list(plan.warnings).map(str),
+          },
+        }
+      : {}),
+  };
+}
+
 function readBody(req: http.IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -502,6 +548,58 @@ const server = http.createServer(async (req, res) => {
       const detail =
         err instanceof DiagnosisServiceError ? `${err.provider}: ${err.detail}` : errText(err);
       fail(res, rid, 502, 'diagnosis_failed', 'The plant service did not answer.', detail);
+    }
+    return;
+  }
+
+  // ── POST /api/translate-diagnosis ───────────────────────────────────────────
+  // A diagnosis the user already has, in the language they now read. Billable
+  // and gated like any other model call. The client only calls it for a record
+  // whose prose is in the WRONG language (src/lib/diagnosisLanguage.ts) and
+  // saves the answer, so this is one call per stale plant per language change,
+  // not one per screen open.
+  if (u.pathname === '/api/translate-diagnosis' && req.method === 'POST') {
+    const decision = gate.check(ip, secret);
+    if (!decision.allow) {
+      json(res, decision.status, { error: decision.code, message: decision.message });
+      return;
+    }
+
+    let fields: TranslatableFields;
+    let lang: Lang = 'en';
+    try {
+      const body = JSON.parse((await readBody(req)).toString('utf8'));
+      lang = readLang(body?.lang);
+      fields = readFields(body?.diagnosis);
+      /* Free text from the client goes straight into a prompt, so the size cap
+       * is the cheap half of not being an open text-completion endpoint. */
+      const why = tooLarge(fields);
+      if (why) {
+        json(res, 400, { error: 'bad_request', message: `That is not a diagnosis: ${why}.` });
+        return;
+      }
+    } catch (err: unknown) {
+      const tooBig = err instanceof PayloadTooLarge;
+      fail(
+        res,
+        rid,
+        tooBig ? 413 : 400,
+        tooBig ? 'payload_too_large' : 'bad_request',
+        tooBig ? 'That request is too large to send.' : 'That request could not be read.',
+        errText(err)
+      );
+      return;
+    }
+
+    const t0 = Date.now();
+    logEvent(rid, 'translate_start', { lang, issues: fields.issues.length });
+    try {
+      const translated = await translateDiagnosis(fields, openAiTranslate(OPENAI_KEY!), lang);
+      logEvent(rid, 'translate_done', { lang, ms: Date.now() - t0 });
+      json(res, 200, translated);
+    } catch (err: unknown) {
+      const detail = err instanceof TranslateError ? err.detail : errText(err);
+      fail(res, rid, 502, 'translate_failed', 'The translation service did not answer.', detail);
     }
     return;
   }

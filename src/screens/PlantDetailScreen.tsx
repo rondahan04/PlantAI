@@ -8,7 +8,9 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
-import { directionalIconStyle } from '../lib/rtl';
+import { directionalIconStyle, iconRow } from '../lib/rtl';
+import { conditionLabel } from '../lib/conditionLabel';
+import { translateIfStale } from '../services/diagnosisTranslation';
 import { LOGO_GLYPH } from '../brand';
 import { plantRepo } from '../services/plantRepoInstance';
 import {
@@ -22,7 +24,7 @@ import { SERVER_MAX_BODY_BYTES, megabytes } from '../lib/uploadLimit';
 import { copy, localeTag } from '../services/language';
 import { plantPhotos } from '../services/photos';
 import { intervalLabel, wateringState } from '../lib/watering';
-import { treatmentProduct } from '../lib/treatments';
+import { treatmentProduct, treatmentProductLabel } from '../lib/treatments';
 import { CARE_KINDS, plantCarePlan, soilPlanFor } from '../lib/care';
 import type { GenusCarePlan } from '../lib/genusCarePlan';
 import type { SoilMediumId } from '../lib/soilMedia';
@@ -182,6 +184,35 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
   }, [genus, family, genusPlan]);
 
   /*
+   * A diagnosis written before this user picked their language.
+   *
+   * The model writes the prose once, on the day of the photo, so a library
+   * built in English and then switched to Hebrew keeps showing English
+   * paragraphs under Hebrew headings - a stale record, not a rendering bug.
+   * `translateIfStale` decides (by script, see lib/diagnosisLanguage.ts), so
+   * the common case - a record already in the right language - costs nothing
+   * and never touches the network.
+   *
+   * The result is SAVED, not just rendered: the call is billable, and a
+   * translation thrown away on unmount would be bought again on the next open.
+   * A failure is silent on purpose - the screen keeps showing the diagnosis it
+   * already has, which is what it did before this existed.
+   */
+  useEffect(() => {
+    const current = plant?.diagnosis;
+    if (!plant || !current) return;
+    let alive = true;
+    translateIfStale(plant.id, current).then(async (translated) => {
+      if (!alive || !translated) return;
+      const stored = await plantRepo.setDiagnosis(plant.id, translated);
+      if (alive && stored.ok) setPlant(stored.plant);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [plant?.id, plant?.diagnosis]);
+
+  /*
    * The plant is gone. Reachable if it was removed in another tab of the
    * navigation stack. Say so plainly instead of rendering an empty shell.
    */
@@ -214,6 +245,10 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
   const plantName = plantDisplayName(plant);
   const secondaryName = plantSecondaryName(plant);
   const color = t.color[CONDITION_COLOR[diagnosis?.condition ?? 'healthy'] ?? 'conditionModerate'];
+  /* From the enum, not from what the model wrote - see lib/conditionLabel.ts. */
+  const badgeLabel = diagnosis
+    ? conditionLabel(diagnosis.condition, diagnosis.conditionLabel, copy.condition)
+    : undefined;
 
   /*
    * The two derived facts every schedule below is built from.
@@ -461,9 +496,9 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
         {/* No diagnosis, no badge. An empty coloured pill would read as a
             condition the app failed to load rather than as one it was never
             asked for. */}
-        {!!diagnosis?.conditionLabel && (
+        {!!badgeLabel && (
           <View style={[s.badge, { backgroundColor: color }]}>
-            <Text style={s.badgeText}>{diagnosis.conditionLabel}</Text>
+            <Text style={s.badgeText}>{badgeLabel}</Text>
           </View>
         )}
 
@@ -520,6 +555,9 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
             <Text style={s.sectionTitle}>{copy.plantDetail.treatments}</Text>
             {diagnosis.treatments.map((tr, i) => {
               const product = treatmentProduct(tr);
+              /* Read on the button, searched for in the shop - see the note on
+               * `productLabel` in src/types/index.ts. */
+              const productName = product ? treatmentProductLabel(tr, product) : '';
               return (
                 <View key={i} style={s.treatmentCard}>
                   {tr.urgent && (
@@ -534,10 +572,10 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
                       style={({ pressed }) => [s.shopBtn, pressed && { opacity: 0.6 }]}
                       onPress={() => findNearby(product)}
                       accessibilityRole="button"
-                      accessibilityLabel={copy.plantDetail.findProductA11y(product)}
+                      accessibilityLabel={copy.plantDetail.findProductA11y(productName)}
                     >
                       <Ionicons name="storefront-outline" size={16} color={t.color.primary} />
-                      <Text style={s.shopBtnText}>{copy.plantDetail.findProduct(product)}</Text>
+                      <Text style={s.shopBtnText}>{copy.plantDetail.findProduct(productName)}</Text>
                     </Pressable>
                   )}
                 </View>
@@ -732,7 +770,7 @@ const makeStyles = (t: Theme) =>
      * plant has a problem, when all it has is a diagnosis they never asked for.
      */
     undiagnosed: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       gap: t.space.sm,
       marginTop: t.space.lg,
@@ -794,7 +832,7 @@ const makeStyles = (t: Theme) =>
     /* Quiet outline button inside a treatment card - the filled accent on this
      * screen belongs to watering, and buying supplies must not outrank it. */
     shopBtn: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       alignSelf: 'flex-start',
       gap: t.space.xs,
@@ -822,7 +860,7 @@ const makeStyles = (t: Theme) =>
       writingDirection: 'auto',
     },
     nurseryBtn: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       justifyContent: 'center',
       gap: t.space.sm,

@@ -5,7 +5,8 @@ import { Image as ExpoImage } from 'expo-image';
 import { photoCacheKey } from '../lib/photoCacheKey';
 import { Theme, useTheme } from '../theme';
 import { copy } from '../services/language';
-import { directionalIconStyle } from '../lib/rtl';
+import { directionalIconStyle, iconRow } from '../lib/rtl';
+import { conditionLabel as labelForCondition } from '../lib/conditionLabel';
 import { LOGO_GLYPH } from '../brand';
 import { plantDisplayName, plantSecondaryName, type CareSlot } from '../lib/portfolio';
 import { samePlantCard } from '../lib/plantCardEquality';
@@ -112,7 +113,12 @@ function PlantCard({ plant, slots = EMPTY_SLOTS, onPress, onEdit }: PlantCardPro
    */
   const name = plantDisplayName(plant);
   const secondary = plantSecondaryName(plant);
-  const conditionLabel = diagnosis?.conditionLabel;
+  /* Derived from the enum rather than read straight off the record: the
+   * model's own label is frozen in the language of the day it was written.
+   * See lib/conditionLabel.ts. */
+  const conditionLabel = diagnosis
+    ? labelForCondition(diagnosis.condition, diagnosis.conditionLabel, copy.condition)
+    : undefined;
   const when = relativeDay(plant.savedAt, Date.now());
 
   /*
@@ -191,7 +197,7 @@ function PlantCard({ plant, slots = EMPTY_SLOTS, onPress, onEdit }: PlantCardPro
           dot + text: at a glance down the list the pill's colour is the signal.
         */}
         {pill !== undefined && (
-          <View style={[s.pill, { backgroundColor: pill.wash }]} importantForAccessibility="no">
+          <View style={[s.pill, iconRow, { backgroundColor: pill.wash }]} importantForAccessibility="no">
             <Ionicons name={pill.icon} size={11} color={pill.tint} />
             <Text style={[s.pillText, { color: pill.tint }]} numberOfLines={1}>
               {pill.label}
@@ -298,7 +304,6 @@ const makeStyles = (t: Theme) =>
     thumb: { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0 },
     body: { flex: 1, marginEnd: t.space.sm },
     pill: {
-      flexDirection: 'row',
       alignItems: 'center',
       alignSelf: 'flex-start',
       gap: 4,
@@ -320,7 +325,7 @@ const makeStyles = (t: Theme) =>
     metaRow: { flexDirection: 'row', alignItems: 'flex-start', gap: t.space.sm, marginTop: t.space.sm },
     // Each column takes an equal third and wraps its own label, so a long
     // "Every 18 months" cannot push the column beside it off the card.
-    metaItem: { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 4 },
+    metaItem: { flex: 1, ...iconRow, alignItems: 'flex-start', gap: 4 },
     meta: { ...t.type.caption, color: t.color.textMuted, flexShrink: 1, writingDirection: 'auto' },
   });
 

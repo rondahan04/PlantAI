@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Theme, useTheme } from '../theme';
 import { copy } from '../services/language';
-import { directionalIconStyle } from '../lib/rtl';
+import { directionalIconStyle, iconRow } from '../lib/rtl';
 import type { CarePlan } from '../types';
 import type { CareKind } from '../services/plantStore';
 import type { SoilCarePlan } from '../lib/genusCarePlan';
@@ -373,7 +373,7 @@ const makeStyles = (t: Theme) =>
       ...t.elevation.card,
     },
     headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    heading: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+    heading: { ...iconRow, alignItems: 'center', gap: 5 },
     headingText: { ...t.type.caption, textTransform: 'uppercase', letterSpacing: 0.6 },
     historyBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 28 },
     historyText: { ...t.type.caption, fontWeight: '700' },
@@ -383,7 +383,7 @@ const makeStyles = (t: Theme) =>
     advice: { ...t.type.body, color: t.color.textSecondary, marginTop: t.space.sm, writingDirection: 'auto' },
 
     actionBtn: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       justifyContent: 'center',
       gap: t.space.sm,

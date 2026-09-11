@@ -28,3 +28,21 @@ export const isRTL = I18nManager.isRTL;
 export const mirrorInRTL = isRTL ? ([{ scaleX: -1 }] as const) : ([] as const);
 
 export const directionalIconStyle = { transform: mirrorInRTL } as const;
+
+/*
+ * A row of [icon, label] that must keep the icon on the LEFT in either
+ * writing direction.
+ *
+ * Yoga's mirroring is right for text and wrong for this. `flexDirection: 'row'`
+ * puts the first child on the leading edge, which in Hebrew is the right - so
+ * every icon in the app drifted to the trailing side of its own label and the
+ * glyph stopped introducing the word it belongs to. `row-reverse` under RTL
+ * starts the row from the left instead, so the icon leads visually while the
+ * label still reads right-to-left as Hebrew must.
+ *
+ * Deliberately NOT a general "un-mirror this row" tool: it is for an icon
+ * paired with its label, and applying it to a row whose two ends are separate
+ * controls (a heading and a history link, say) would swap those controls over
+ * and break the mirroring that IS correct.
+ */
+export const iconRow = { flexDirection: isRTL ? 'row-reverse' : 'row' } as const;

@@ -20,7 +20,7 @@ import {
   taskSubtitle,
   type TaskGroup,
 } from '../lib/home';
-import { directionalIconStyle } from '../lib/rtl';
+import { directionalIconStyle, iconRow } from '../lib/rtl';
 import { onboarding } from '../services/onboarding';
 import { useSession } from '../hooks/useSession';
 import { copy, localeTag } from '../services/language';
@@ -416,7 +416,7 @@ const makeStyles = (t: Theme) =>
      * cost of two lines of wrap on any name longer than a few words. */
     heroTitle: { ...t.type.title, color: t.color.onPrimary, marginTop: t.space.sm, writingDirection: 'auto' },
     heroCta: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       alignSelf: 'flex-start',
       gap: t.space.sm,

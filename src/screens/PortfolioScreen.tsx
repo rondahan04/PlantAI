@@ -35,7 +35,7 @@ import {
   type DueItem,
   type PortfolioFilter,
 } from '../lib/portfolio';
-import { directionalIconStyle } from '../lib/rtl';
+import { directionalIconStyle, iconRow, isRTL } from '../lib/rtl';
 import type { CareKind, StoredPlant } from '../services/plantStore';
 import { APP_LOGO } from '../brand';
 import { FEATURES } from '../content/features';
@@ -46,6 +46,10 @@ import { copy } from '../services/language';
 import { diagnoseTargets, waterTargets } from '../lib/bulkCare';
 import { bulkDiagnose } from '../services/bulkDiagnoseInstance';
 import type { BulkProgress } from '../services/bulkDiagnose';
+import { bulkTranslate } from '../services/bulkTranslateInstance';
+import type { TranslateProgress } from '../services/bulkTranslate';
+import { needsCallFor } from '../lib/diagnosisProse';
+import { getLanguage } from '../services/language';
 import PlantCard from '../components/PlantCard';
 import ImportBanner from '../components/ImportBanner';
 import { TAB_BAR_CLEARANCE } from '../navigation/tabBarMetrics';
@@ -142,6 +146,37 @@ export default function PortfolioScreen({ navigation }: Props) {
    * the fold. Opening is the user asking for the whole watering round. */
   const [dueExpanded, setDueExpanded] = useState(false);
   useEffect(() => bulkDiagnose.subscribe(setBulk), []);
+
+  const [translating, setTranslating] = useState<TranslateProgress>(() => bulkTranslate.get());
+  useEffect(() => bulkTranslate.subscribe(setTranslating), []);
+
+  /*
+   * Bring the library into the current language on the way in.
+   *
+   * A language change forces a relaunch (see needsDirectionChange), so this
+   * screen mounting IS the moment after a switch - and at that moment every
+   * plant is stale at once. Doing them lazily would put a fifteen-second wait
+   * behind every tap; doing them here puts it behind the scroll instead.
+   *
+   * Nearly always selects nothing: `needsCallFor` answers from the cache, so a
+   * library already in this language - or one translated on an earlier switch
+   * and switched back - costs no call and shows no progress row. Guarded on
+   * the plant list rather than run once on mount so a library that arrives
+   * from the cloud after first paint is still covered.
+   */
+  useEffect(() => {
+    const lang = getLanguage();
+    const stale = library.plants.filter((p) => needsCallFor(p.diagnosis, lang));
+    if (stale.length > 0) void bulkTranslate.run(stale);
+  }, [library.plants]);
+
+  /* Same as the diagnose job below: refresh the cards as translations land, so
+   * a finished plant stops showing the old language while the rest run. */
+  useEffect(() => {
+    if (translating.state === 'running' || translating.state === 'done') {
+      setLibrary(plantRepo.loadLocal());
+    }
+  }, [translating.done, translating.state]);
 
   /* Refresh the cards as findings land, so a diagnosed plant stops looking
    * untouched while the job is still working through the rest. */
@@ -471,6 +506,34 @@ export default function PortfolioScreen({ navigation }: Props) {
     const kind = KIND_ICON[item.kind];
     const tint = t.color[kind.tint];
     const name = plantDisplayName(item.plant);
+
+    /* Thunks rather than elements, so each is built once in the order the
+     * direction actually needs and React still sees a stable key per slot. */
+    const icon = () => (
+      <View key="icon" style={[s.dueIcon, { backgroundColor: t.color.surfaceMuted }]}>
+        <Ionicons name={kind.icon} size={14} color={tint} />
+      </View>
+    );
+    const plantName = () => (
+      <Text key="name" style={s.dueName} numberOfLines={1}>
+        {name}
+      </Text>
+    );
+    const label = () => (
+      <Text key="label" style={[s.dueLabel, { color: tint }]} numberOfLines={1}>
+        {item.label}
+      </Text>
+    );
+    const chevron = () => (
+      <Ionicons
+        key="chevron"
+        name="chevron-forward"
+        size={14}
+        color={t.color.textMuted}
+        style={directionalIconStyle}
+      />
+    );
+
     return (
       <Pressable
         key={`${item.plant.id}:${item.kind}`}
@@ -479,21 +542,23 @@ export default function PortfolioScreen({ navigation }: Props) {
         accessibilityRole="button"
         accessibilityLabel={`${name}, ${item.label}`}
       >
-        <View style={[s.dueIcon, { backgroundColor: t.color.surfaceMuted }]}>
-          <Ionicons name={kind.icon} size={14} color={tint} />
-        </View>
-        <Text style={s.dueName} numberOfLines={1}>
-          {name}
-        </Text>
-        <Text style={[s.dueLabel, { color: tint }]} numberOfLines={1}>
-          {item.label}
-        </Text>
-        <Ionicons
-          name="chevron-forward"
-          size={14}
-          color={t.color.textMuted}
-          style={directionalIconStyle}
-        />
+        {/*
+          The one row in the app whose order is not the same in both
+          directions, so it is written out rather than mirrored.
+
+          Yoga puts the first child on the LEADING edge, which in Hebrew is the
+          right - so the plain order below reads icon, name, label, chevron
+          left-to-right in English and mirrors cleanly. In Hebrew that pushed
+          the droplet to the right, where it sat between the card edge and the
+          plant's name and split the two lines of text the row is actually
+          made of. Listing the name FIRST under RTL puts it on that leading
+          right edge, the label follows it inward, and the two glyphs land
+          together on the left with the chevron outermost - still the "go here"
+          affordance on the edge the user swipes from.
+        */}
+        {(isRTL
+          ? [plantName(), label(), icon(), chevron()]
+          : [icon(), plantName(), label(), chevron()])}
       </Pressable>
     );
   };
@@ -668,6 +733,48 @@ export default function PortfolioScreen({ navigation }: Props) {
                   </Text>
                 </Pressable>
               </View>
+
+              {/*
+                The same row for the translation pass. Its own block rather than
+                a mode on the one below: the two jobs can be running at once -
+                a bulk diagnosis writes records in the current language while
+                the translator is still working through the old ones - and
+                collapsing them into one row would have to pick a winner.
+              */}
+              {translating.state !== 'idle' && (
+                <View style={s.bulkProgress}>
+                  {translating.state === 'running' ? (
+                    <ActivityIndicator size="small" color={t.color.primary} />
+                  ) : (
+                    <Ionicons name="checkmark-circle" size={18} color={t.color.primary} />
+                  )}
+                  <View style={s.bulkProgressText}>
+                    <Text style={s.bulkProgressTitle} numberOfLines={1}>
+                      {translating.state === 'running'
+                        ? copy.bulkCare.translateRunning(translating.done, translating.total)
+                        : translating.failed > 0
+                          ? copy.bulkCare.translateDoneWithFailures(translating.done, translating.failed)
+                          : copy.bulkCare.translateDone(translating.done)}
+                    </Text>
+                    {translating.state === 'running' && translating.currentName !== undefined && (
+                      <Text style={s.bulkProgressSub} numberOfLines={1}>
+                        {translating.currentName}
+                      </Text>
+                    )}
+                  </View>
+                  <Pressable
+                    onPress={() =>
+                      translating.state === 'running' ? bulkTranslate.cancel() : bulkTranslate.dismiss()
+                    }
+                    hitSlop={10}
+                    accessibilityRole="button"
+                  >
+                    <Text style={s.bulkProgressAction}>
+                      {translating.state === 'running' ? copy.bulkCare.cancel : copy.bulkCare.dismiss}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
 
               {/*
                 The job outlives this screen, so the row reports it wherever the
@@ -865,7 +972,11 @@ function makeStyles(t: Theme) {
     libScroll: { paddingBottom: t.space['3xl'] + TAB_BAR_CLEARANCE, paddingHorizontal: t.space.xl },
     libHeader: {
       flexDirection: 'row',
-      alignItems: 'flex-start',
+      /* Centre, not flex-start: the buttons belong to the masthead as a whole.
+       * Pinned to the top they lined up with the eyebrow - the smallest line
+       * on the screen - and read as floating above the title rather than
+       * sitting beside it. */
+      alignItems: 'center',
       gap: t.space.sm,
       paddingTop: t.space.lg,
       paddingBottom: t.space.lg,
@@ -884,7 +995,7 @@ function makeStyles(t: Theme) {
       ...t.elevation.card,
     },
     addBtn: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       gap: t.space.xs,
       backgroundColor: t.color.primary,
@@ -909,7 +1020,7 @@ function makeStyles(t: Theme) {
     bulkRow: { flexDirection: 'row', gap: t.space.md, marginTop: t.space.lg },
     bulkBtn: {
       flex: 1,
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       justifyContent: 'center',
       gap: t.space.sm,
@@ -950,7 +1061,7 @@ function makeStyles(t: Theme) {
       paddingBottom: t.space.md,
     },
     chip: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       gap: 6,
       paddingHorizontal: t.space.lg,
@@ -1066,7 +1177,7 @@ function makeStyles(t: Theme) {
 
     ctaWrap: { marginBottom: t.space.md },
     ctaBtn: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       justifyContent: 'center',
       gap: t.space.sm,
@@ -1081,7 +1192,7 @@ function makeStyles(t: Theme) {
 
     secondaryWrap: { marginBottom: t.space['2xl'] },
     secondaryBtn: {
-      flexDirection: 'row',
+      ...iconRow,
       alignItems: 'center',
       justifyContent: 'center',
       gap: t.space.sm,

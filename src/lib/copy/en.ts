@@ -100,6 +100,19 @@ export const en = {
     yesterday: 'Stock checked yesterday',
     daysAgo: (days: number) => `Stock checked ${days} days ago`,
   },
+  /*
+   * Injected into `conditionLabel` (lib/conditionLabel.ts). Keyed on the health
+   * enum rather than on the model's own sentence, so a plant diagnosed before
+   * the language was switched still shows a badge the reader can read. The copy
+   * test asserts these agree with EN_CONDITION_COPY in that module.
+   */
+  condition: {
+    healthy: 'Healthy',
+    mild: 'Mild concern',
+    moderate: 'Moderate decline',
+    severe: 'Serious decline',
+    critical: 'Critical',
+  },
   triage: {
     attention: 'Needs attention',
     watching: 'Watching',
@@ -344,6 +357,14 @@ export const en = {
       `Diagnosed ${done}, ${failed} could not be checked`,
     diagnoseDoneSkipped: (skipped: number) =>
       `${skipped} skipped, no photo`,
+    /* The translation pass after a language switch. Says "translating", not
+     * "loading": the user is owed the fact that their existing diagnoses are
+     * being rewritten rather than merely fetched. */
+    translateRunning: (done: number, total: number) => `Translating ${done} of ${total}`,
+    translateDone: (done: number) =>
+      `Translated ${done} ${done === 1 ? 'diagnosis' : 'diagnoses'}`,
+    translateDoneWithFailures: (done: number, failed: number) =>
+      `Translated ${done}, ${failed} could not be translated`,
     cancel: 'Stop',
     dismiss: 'Dismiss',
     /* Water-all names the plants it will NOT touch, because the surprise is
