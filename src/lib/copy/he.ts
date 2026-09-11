@@ -190,7 +190,6 @@ export const he: Copy = {
     loginPromptA11y: 'התחברות או הרשמה',
     loggedOutBlurb:
       'צרו חשבון כדי לשמור את הפרופיל שלכם ולנהל את הפרטים. האבחון עובד מצוין גם בלי חשבון.',
-    deviceSection: 'במכשיר הזה',
     profileSettings: 'הגדרות פרופיל',
     fullName: 'שם מלא',
     username: 'שם משתמש',
@@ -476,7 +475,6 @@ export const he: Copy = {
     nextMonth: 'החודש הבא',
     nextDue: 'הטיפול הבא',
     recent: 'אחרונים',
-    dayA11y: (date: string, done: string, due: string) => `${date}${done}${due}`,
     /* No lowercasing - Hebrew has no letter case. */
     doneSuffix: (kind: string) => `, ${kind} בוצע`,
     dueSuffix: (kind: string) => `, ${kind} נדרש`,
@@ -657,7 +655,6 @@ export const he: Copy = {
   },
   plantCard: {
     needsWatering: 'זקוק להשקיה',
-    diagnosedBadge: 'אובחן',
     a11y: (p: {
       name: string;
       secondary: string;

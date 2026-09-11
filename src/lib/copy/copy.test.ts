@@ -113,7 +113,6 @@ const SHARED_OUTPUT = new Set<string>([
   'copy.speciesPicker.rowA11y', //      `${name}, ${scientific}`
   'copy.statusView.a11y', //            `${title}. ${body}`
   'copy.nurseries.pillA11y', //         `${text}. ${detail}`
-  'copy.careHistory.dayA11y', //        `${date}${done}${due}`
   'copy.carePlan.rowA11y', //           `${label}: ${text}`
   'copy.soilCard.optionA11y', //        `${label}. ${description}`
   'copy.portfolio.filterCount', //      `${label} (${n})`

@@ -229,7 +229,6 @@ export const en = {
     loginPromptA11y: 'Log in or sign up',
     loggedOutBlurb:
       'Create an account to save your profile and manage your details. Diagnosis works fine without one.',
-    deviceSection: 'This device',
     profileSettings: 'Profile settings',
     fullName: 'Full name',
     username: 'Username',
@@ -567,7 +566,6 @@ export const en = {
     nextMonth: 'Next month',
     nextDue: 'Next due',
     recent: 'Recent',
-    dayA11y: (date: string, done: string, due: string) => `${date}${done}${due}`,
     doneSuffix: (kind: string) => `, ${kind.toLowerCase()} logged`,
     dueSuffix: (kind: string) => `, ${kind.toLowerCase()} due`,
   },
@@ -794,7 +792,6 @@ export const en = {
   },
   plantCard: {
     needsWatering: 'Needs watering',
-    diagnosedBadge: 'Diagnosed',
     /*
      * ONE label rather than four nodes: a screen reader user wants the plant
      * and its state in a single utterance, not a tour of the row.
