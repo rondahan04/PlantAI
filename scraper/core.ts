@@ -501,13 +501,20 @@ export async function resolveScrape(opts: {
  * minute against Tavily's hundred, and Tavily answers in ~700ms where
  * Firecrawl takes 1.4-2.8s (13-site benchmark, 2026-09-05).
  *
- * So the rule follows the capability, not the vendor: `waitFor: 0` says the
- * caller wants the page as served, which is exactly what Tavily does well, so
- * Tavily leads. Any `waitFor` above zero is a request to render, which only
- * Firecrawl can honour, so Firecrawl leads and Tavily is the rescue.
+ * Tavily therefore leads EVERY read it is configured for, rendered or not. It
+ * used to lead only `waitFor: 0` reads, on the grounds that a render request is
+ * Firecrawl's job - but the Deliver tab now scrapes eight shippers on top of
+ * the local fan-out, so a search touches roughly twice the sites it did and the
+ * ten-a-minute window is the thing that decides how long a search takes.
+ *
+ * Rendering is not lost, it is demoted to a rescue: a read that wanted a render
+ * and came back without a product grid falls through to Firecrawl (see the
+ * careful re-read in fetchSearchMarkdown), which is the one thing only it can
+ * do. A shop that serves its grid in the first byte - most of them - never pays
+ * a Firecrawl slot at all.
  */
 export function tavilyLeads(opts: { waitFor?: number; tavilyKey?: string }): boolean {
-  return Boolean(opts.tavilyKey) && (opts.waitFor ?? RENDER_WAIT_MS) === 0;
+  return Boolean(opts.tavilyKey);
 }
 
 /*
@@ -2773,8 +2780,18 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
        * this retry queued 50s behind other sites for a page we already had a
        * readable-enough copy of, and one host set the pace for the whole
        * fan-out.
+       *
+       * Two triggers, because Tavily now leads even the reads that asked for a
+       * render (see tavilyLeads). A shop whose grid is painted by JavaScript
+       * hands Tavily a shell - nav and footer, nothing unreadable about it - so
+       * "empty or a bot wall" would never fire on the exact case rendering
+       * exists for. On a platform we asked to render (`quickWait > 0`), a page
+       * that scores nothing is that shell, and Firecrawl is the layer that can
+       * turn it into a grid. Server-rendered platforms keep the old rule: their
+       * zero-score page is a real "not sold" answer, not a missing render.
        */
-      if (looksUnreadable(md) && canRender()) {
+      const shellOnRenderPlatform = quickWait > 0 && scoreMarkdown(md, query) <= 0;
+      if ((looksUnreadable(md) || shellOnRenderPlatform) && canRender()) {
         md = await scrape(url, firecrawlKey, {
           waitFor: RENDER_WAIT_MS,
           maxAge: 0,

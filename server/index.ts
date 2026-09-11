@@ -101,11 +101,40 @@ const nurseryCache = createNurseryCache<NurseryResult[]>({
  */
 const CORS_ORIGIN = env('CORS_ORIGIN');
 
+/* Lines that are not a URL are comments - the files are edited by hand. */
+function readUrlList(file: string): string[] {
+  return fs
+    .readFileSync(file, 'utf8')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith('http'));
+}
+
+const FALLBACK_URLS_PATH = path.join(ROOT, 'nurseries-fallback.txt');
+
+/* The nurseries read when Places discovery comes back empty - a list of shops
+ * to SEARCH, not a claim that any of them deliver. */
+function readFallbackUrls(): string[] {
+  return readUrlList(FALLBACK_URLS_PATH);
+}
+
+/* Its own file, not the dashboard's nurseries-fallback.txt: that list is a
+ * benchmarking corpus of shops to READ, this one is the list of shops that
+ * deliver. They drifted apart the moment the Deliver tab stopped being "every
+ * nursery we know". */
+const SHIPPER_URLS_PATH = path.join(ROOT, 'nurseries-shippers.txt');
+
+/* The shipper list, read from disk so adding a shop is an edit to a text file
+ * rather than a deploy of new code. */
+function readShipperUrls(): string[] {
+  return readUrlList(SHIPPER_URLS_PATH);
+}
+
 /*
- * The nurseries that actually ship nationally. These are scraped on EVERY
- * search, not only when nothing local matches, because they are the whole
- * content of the Deliver tab - a user who opens it wants delivery whether or
- * not a local shop happened to have the plant.
+ * The nurseries that ship. These are scraped on EVERY search, not only when
+ * nothing local matches, because they are the whole content of the Deliver tab
+ * - a user who opens it wants delivery whether or not a local shop happened to
+ * have the plant.
  *
  * Kept to CONFIRMED shippers. General nurseries with no delivery used to sit on
  * this list, which padded the tab with rows that could not be delivered and cost
@@ -117,12 +146,7 @@ const CORS_ORIGIN = env('CORS_ORIGIN');
  * without which this shop returns a full catalogue that all prices at zero and
  * is dropped row by row.
  */
-const NATIONAL_NURSERIES = [
-  'https://al-haderech.co.il/',
-  'https://rootine.co.il/',
-  'https://netaplants.co.il/',
-  'https://www.plantit.co.il/',
-];
+const NATIONAL_NURSERIES = readShipperUrls();
 
 const searcher = createSearcher(FIRECRAWL_KEY, {
   openaiKey: OPENAI_KEY,
@@ -171,12 +195,7 @@ const deps: PipelineDeps = {
     scrapeUrl(origin, FIRECRAWL_KEY!, { tavilyKey: TAVILY_KEY }),
   infer: (homeMd, query, site) => inferAvailabilityLLM(homeMd, query, site, OPENAI_KEY!),
   resolvePhoto: (photoName) => resolvePhotoUrl(photoName, GOOGLE_KEY!),
-  readFallbackUrls: () =>
-    fs
-      .readFileSync(path.join(ROOT, 'nurseries-fallback.txt'), 'utf8')
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l.startsWith('http')),
+  readFallbackUrls,
   nationalUrls: NATIONAL_NURSERIES,
   onSiteRead: (host, stage) => scrapeHealth.record(host, stage),
 };

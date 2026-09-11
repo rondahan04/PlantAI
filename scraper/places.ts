@@ -10,8 +10,13 @@
  *     └─ POST places:searchText
  *          body  { textQuery, locationBias.circle{center,radius} }
  *          mask  places.displayName, .location, .websiteUri, .formattedAddress
- *     └─ keep ONLY places that have a website (others are unscrapable)
- *     └─ slice to maxResults  ─▶ DiscoveredNursery[]  (feed website → scraper)
+ *     └─ scrapable sites (real storefront host), capped at maxResults
+ *     └─ PLUS contact-only places - no website, or a social page for one - up
+ *        to contactOnlyMax. Nothing to scrape, but a real nursery with a phone
+ *        number a kilometre away is a better answer than an unreachable one
+ *        with a webshop, and the Pick Up tab is where a user goes to be told
+ *        who is nearby.
+ *     ─▶ DiscoveredNursery[]  (website '' = contact-only)
  *
  * `fetchImpl` is injectable so the parser is unit-tested without network,
  * mirroring tavilyExtract in core.ts.
@@ -25,8 +30,12 @@ import { hostOf } from './core.ts';
  * websiteUri exactly like a real storefront. Measured 2026-08-25: 2 of 19
  * site-visits in a tally run were social URLs - each one burned a platform
  * identification, a search scrape and an LLM availability estimate to arrive at
- * "~2% likely", which was never in doubt. Dropping them at discovery is pure
- * saving: no reachable product page is lost.
+ * "~2% likely", which was never in doubt. Never scraping them is pure saving:
+ * no reachable product page is lost.
+ *
+ * They are no longer DROPPED, though - they come back as contact-only rows. A
+ * nursery whose whole web presence is a Facebook page is still a nursery, and
+ * the phone number Places hands us is the thing the user actually needs.
  */
 const NON_STORE_HOSTS = [
   'facebook.com',
@@ -55,6 +64,8 @@ export function isNonStoreHost(website: string): boolean {
 
 export interface DiscoveredNursery {
   name: string;
+  /* '' when the place has no scrapable storefront (no website at all, or only a
+   * social page). Such a nursery is reported, never scraped - see scrapeOne. */
   website: string;
   lat: number;
   lng: number;
@@ -70,6 +81,11 @@ export interface DiscoverOpts {
   textQuery?: string; // search term; default Hebrew 'משתלה' (nursery)
   radiusM?: number; // circle radius in meters (Places allows 0–50000); default 5000
   maxResults?: number; // cap how many sites we scrape downstream; default 10
+  /* Cap on contact-only places (no scrapable site) returned alongside them.
+   * They cost nothing downstream - no scrape, no LLM call - so this is a
+   * screen-space limit, not a budget one. 0 restores the old behaviour of
+   * dropping them entirely. */
+  contactOnlyMax?: number;
   languageCode?: string; // default 'he'
   regionCode?: string; // default 'IL'
   richFields?: boolean; // widen field mask: rating, reviews, hours, phone, photo
@@ -116,6 +132,7 @@ export async function discoverNurseries(
     textQuery = 'משתלה',
     radiusM = 5000,
     maxResults = 10,
+    contactOnlyMax = 10,
     languageCode = 'he',
     regionCode = 'IL',
     richFields = false,
@@ -163,14 +180,36 @@ export async function discoverNurseries(
   // Dedup by website host: chains return one place per branch (same site),
   // and scraping the same site N times is wasted Firecrawl/OpenAI cost.
   const seenHosts = new Set<string>();
+  /* Contact-only places have no host to dedup on. A chain's branches are
+   * separate shops at separate addresses, so name+address is the identity that
+   * matters: two rows for the same nursery are a bug, two branches are two
+   * places the user could drive to. */
+  const seenPlaces = new Set<string>();
   const out: DiscoveredNursery[] = [];
+  const contactOnly: DiscoveredNursery[] = [];
+
   for (const p of places) {
     const website: unknown = p?.websiteUri;
-    if (typeof website !== 'string' || !website) continue;
-    if (isNonStoreHost(website)) continue; // social page, not a storefront
-    const host = hostOf(website);
-    if (seenHosts.has(host)) continue;
-    seenHosts.add(host);
+    const url = typeof website === 'string' ? website : '';
+    /* No site, or a Facebook page standing in for one. Nothing to scrape - but
+     * still a nursery, and the Pick Up tab is a list of places to go. */
+    const scrapable = Boolean(url) && !isNonStoreHost(url);
+
+    /* Both lists full - nothing later in the page can change the answer. */
+    if (out.length >= maxResults && contactOnly.length >= contactOnlyMax) break;
+
+    if (scrapable) {
+      if (out.length >= maxResults) continue;
+      const host = hostOf(url);
+      if (seenHosts.has(host)) continue;
+      seenHosts.add(host);
+    } else {
+      if (contactOnly.length >= contactOnlyMax) continue;
+      const key = `${p.displayName?.text ?? ''}@${p.formattedAddress ?? ''}`;
+      if (seenPlaces.has(key)) continue;
+      seenPlaces.add(key);
+    }
+
     // Only attach rich fields when requested, so the base-mask shape is
     // unchanged for callers that don't opt in.
     const rich = richFields
@@ -182,15 +221,23 @@ export async function discoverNurseries(
           photoName: p.photos?.[0]?.name ?? undefined,
         }
       : {};
-    out.push({
+    const row: DiscoveredNursery = {
       name: p.displayName?.text ?? '',
-      website,
+      website: scrapable ? url : '',
       lat: p.location?.latitude ?? 0,
       lng: p.location?.longitude ?? 0,
       address: p.formattedAddress ?? '',
       ...rich,
-    });
-    if (out.length >= maxResults) break;
+    };
+
+    /* Hitting the scrapable cap is not the end of the loop any more: the
+     * contact-only list may still have room, and those rows cost nothing. */
+    if (scrapable) out.push(row);
+    else contactOnly.push(row);
   }
-  return out;
+
+  /* Scrapable shops first: the search is about finding the plant, and the rows
+   * that can answer that question lead. The pipeline sorts on stock and
+   * distance afterwards, so this only decides who survives a cap. */
+  return [...out, ...contactOnly];
 }
