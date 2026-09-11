@@ -1,3 +1,6 @@
+import type { Language } from '../lib/language';
+import type { DiagnosisProse } from '../lib/diagnosisProse';
+
 export interface PlantDiagnosis {
   plantName: string;
   /*
@@ -20,6 +23,25 @@ export interface PlantDiagnosis {
    * field existed has none. Absent means the section is not rendered.
    */
   carePlan?: CarePlan;
+  /*
+   * Which language the prose above is written in.
+   *
+   * The model writes it once, on the day of the photo, so this is a fact about
+   * the record rather than about the app. Absent on everything saved before
+   * the field existed - readers go through `languageOf` in lib/diagnosisProse,
+   * which falls back to reading the script.
+   */
+  lang?: Language;
+  /*
+   * The same prose in the other languages we have paid to produce, INCLUDING
+   * the one currently on the top-level fields.
+   *
+   * Keeping the original is what makes switching back free: without it,
+   * translating en->he throws the English away and he->en has to be bought
+   * again. Only words live here - see the note in lib/diagnosisProse.ts on
+   * what is deliberately not prose.
+   */
+  translations?: Partial<Record<Language, DiagnosisProse>>;
   /*
    * Cultivar/variety, e.g. "Thai Constellation" - present only when the model
    * could actually tell from the photo. Absent means generic species, not a

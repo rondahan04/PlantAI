@@ -309,6 +309,10 @@ export const he: Copy = {
     diagnoseDoneWithFailures: (done: number, failed: number) =>
       `אובחנו ${done}, ${failed} לא נבדקו`,
     diagnoseDoneSkipped: (skipped: number) => `${skipped} דולגו, אין תמונה`,
+    translateRunning: (done: number, total: number) => `מתרגם ${done} מתוך ${total}`,
+    translateDone: (done: number) => `תורגמו ${done} אבחונים`,
+    translateDoneWithFailures: (done: number, failed: number) =>
+      `תורגמו ${done}, ${failed} לא תורגמו`,
     cancel: 'עצירה',
     dismiss: 'סגירה',
     waterConfirmTitle: 'להשקות את הצמחים שצריכים?',

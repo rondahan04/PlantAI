@@ -357,6 +357,14 @@ export const en = {
       `Diagnosed ${done}, ${failed} could not be checked`,
     diagnoseDoneSkipped: (skipped: number) =>
       `${skipped} skipped, no photo`,
+    /* The translation pass after a language switch. Says "translating", not
+     * "loading": the user is owed the fact that their existing diagnoses are
+     * being rewritten rather than merely fetched. */
+    translateRunning: (done: number, total: number) => `Translating ${done} of ${total}`,
+    translateDone: (done: number) =>
+      `Translated ${done} ${done === 1 ? 'diagnosis' : 'diagnoses'}`,
+    translateDoneWithFailures: (done: number, failed: number) =>
+      `Translated ${done}, ${failed} could not be translated`,
     cancel: 'Stop',
     dismiss: 'Dismiss',
     /* Water-all names the plants it will NOT touch, because the surprise is

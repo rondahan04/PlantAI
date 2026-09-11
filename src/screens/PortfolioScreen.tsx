@@ -46,6 +46,10 @@ import { copy } from '../services/language';
 import { diagnoseTargets, waterTargets } from '../lib/bulkCare';
 import { bulkDiagnose } from '../services/bulkDiagnoseInstance';
 import type { BulkProgress } from '../services/bulkDiagnose';
+import { bulkTranslate } from '../services/bulkTranslateInstance';
+import type { TranslateProgress } from '../services/bulkTranslate';
+import { needsCallFor } from '../lib/diagnosisProse';
+import { getLanguage } from '../services/language';
 import PlantCard from '../components/PlantCard';
 import ImportBanner from '../components/ImportBanner';
 import { TAB_BAR_CLEARANCE } from '../navigation/tabBarMetrics';
@@ -142,6 +146,37 @@ export default function PortfolioScreen({ navigation }: Props) {
    * the fold. Opening is the user asking for the whole watering round. */
   const [dueExpanded, setDueExpanded] = useState(false);
   useEffect(() => bulkDiagnose.subscribe(setBulk), []);
+
+  const [translating, setTranslating] = useState<TranslateProgress>(() => bulkTranslate.get());
+  useEffect(() => bulkTranslate.subscribe(setTranslating), []);
+
+  /*
+   * Bring the library into the current language on the way in.
+   *
+   * A language change forces a relaunch (see needsDirectionChange), so this
+   * screen mounting IS the moment after a switch - and at that moment every
+   * plant is stale at once. Doing them lazily would put a fifteen-second wait
+   * behind every tap; doing them here puts it behind the scroll instead.
+   *
+   * Nearly always selects nothing: `needsCallFor` answers from the cache, so a
+   * library already in this language - or one translated on an earlier switch
+   * and switched back - costs no call and shows no progress row. Guarded on
+   * the plant list rather than run once on mount so a library that arrives
+   * from the cloud after first paint is still covered.
+   */
+  useEffect(() => {
+    const lang = getLanguage();
+    const stale = library.plants.filter((p) => needsCallFor(p.diagnosis, lang));
+    if (stale.length > 0) void bulkTranslate.run(stale);
+  }, [library.plants]);
+
+  /* Same as the diagnose job below: refresh the cards as translations land, so
+   * a finished plant stops showing the old language while the rest run. */
+  useEffect(() => {
+    if (translating.state === 'running' || translating.state === 'done') {
+      setLibrary(plantRepo.loadLocal());
+    }
+  }, [translating.done, translating.state]);
 
   /* Refresh the cards as findings land, so a diagnosed plant stops looking
    * untouched while the job is still working through the rest. */
@@ -698,6 +733,48 @@ export default function PortfolioScreen({ navigation }: Props) {
                   </Text>
                 </Pressable>
               </View>
+
+              {/*
+                The same row for the translation pass. Its own block rather than
+                a mode on the one below: the two jobs can be running at once -
+                a bulk diagnosis writes records in the current language while
+                the translator is still working through the old ones - and
+                collapsing them into one row would have to pick a winner.
+              */}
+              {translating.state !== 'idle' && (
+                <View style={s.bulkProgress}>
+                  {translating.state === 'running' ? (
+                    <ActivityIndicator size="small" color={t.color.primary} />
+                  ) : (
+                    <Ionicons name="checkmark-circle" size={18} color={t.color.primary} />
+                  )}
+                  <View style={s.bulkProgressText}>
+                    <Text style={s.bulkProgressTitle} numberOfLines={1}>
+                      {translating.state === 'running'
+                        ? copy.bulkCare.translateRunning(translating.done, translating.total)
+                        : translating.failed > 0
+                          ? copy.bulkCare.translateDoneWithFailures(translating.done, translating.failed)
+                          : copy.bulkCare.translateDone(translating.done)}
+                    </Text>
+                    {translating.state === 'running' && translating.currentName !== undefined && (
+                      <Text style={s.bulkProgressSub} numberOfLines={1}>
+                        {translating.currentName}
+                      </Text>
+                    )}
+                  </View>
+                  <Pressable
+                    onPress={() =>
+                      translating.state === 'running' ? bulkTranslate.cancel() : bulkTranslate.dismiss()
+                    }
+                    hitSlop={10}
+                    accessibilityRole="button"
+                  >
+                    <Text style={s.bulkProgressAction}>
+                      {translating.state === 'running' ? copy.bulkCare.cancel : copy.bulkCare.dismiss}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
 
               {/*
                 The job outlives this screen, so the row reports it wherever the

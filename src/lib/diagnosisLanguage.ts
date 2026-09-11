@@ -52,6 +52,22 @@ export function prose(d: TranslatableDiagnosis): string[] {
 }
 
 /*
+ * Which language the prose LOOKS like, for a record that does not say.
+ *
+ * Any Hebrew character means Hebrew. A Hebrew diagnosis routinely carries
+ * English fragments - a cultivar, a product name, "pH" - and none of those
+ * make it an English record, whereas an English one cannot accidentally
+ * contain Hebrew.
+ *
+ * Prose-free records answer English, matching DEFAULT_LANGUAGE. There is
+ * nothing to read, so this is a floor rather than a finding, and callers skip
+ * empty records before it matters.
+ */
+export function scriptOf(d: TranslatableDiagnosis): Language {
+  return HEBREW.test(prose(d).join(' ')) ? 'he' : 'en';
+}
+
+/*
  * True when the saved prose is in some language OTHER than `lang`.
  *
  * Biased hard towards saying no. A false positive costs a billed translation
