@@ -2,6 +2,11 @@ import type { PlantDiagnosis } from '../types';
 import type { SoilMediumId } from '../lib/soilMedia';
 import type { CareKind, PlantStore, StoredPlant, LoadResult } from './plantStore';
 import type { CloudPlantLibrary, ImportBatchResult, ManualInput } from './plantCloud';
+/* Runtime import with its extension, same rule as plantStore's: `node --test`
+ * needs it and Metro resolves it. The leaf rules are PURE and live in one
+ * place, so unlike the care-log fold below there is nothing to duplicate - a
+ * logged-in tap and a logged-out one run the identical function. */
+import { emergeLeaf, matureLeaf, normalizeLeaves, undoLastLeaf, type LeafEvent } from '../lib/leaves.ts';
 
 /*
  * `careHistory` and `sameDay` re-implemented here rather than imported from
@@ -61,6 +66,12 @@ export interface RepoDeps {
   photos: { adopt(id: string, sourceUri: string): Promise<string | null> };
   getSessionHint(): boolean;
   getUserId(): string | null;
+  /*
+   * Identity for a leaf logged while signed in. Optional, defaulting to the
+   * same generator both stores use - the guest path never needs it, because
+   * `plantStore` mints the id itself there.
+   */
+  newId?: () => string;
 }
 
 /*
@@ -72,6 +83,8 @@ export interface RepoDeps {
  */
 export function createPlantRepo(deps: RepoDeps) {
   const { guest, mirror, cloud, photos, getSessionHint, getUserId } = deps;
+  const newLeafId =
+    deps.newId ?? (() => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
 
   /*
    * `getSessionHint()` and `getUserId()` are two independently-updated sync
@@ -93,9 +106,29 @@ export function createPlantRepo(deps: RepoDeps) {
     return isLoggedIn() ? mirror.load() : guest.load();
   }
 
+  /*
+   * Pull the account's library down and make the mirror match it.
+   *
+   * A FAILED FETCH LEAVES THE MIRROR ALONE. The cloud is the source of truth,
+   * so a successful read that returns nothing really does mean "delete the
+   * local copies" - but a read that did not happen says nothing at all, and
+   * treating the two alike is how a network blip, an expired session or one bad
+   * column erases a user's whole library on their device. Losing plants the
+   * account still holds is unrecoverable from the phone's point of view: the
+   * app shows the first-run screen and the user has no way to tell that from a
+   * deletion. Stale data is the better failure.
+   *
+   * Resolves either way rather than rethrowing: every caller reads the returned
+   * library, and none of them has anything better to do about a failure than
+   * show what is already there.
+   */
   async function refreshFromCloud(): Promise<LoadResult> {
-    const plants = await cloud.fetchAll();
-    mirror.replace(plants);
+    try {
+      const plants = await cloud.fetchAll();
+      mirror.replace(plants);
+    } catch {
+      /* Keep what the mirror already holds. */
+    }
     return mirror.load();
   }
 
@@ -235,6 +268,67 @@ export function createPlantRepo(deps: RepoDeps) {
         : { ...latest, lastFertilizedAt: stamp, fertilizerLog: log };
     mirror.replace(fresh.map((p) => (p.id === id ? updated : p)));
     return { ok: true, plant: updated };
+  }
+
+  /*
+   * New growth, all three taps behind one helper.
+   *
+   * Unlike `markCare`, the transformation is not re-implemented here: the care
+   * fold had to be, because it is a few lines living inside `plantStore`, while
+   * every leaf rule already lives in `lib/leaves.ts` and both stores call it.
+   * So guest and cloud genuinely run the same code and cannot drift.
+   */
+  async function writeLeaves(
+    id: string,
+    next: (leaves: LeafEvent[]) => LeafEvent[],
+    guestWrite: () => ReturnType<PlantStore['logLeaf']>
+  ): Promise<RepoResult<{ plant: StoredPlant }>> {
+    if (!isLoggedIn()) {
+      const result = guestWrite();
+      return result.ok ? { ok: true, plant: result.plant } : { ok: false, reason: result.reason };
+    }
+
+    const current = mirror.load().plants.find((p) => p.id === id);
+    if (!current) return { ok: false, reason: 'not_found' };
+
+    const leaves = next(normalizeLeaves(current.leafLog));
+    const cloudResult = await cloud.updatePlant(id, { leafLog: leaves });
+    if (!cloudResult.ok) return { ok: false, reason: cloudResult.reason };
+
+    const fresh = mirror.load().plants;
+    const latest = fresh.find((p) => p.id === id) ?? current;
+    const updated: StoredPlant = { ...latest, leafLog: leaves };
+    /* Absent rather than empty, matching what the guest store writes - the
+     * mirror is compared against locally-written records all over the app. */
+    if (leaves.length === 0) delete updated.leafLog;
+    mirror.replace(fresh.map((p) => (p.id === id ? updated : p)));
+    return { ok: true, plant: updated };
+  }
+
+  /*
+   * A leaf is showing. The id is minted HERE, not inside the two stores, so the
+   * same leaf carries the same identity into the cloud and into the mirror -
+   * otherwise the second tap ("it is fully grown") would look for a leaf the
+   * other side has never heard of.
+   */
+  async function logLeaf(id: string, at: number): Promise<RepoResult<{ plant: StoredPlant }>> {
+    return writeLeaves(id, (leaves) => emergeLeaf(leaves, newLeafId(), at), () => guest.logLeaf(id, at));
+  }
+
+  async function markLeafGrown(
+    id: string,
+    leafId: string,
+    at: number
+  ): Promise<RepoResult<{ plant: StoredPlant }>> {
+    return writeLeaves(
+      id,
+      (leaves) => matureLeaf(leaves, leafId, at),
+      () => guest.markLeafGrown(id, leafId, at)
+    );
+  }
+
+  async function undoLeaf(id: string): Promise<RepoResult<{ plant: StoredPlant }>> {
+    return writeLeaves(id, undoLastLeaf, () => guest.undoLeaf(id));
   }
 
   /*
@@ -426,6 +520,9 @@ export function createPlantRepo(deps: RepoDeps) {
     saveManual,
     markWatered,
     markCare,
+    logLeaf,
+    markLeafGrown,
+    undoLeaf,
     update,
     remove,
     hasUnimportedGuestPlants,

@@ -42,6 +42,7 @@ function row(over: Partial<CloudRow> & Pick<CloudRow, 'id' | 'user_id' | 'saved_
     nickname: null,
     last_watered_at: null,
     watering_log: [],
+    leaf_log: [],
     last_repotted_at: null,
     repot_log: [],
     last_fertilized_at: null,

@@ -8,7 +8,8 @@ import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
 import { directionalIconStyle, iconRow } from '../lib/rtl';
 import { plantRepo } from '../services/plantRepoInstance';
-import { careHistory, type CareKind } from '../services/plantStore';
+import { careHistory, leafHistory, type CareKind } from '../services/plantStore';
+import { leafDays, leafStamps } from '../lib/leaves';
 import { dayKey, dayKeySet, monthView, shiftMonth, weekdayLabels } from '../lib/calendar';
 import { copy, getLanguage, localeTag } from '../services/language';
 import { CARE_KINDS, careState } from '../lib/care';
@@ -34,32 +35,67 @@ type Props = {
   route: RouteProp<RootStackParamList, 'WateringHistory'>;
 };
 
-type Filter = CareKind | 'all';
+/*
+ * A FILTER is what the user picks; a MARK is what the grid draws. They are
+ * one-to-one for the three care kinds and deliberately not for new growth: one
+ * chip says "leaves", and it puts TWO markers on the calendar - the day a leaf
+ * appeared and the day it finished opening. Collapsing those into one marker
+ * would throw away the only thing the two-tap tracking buys.
+ */
+type Filter = CareKind | 'leaf' | 'all';
+type Mark = CareKind | 'leafNew' | 'leafGrown';
 
-interface KindCopy {
-  /* Chip and legend label. */
+const MARKS: Mark[] = [...CARE_KINDS, 'leafNew', 'leafGrown'];
+
+/* Which markers a filter draws. 'all' is everything, and the leaf chip is the
+ * one row that expands to two. */
+const MARKS_FOR: Record<Filter, Mark[]> = {
+  all: MARKS,
+  water: ['water'],
+  repot: ['repot'],
+  fertilizer: ['fertilizer'],
+  leaf: ['leafNew', 'leafGrown'],
+};
+
+interface FilterCopy {
+  /* Chip label. */
   short: string;
-  /* Screen title when this kind is the filter. */
+  /* Screen title when this is the filter. */
   title: string;
   empty: string;
   logged: (n: number) => string;
   noneThisMonth: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  /* Theme token names, so light and dark both resolve through the palette. */
-  color: 'water' | 'repot' | 'feed';
-  onColor: 'onWater' | 'onRepot' | 'onFeed';
+  /* Theme token, for the chip's dot. */
+  color: MarkColor;
 }
 
-const COPY: Record<CareKind, KindCopy> = {
+type MarkColor = 'water' | 'repot' | 'feed' | 'growth';
+type MarkOnColor = 'onWater' | 'onRepot' | 'onFeed' | 'onGrowth';
+
+interface MarkCopy {
+  /* Legend and "recent" label. */
+  short: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  /* Theme token names, so light and dark both resolve through the palette. */
+  color: MarkColor;
+  onColor: MarkOnColor;
+  /*
+   * Drawn as a ring rather than a filled square. New growth shares ONE colour
+   * across its two markers - they are two ends of the same event, and a second
+   * green would read as a second kind of care - so the shape is what tells them
+   * apart: an outline for the leaf appearing, a fill for it finishing.
+   */
+  outline?: boolean;
+}
+
+const FILTER_COPY: Record<Exclude<Filter, 'all'>, FilterCopy> = {
   water: {
     short: copy.careHistory.water.short,
     title: copy.careHistory.water.title,
     empty: copy.careHistory.water.empty,
     logged: copy.careHistory.water.logged,
     noneThisMonth: copy.careHistory.water.noneThisMonth,
-    icon: 'water',
     color: 'water',
-    onColor: 'onWater',
   },
   repot: {
     short: copy.careHistory.repot.short,
@@ -67,9 +103,7 @@ const COPY: Record<CareKind, KindCopy> = {
     empty: copy.careHistory.repot.empty,
     logged: copy.careHistory.repot.logged,
     noneThisMonth: copy.careHistory.repot.noneThisMonth,
-    icon: 'flower-outline',
     color: 'repot',
-    onColor: 'onRepot',
   },
   fertilizer: {
     short: copy.careHistory.fertilizer.short,
@@ -77,9 +111,44 @@ const COPY: Record<CareKind, KindCopy> = {
     empty: copy.careHistory.fertilizer.empty,
     logged: copy.careHistory.fertilizer.logged,
     noneThisMonth: copy.careHistory.fertilizer.noneThisMonth,
+    color: 'feed',
+  },
+  leaf: {
+    short: copy.careHistory.leaf.short,
+    title: copy.careHistory.leaf.title,
+    empty: copy.careHistory.leaf.empty,
+    logged: copy.careHistory.leaf.logged,
+    noneThisMonth: copy.careHistory.leaf.noneThisMonth,
+    color: 'growth',
+  },
+};
+
+const MARK_COPY: Record<Mark, MarkCopy> = {
+  water: { short: copy.careHistory.water.short, icon: 'water', color: 'water', onColor: 'onWater' },
+  repot: {
+    short: copy.careHistory.repot.short,
+    icon: 'flower-outline',
+    color: 'repot',
+    onColor: 'onRepot',
+  },
+  fertilizer: {
+    short: copy.careHistory.fertilizer.short,
     icon: 'nutrition-outline',
     color: 'feed',
     onColor: 'onFeed',
+  },
+  leafNew: {
+    short: copy.careHistory.leaf.emerged,
+    icon: 'leaf-outline',
+    color: 'growth',
+    onColor: 'onGrowth',
+    outline: true,
+  },
+  leafGrown: {
+    short: copy.careHistory.leaf.matured,
+    icon: 'leaf',
+    color: 'growth',
+    onColor: 'onGrowth',
   },
 };
 
@@ -103,24 +172,32 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
     return monthView(now.getFullYear(), now.getMonth(), localeTag());
   });
 
-  /* Every kind's history, always - the filter decides what is drawn, not what
-   * is computed, so switching chips never re-reads storage. */
+  /* Every marker's history, always - the filter decides what is drawn, not what
+   * is computed, so switching chips never re-reads storage. The two leaf
+   * markers are the two ENDS of the same records, split here so the grid below
+   * needs to know nothing about how a leaf is stored. */
   const histories = useMemo(() => {
-    const out = {} as Record<CareKind, string[]>;
+    const out = {} as Record<Mark, string[]>;
     for (const k of CARE_KINDS) out[k] = plant ? careHistory(plant, k) : [];
+    const stamps = plant ? leafStamps(leafHistory(plant)) : [];
+    out.leafNew = stamps.filter((stamp) => stamp.stage === 'emerged').map((stamp) => stamp.at);
+    out.leafGrown = stamps.filter((stamp) => stamp.stage === 'matured').map((stamp) => stamp.at);
     return out;
   }, [plant]);
 
   const daySets = useMemo(() => {
-    const out = {} as Record<CareKind, Set<string>>;
+    const out = {} as Record<Mark, Set<string>>;
     for (const k of CARE_KINDS) out[k] = dayKeySet(histories[k]);
+    /* Through `leafDays` rather than `dayKeySet` on the stamps above: both
+     * answer "which local days", and keeping the leaf rule in lib/leaves.ts
+     * means one module owns what a leaf day is. */
+    const days = leafDays(plant ? leafHistory(plant) : []);
+    out.leafNew = days.emerged;
+    out.leafGrown = days.matured;
     return out;
-  }, [histories]);
+  }, [histories, plant]);
 
-  const shown = useMemo<CareKind[]>(
-    () => (filter === 'all' ? CARE_KINDS : [filter]),
-    [filter]
-  );
+  const shown = useMemo<Mark[]>(() => MARKS_FOR[filter], [filter]);
 
   /*
    * Next due, per kind. Watering's interval comes from the diagnosis; repot and
@@ -165,12 +242,23 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
   const plantName =
     plant.nickname ?? plant.species?.name ?? plant.diagnosis?.plantName ?? copy.careHistory.unnamed;
 
-  /* Which kinds happened on a given day, in the fixed order of CARE_KINDS so
-   * the dots never swap places between one square and the next. */
-  const kindsOn = (key: string): CareKind[] => shown.filter((k) => daySets[k].has(key));
-  const dueOn = (key: string): CareKind[] => shown.filter((k) => due[k] === key);
+  /* Which markers land on a given day, in the fixed order of MARKS so they
+   * never swap places between one square and the next. */
+  const kindsOn = (key: string): Mark[] => shown.filter((k) => daySets[k].has(key));
+  /* Only the three care kinds have a due date. New growth has none - the plant
+   * decides when it pushes a leaf, and a dashed "next leaf due" square would be
+   * the app inventing a schedule for something it cannot schedule. */
+  const dueOn = (key: string): CareKind[] =>
+    CARE_KINDS.filter((k) => shown.includes(k) && due[k] === key);
 
-  const total = shown.reduce((n, k) => n + histories[k].length, 0);
+  /*
+   * A leaf is ONE entry however many markers it draws, so the count skips the
+   * maturity stamps - "12 leaves tracked" over six leaves that have each been
+   * marked grown is a number the user cannot reconcile with anything.
+   */
+  const total = shown
+    .filter((k) => k !== 'leafGrown')
+    .reduce((n, k) => n + histories[k].length, 0);
   const monthDays = view.weeks.flat().filter((c) => c.date);
   const monthCount = monthDays.filter((c) => kindsOn(dayKey(c.date!)).length > 0).length;
 
@@ -183,7 +271,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
       .slice(0, 10);
   }, [shown, histories]);
 
-  const single = filter === 'all' ? null : COPY[filter];
+  const single = filter === 'all' ? null : FILTER_COPY[filter];
 
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
@@ -214,10 +302,13 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
         {/* Filter, not navigation: every chip shows the same month of the same
             plant, so switching must never reset the month the user paged to. */}
         <View style={s.filterRow}>
-          {(['all', ...CARE_KINDS] as Filter[]).map((f) => {
+          {(['all', ...CARE_KINDS, 'leaf'] as Filter[]).map((f) => {
             const active = filter === f;
-            const label = f === 'all' ? copy.careHistory.filterAll : COPY[f].short;
-            const count = f === 'all' ? undefined : histories[f].length;
+            const label = f === 'all' ? copy.careHistory.filterAll : FILTER_COPY[f].short;
+            /* One leaf is one count, so the chip counts the leaves that
+               appeared rather than every marker the filter draws. */
+            const count =
+              f === 'all' ? undefined : f === 'leaf' ? histories.leafNew.length : histories[f].length;
             return (
               <Pressable
                 key={f}
@@ -228,7 +319,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
                 accessibilityLabel={`Show ${label.toLowerCase()}`}
               >
                 {f !== 'all' && (
-                  <View style={[s.chipDot, { backgroundColor: t.color[COPY[f].color] }]} />
+                  <View style={[s.chipDot, { backgroundColor: t.color[FILTER_COPY[f].color] }]} />
                 )}
                 <Text style={[s.chipText, active && s.chipTextActive]}>
                   {label}
@@ -287,17 +378,27 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
                 const isToday = key === todayKey;
 
                 /*
-                 * A square filled by ONE kind is that kind's colour; a square
-                 * with two or three logged on the same day cannot be, so it
+                 * A square carrying ONE marker takes that marker's colour; a
+                 * square with two or more logged on the same day cannot, so it
                  * stays neutral and lets the dots underneath carry the meaning.
                  * A colour per pair would need six more tokens to say something
                  * the dots already say.
                  */
-                const fill = done.length === 1 ? t.color[COPY[done[0]].color] : null;
-                const onFill = done.length === 1 ? t.color[COPY[done[0]].onColor] : null;
-                /* Due is an outline, done is a fill: one is a plan and the
-                 * other is a fact, and they must not read alike. */
-                const ring = dueKinds.length > 0 ? t.color[COPY[dueKinds[0]].color] : null;
+                const only = done.length === 1 ? MARK_COPY[done[0]] : null;
+                /*
+                 * A leaf APPEARING is drawn as a solid ring rather than a fill -
+                 * same green as the leaf finishing, different shape. The two
+                 * are one event seen twice, so they must read as related, and
+                 * only the shape can say which end of it this square is.
+                 */
+                const outlined = only?.outline === true;
+                const fill = only && !outlined ? t.color[only.color] : null;
+                const onFill = only && !outlined ? t.color[only.onColor] : null;
+                const markRing = only && outlined ? t.color[only.color] : null;
+                /* Due is a DASHED outline, done is a fill or a solid ring: one
+                 * is a plan and the other is a fact, and they must not read
+                 * alike. */
+                const ring = dueKinds.length > 0 ? t.color[MARK_COPY[dueKinds[0]].color] : null;
 
                 return (
                   <View key={ci} style={s.cell}>
@@ -306,14 +407,17 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
                         s.cellInner,
                         done.length > 1 && s.cellMulti,
                         fill ? { backgroundColor: fill } : null,
-                        ring && !fill ? { borderWidth: 1.5, borderColor: ring, borderStyle: 'dashed' } : null,
+                        markRing ? { borderWidth: 2, borderColor: markRing } : null,
+                        ring && !fill && !markRing
+                          ? { borderWidth: 1.5, borderColor: ring, borderStyle: 'dashed' }
+                          : null,
                         isToday && done.length === 0 && !ring ? s.cellToday : null,
                       ]}
                       accessible
                       accessibilityLabel={
                         `${cell.date.toLocaleDateString(localeTag(), { day: 'numeric', month: 'long' })}` +
-                        done.map((k) => copy.careHistory.doneSuffix(COPY[k].short)).join('') +
-                        dueKinds.map((k) => copy.careHistory.dueSuffix(COPY[k].short)).join('') +
+                        done.map((k) => copy.careHistory.doneSuffix(MARK_COPY[k].short)).join('') +
+                        dueKinds.map((k) => copy.careHistory.dueSuffix(MARK_COPY[k].short)).join('') +
                         (isToday ? ', today' : '')
                       }
                     >
@@ -321,7 +425,8 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
                         style={[
                           s.cellText,
                           onFill ? { color: onFill, fontWeight: '700' } : null,
-                          !fill && ring ? { color: ring, fontWeight: '700' } : null,
+                          markRing ? { color: markRing, fontWeight: '700' } : null,
+                          !fill && !markRing && ring ? { color: ring, fontWeight: '700' } : null,
                         ]}
                       >
                         {cell.day}
@@ -331,7 +436,18 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
                       {done.length > 1 && (
                         <View style={s.dotRow}>
                           {done.map((k) => (
-                            <View key={k} style={[s.dot, { backgroundColor: t.color[COPY[k].color] }]} />
+                            /* Hollow for the leaf that appeared, solid for
+                               everything that happened - the same shape rule
+                               the filled square follows, at dot scale. */
+                            <View
+                              key={k}
+                              style={[
+                                s.dot,
+                                MARK_COPY[k].outline
+                                  ? { borderWidth: 1.5, borderColor: t.color[MARK_COPY[k].color] }
+                                  : { backgroundColor: t.color[MARK_COPY[k].color] },
+                              ]}
+                            />
                           ))}
                         </View>
                       )}
@@ -354,8 +470,15 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
         <View style={s.legend}>
           {shown.map((k) => (
             <View key={k} style={s.legendItem}>
-              <View style={[s.legendSwatch, { backgroundColor: t.color[COPY[k].color] }]} />
-              <Text style={s.legendText}>{COPY[k].short}</Text>
+              <View
+                style={[
+                  s.legendSwatch,
+                  MARK_COPY[k].outline
+                    ? { borderWidth: 2, borderColor: t.color[MARK_COPY[k].color] }
+                    : { backgroundColor: t.color[MARK_COPY[k].color] },
+                ]}
+              />
+              <Text style={s.legendText}>{MARK_COPY[k].short}</Text>
             </View>
           ))}
           <View style={s.legendItem}>
@@ -375,9 +498,9 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
             {recent.map((entry) => (
               <View key={`${entry.kind}-${entry.at}`} style={s.recentRow}>
                 <Ionicons
-                  name={COPY[entry.kind].icon}
+                  name={MARK_COPY[entry.kind].icon}
                   size={14}
-                  color={t.color[COPY[entry.kind].color]}
+                  color={t.color[MARK_COPY[entry.kind].color]}
                 />
                 <Text style={s.recentText}>
                   {new Date(entry.at).toLocaleDateString(localeTag(), {
@@ -386,7 +509,11 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
                     month: 'short',
                   })}
                 </Text>
-                {filter === 'all' && <Text style={s.recentKind}>{COPY[entry.kind].short}</Text>}
+                {/* The marker's own word, not the filter's: inside the leaf
+                    filter the two rows differ only by which end they are. */}
+                {(filter === 'all' || filter === 'leaf') && (
+                  <Text style={s.recentKind}>{MARK_COPY[entry.kind].short}</Text>
+                )}
                 <Text style={s.recentTime}>
                   {new Date(entry.at).toLocaleTimeString(localeTag(), {
                     hour: '2-digit',

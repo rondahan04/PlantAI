@@ -1,6 +1,7 @@
 import type { PlantDiagnosis } from '../types';
 import type { SoilMediumId } from '../lib/soilMedia';
 import type { PlantSpecies, StoredPlant } from './plantStore';
+import type { LeafEvent } from '../lib/leaves';
 
 /*
  * Cloud sync for the plant library (Epic 3a).
@@ -70,6 +71,9 @@ export interface CloudRow {
   repot_log: string[] | null;
   last_fertilized_at: string | null;
   fertilizer_log: string[] | null;
+  /* New growth. A jsonb array of objects rather than of timestamps, because a
+   * leaf has two ends that have to stay paired - see lib/leaves.ts. */
+  leaf_log: LeafEvent[] | null;
   reminder_id: string | null;
 }
 
@@ -124,6 +128,7 @@ export type CloudPatch = Partial<{
   repotLog: string[];
   lastFertilizedAt: string | null;
   fertilizerLog: string[];
+  leafLog: LeafEvent[];
   soilMedium: SoilMediumId | null;
   nickname: string | null;
   /* Storage OBJECT PATH, never a URL - see CloudRow.photo_path. */
@@ -167,6 +172,7 @@ function toStoredPlant(row: CloudRow): StoredPlant {
   if (row.fertilizer_log && row.fertilizer_log.length > 0) {
     plant.fertilizerLog = row.fertilizer_log;
   }
+  if (row.leaf_log && row.leaf_log.length > 0) plant.leafLog = row.leaf_log;
   if (row.reminder_id) plant.reminderId = row.reminder_id;
   return plant;
 }
@@ -199,6 +205,7 @@ function toRow(userId: string, plant: StoredPlant, photoPath: string | null): Cl
     repot_log: plant.repotLog ?? [],
     last_fertilized_at: plant.lastFertilizedAt ?? null,
     fertilizer_log: plant.fertilizerLog ?? [],
+    leaf_log: plant.leafLog ?? [],
     reminder_id: null,
   };
 }
@@ -271,6 +278,7 @@ export function createCloudPlantLibrary(deps: CloudDeps, opts: CloudOptions = {}
     if ('repotLog' in patch) rowPatch.repot_log = patch.repotLog ?? [];
     if ('lastFertilizedAt' in patch) rowPatch.last_fertilized_at = patch.lastFertilizedAt ?? null;
     if ('fertilizerLog' in patch) rowPatch.fertilizer_log = patch.fertilizerLog ?? [];
+    if ('leafLog' in patch) rowPatch.leaf_log = patch.leafLog ?? [];
     if ('soilMedium' in patch) rowPatch.soil_medium = patch.soilMedium ?? null;
     if ('nickname' in patch) rowPatch.nickname = patch.nickname ?? null;
     if ('photoPath' in patch) rowPatch.photo_path = patch.photoPath ?? null;

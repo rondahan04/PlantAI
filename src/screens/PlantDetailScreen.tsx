@@ -30,10 +30,11 @@ import type { GenusCarePlan } from '../lib/genusCarePlan';
 import type { SoilMediumId } from '../lib/soilMedia';
 import { plantDisplayName, plantSecondaryName } from '../lib/portfolio';
 import { genusCarePlans } from '../services/genusCarePlans';
-import { careHistory, type CareKind } from '../services/plantStore';
+import { careHistory, leafHistory, type CareKind } from '../services/plantStore';
 import { useNurserySearch } from '../hooks/useNurserySearch';
 import { cancelWateringReminder, scheduleWateringReminder } from '../services/wateringReminder';
 import ScheduleCard from '../components/ScheduleCard';
+import LeafCard from '../components/LeafCard';
 import CarePlanCard from '../components/CarePlanCard';
 import SoilCard from '../components/SoilCard';
 
@@ -115,6 +116,10 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
     plantRepo.loadLocal().plants.find((p) => p.id === plantId) ?? null
   );
   const [watering, setWatering] = useState(false);
+  /* New growth writes through the same repo as everything else, which is a
+   * round trip when signed in - the card dims rather than letting a second tap
+   * log a second leaf for the same one. */
+  const [leafBusy, setLeafBusy] = useState(false);
   const [removing, setRemoving] = useState(false);
   /* A paid call that takes seconds, so the button says "Checking…" rather than
    * going quiet - and refuses a second tap, which would spend twice. */
@@ -243,6 +248,9 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
    * here is how the card and the detail screen come to call the same plant two
    * different things. */
   const plantName = plantDisplayName(plant);
+  /* Read through `leafHistory` rather than off `plant.leafLog`, so a damaged
+   * entry is dropped here instead of reaching the card as `Invalid Date`. */
+  const leaves = leafHistory(plant);
   const secondaryName = plantSecondaryName(plant);
   const color = t.color[CONDITION_COLOR[diagnosis?.condition ?? 'healthy'] ?? 'conditionModerate'];
   /* From the enum, not from what the model wrote - see lib/conditionLabel.ts. */
@@ -348,6 +356,28 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
       return;
     }
     setPlant(logged.plant);
+  };
+
+  /*
+   * New growth: three taps, one path. Each hands the repo the change and
+   * re-renders from what came back, exactly as the care logs do - the rules
+   * about which tap reverses which live in lib/leaves.ts, not here.
+   */
+  const runLeaf = async (action: () => Promise<Awaited<ReturnType<typeof plantRepo.logLeaf>>>) => {
+    setLeafBusy(true);
+    try {
+      const result = await action();
+      if (!result.ok) {
+        Alert.alert(
+          copy.leafCard.failTitle,
+          SAVE_FAILURE[result.reason] ?? copy.plantDetail.failStorage
+        );
+        return;
+      }
+      setPlant(result.plant);
+    } finally {
+      setLeafBusy(false);
+    }
   };
 
   /*
@@ -643,6 +673,26 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
               onHistory={() => navigation.navigate('WateringHistory', { plantId: plant.id, kind })}
             />
           ))}
+
+          {/*
+            New growth, directly under the schedules and inside the same
+            section. It belongs with them - it is the same plant's ongoing
+            story - but it is not one of them: nothing here is due, and the
+            card has one action per leaf still opening rather than one action
+            full stop. See components/LeafCard.tsx.
+          */}
+          <LeafCard
+            leaves={leaves}
+            plantName={plantName}
+            busy={leafBusy}
+            onLogNew={() => runLeaf(() => plantRepo.logLeaf(plant.id, Date.now()))}
+            onMarkGrown={(leafId) =>
+              runLeaf(() => plantRepo.markLeafGrown(plant.id, leafId, Date.now()))
+            }
+            /* Absent, not disabled, when there is nothing to undo. */
+            onUndo={leaves.length > 0 ? () => runLeaf(() => plantRepo.undoLeaf(plant.id)) : undefined}
+            onHistory={() => navigation.navigate('WateringHistory', { plantId: plant.id, kind: 'leaf' })}
+          />
         </View>
 
         {/*

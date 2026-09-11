@@ -204,7 +204,9 @@ export type RootStackParamList = {
   EditPlant: { plantId: string };
   /* `kind` is optional so the existing navigate({ plantId }) call sites keep
    * working and default to watering. */
-  WateringHistory: { plantId: string; kind?: 'water' | 'repot' | 'fertilizer' };
+  /* `leaf` is not a care kind - it is new growth, which the same calendar
+   * draws as its own filter with its own two markers. See lib/leaves.ts. */
+  WateringHistory: { plantId: string; kind?: 'water' | 'repot' | 'fertilizer' | 'leaf' };
   Nurseries: {
     plantName: string;
     lat: number;

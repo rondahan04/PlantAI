@@ -8,6 +8,7 @@ import {
   runMigrations,
   wateringHistory,
   careHistory,
+  leafHistory,
   MAX_WATERING_LOG,
   MAX_CARE_LOG,
   type StorageDeps,
@@ -1176,4 +1177,109 @@ test('update refuses a half-formed species rather than writing one', () => {
   assert.ok(result.ok);
   assert.deepEqual(result.plant.species, species, 'the last good species is kept');
   assert.deepEqual(store.load().plants.map((p) => p.id), ['id-1'], 'and the plant still loads');
+});
+
+// ─── New growth ───────────────────────────────────────────────────────────────
+
+/*
+ * The leaf rules themselves are tested in lib/leaves.test.ts. What is tested
+ * here is the STORE's half: that a tap persists, that undoing the only leaf
+ * leaves a record indistinguishable from one never tracked, and that a leaf
+ * never touches the watering schedule it sits beside.
+ */
+
+test('a tracked leaf survives a reload and stays pending', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'a', diagnosis });
+  assert.equal(saved.ok, true);
+  if (!saved.ok) return;
+
+  assert.equal(store.logLeaf(saved.plant.id).ok, true);
+
+  const reloaded = createPlantStore(s.deps, fixedOpts()).load().plants[0];
+  assert.equal(leafHistory(reloaded).length, 1);
+  assert.equal(leafHistory(reloaded)[0].maturedAt, undefined);
+});
+
+test('the second tap marks that leaf grown', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'a', diagnosis });
+  if (!saved.ok) return assert.fail('save failed');
+
+  const logged = store.logLeaf(saved.plant.id);
+  if (!logged.ok) return assert.fail('leaf not logged');
+  const leafId = leafHistory(logged.plant)[0].id;
+
+  const grown = store.markLeafGrown(saved.plant.id, leafId);
+  if (!grown.ok) return assert.fail('leaf not marked grown');
+  assert.notEqual(leafHistory(grown.plant)[0].maturedAt, undefined);
+});
+
+test('undoing the only leaf leaves no leafLog key at all', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'a', diagnosis });
+  if (!saved.ok) return assert.fail('save failed');
+
+  store.logLeaf(saved.plant.id);
+  const undone = store.undoLeaf(saved.plant.id);
+  if (!undone.ok) return assert.fail('undo failed');
+
+  // Absent, not `[]` - a record that was never tracked and one whose only leaf
+  // was undone have to be the same bytes, or every comparison of the mirror
+  // against a locally-written record starts reporting a difference.
+  assert.equal('leafLog' in undone.plant, false);
+  assert.equal(s.data.get(LIBRARY_KEY)?.includes('leafLog'), false);
+});
+
+test('tracking a leaf does not touch the watering schedule or its reminder', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'a', diagnosis });
+  if (!saved.ok) return assert.fail('save failed');
+
+  store.markWatered(saved.plant.id);
+  const withReminder = store.update(saved.plant.id, { reminderId: 'notif-1' });
+  if (!withReminder.ok) return assert.fail('reminder not stored');
+  const wateredAt = withReminder.plant.lastWateredAt;
+
+  const leafed = store.logLeaf(saved.plant.id);
+  if (!leafed.ok) return assert.fail('leaf not logged');
+  assert.equal(leafed.plant.lastWateredAt, wateredAt);
+  assert.equal(leafed.plant.reminderId, 'notif-1');
+});
+
+test('a leaf tap on a plant that is gone reports not_found', () => {
+  const store = createPlantStore(fakeStorage().deps, fixedOpts());
+  assert.deepEqual(store.logLeaf('nope'), { ok: false, reason: 'not_found' });
+  assert.deepEqual(store.undoLeaf('nope'), { ok: false, reason: 'not_found' });
+});
+
+test('a leaf tap that cannot be written reports storage_full', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'a', diagnosis });
+  if (!saved.ok) return assert.fail('save failed');
+
+  s.breakWrites('silent');
+  assert.deepEqual(store.logLeaf(saved.plant.id), { ok: false, reason: 'storage_full' });
+});
+
+test('a damaged leaf entry is hidden on read, not written back over', () => {
+  const s = fakeStorage();
+  const store = createPlantStore(s.deps, fixedOpts());
+  const saved = store.save({ photoUri: 'a', diagnosis });
+  if (!saved.ok) return assert.fail('save failed');
+
+  const blob = JSON.parse(s.data.get(LIBRARY_KEY)!);
+  blob.plants[0].leafLog = [{ id: 'junk' }, { id: 'ok', emergedAt: '2026-01-10T09:00:00.000Z' }];
+  s.data.set(LIBRARY_KEY, JSON.stringify(blob));
+
+  const plant = createPlantStore(s.deps, fixedOpts()).load().plants[0];
+  assert.deepEqual(leafHistory(plant).map((l) => l.id), ['ok']);
+  // The bytes are untouched until something actually writes - same rule the
+  // library's own filter-on-read follows.
+  assert.equal(s.data.get(LIBRARY_KEY)?.includes('junk'), true);
 });

@@ -68,6 +68,15 @@ const light = {
   feed: '#5F7A33',
   onFeed: '#FFFFFF',
 
+  /*
+   * New growth, the one thing on the calendar the user did not DO - a leaf
+   * opening is the plant's own event. A fresh blue-green, deliberately cooler
+   * than feeding's olive so the two greens are told apart on the same grid
+   * without either reading as the other's shade.
+   */
+  growth: '#2F8A63',
+  onGrowth: '#FFFFFF',
+
   // Plant condition scale - badge/dot/bar accents (>=3:1 on light surfaces).
   conditionHealthy: '#2F6B4F',
   conditionMild: '#4A7C59',
@@ -115,6 +124,9 @@ const dark = {
   onRepot: '#2A1B08',
   feed: '#A3C16A',
   onFeed: '#1B2409',
+
+  growth: '#6FCF9C',
+  onGrowth: '#0C2418',
 
   // Plant condition scale - lighter tonal variants for dark surfaces.
   conditionHealthy: '#7FB894',

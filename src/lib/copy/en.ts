@@ -539,8 +539,23 @@ export const en = {
       logged: (n: number) => `${n} ${n === 1 ? 'feed' : 'feeds'} logged`,
       noneThisMonth: 'No feeds this month',
     },
+    /*
+     * New growth is not a fourth care kind - nobody logs a leaf because the app
+     * asked them to - but it belongs on the same grid, because "it pushed a
+     * leaf two days after I fed it" is exactly the question this screen exists
+     * to answer. `emerged` and `matured` name the two marker styles.
+     */
+    leaf: {
+      short: 'Leaves',
+      title: 'New growth',
+      empty: 'No leaves tracked yet - tap New leaf on the plant to start.',
+      logged: (n: number) => `${n} ${n === 1 ? 'leaf' : 'leaves'} tracked`,
+      noneThisMonth: 'No new growth this month',
+      emerged: 'New leaf',
+      matured: 'Fully grown',
+    },
     allTitle: 'Care history',
-    allEmpty: 'Nothing logged yet - water, repot or feed the plant to start.',
+    allEmpty: 'Nothing logged yet - water, repot, feed or track a leaf to start.',
     allLogged: (n: number) => `${n} care ${n === 1 ? 'entry' : 'entries'} logged`,
     allNoneThisMonth: 'Nothing logged this month',
     daysOfCare: (n: number) => `${n} ${n === 1 ? 'day' : 'days'} of care this month`,
@@ -795,6 +810,37 @@ export const en = {
       (p.conditionLabel ? `, diagnosed ${p.conditionLabel}` : ', not diagnosed') +
       `, saved ${p.when}` +
       (p.watering ? `, watering ${p.watering.toLowerCase()}` : ''),
+  },
+  /*
+   * New growth, on the plant's own screen.
+   *
+   * Two taps make one leaf: the day it shows and the day it finishes opening.
+   * The copy never says "log" for the first one - the user is not recording a
+   * chore they performed, they are pointing at something the plant did.
+   */
+  leafCard: {
+    title: 'New growth',
+    note: 'Track a leaf from the day it appears to the day it opens.',
+    logNew: 'A new leaf appeared',
+    logNewA11y: (name: string) => `Track a new leaf on ${name}`,
+    /* The heading over the leaves still opening. Never shown at zero - an empty
+     * "0 leaves opening" is a worse sentence than no sentence. */
+    opening: (n: number) => `${n} ${n === 1 ? 'leaf' : 'leaves'} opening`,
+    appearedToday: 'Appeared today',
+    appearedYesterday: 'Appeared yesterday',
+    appearedDaysAgo: (n: number) => `Appeared ${n} days ago`,
+    markGrown: 'Fully grown',
+    markGrownA11y: (when: string) => `Mark the leaf that ${when.toLowerCase()} as fully grown`,
+    grown: (n: number) => `${n} ${n === 1 ? 'leaf' : 'leaves'} fully grown`,
+    /* The one number worth knowing: whether the leaf on the plant right now is
+     * running late. Omitted until something has actually finished. */
+    average: (n: number) => `about ${n} ${n === 1 ? 'day' : 'days'} to open`,
+    empty: 'Nothing tracked yet. Tap when you spot a new leaf.',
+    undo: 'Undo last',
+    undoA11y: 'Undo the last new-growth entry',
+    history: 'History',
+    historyA11y: 'See the new-growth history',
+    failTitle: 'That did not save',
   },
   scheduleCard: {
     water: {

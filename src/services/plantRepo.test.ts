@@ -78,6 +78,7 @@ function makeRepo(
   /* Records what the guest half was asked to adopt, and answers with the
    * "stored" path so a test can tell an adopted copy from the raw picker URI. */
   const adopted: string[] = [];
+  let leafSeq = 0;
   const photos = {
     adopt: async (id: string, sourceUri: string) => {
       adopted.push(sourceUri);
@@ -92,6 +93,9 @@ function makeRepo(
     photos,
     getSessionHint: () => hint,
     getUserId: () => (hint ? 'u1' : null),
+    /* Deterministic leaf ids, so the second tap can name the leaf the first
+     * one made without reading it back out first. */
+    newId: () => `leaf-${++leafSeq}`,
   });
   return { repo, guest, mirror, rows, adopted, setHint: (v: boolean) => (hint = v) };
 }
@@ -560,4 +564,130 @@ test('clearing a nickname removes it, so the plant goes back to its species name
   // Absent, not the empty string: plantDisplayName falls back to the species
   // only when there is no nickname key at all.
   assert.equal(after?.nickname, undefined);
+});
+
+// ─── New growth ───────────────────────────────────────────────────────────────
+
+/*
+ * Leaves take the same guest/cloud split as the care logs, with one difference
+ * that is worth a test each way: the transformation is NOT re-implemented in
+ * the repo, both sides call `lib/leaves.ts`. So what is checked here is the
+ * wiring - that the cloud row and the mirror end up holding the same list, and
+ * that a leaf logged in the cloud can still be marked grown afterwards.
+ */
+
+test('logged out: logLeaf() goes straight to the guest store', async () => {
+  const { repo, guest } = makeRepo({ hint: false });
+  const saved = await repo.saveManual({ photoUri: '', species });
+  if (!saved.ok) return assert.fail('save failed');
+
+  const logged = await repo.logLeaf(saved.plant.id, Date.parse('2026-09-01T08:00:00.000Z'));
+  assert.equal(logged.ok, true);
+  assert.equal(guest.load().plants[0].leafLog?.length, 1);
+});
+
+test('logged in: a leaf lands in the cloud row and the mirror together', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species });
+  if (!saved.ok) return assert.fail('save failed');
+
+  const at = Date.parse('2026-09-01T08:00:00.000Z');
+  const logged = await repo.logLeaf(saved.plant.id, at);
+  assert.equal(logged.ok, true);
+
+  assert.equal(rows.get(saved.plant.id)?.leaf_log?.length, 1);
+  assert.equal(rows.get(saved.plant.id)?.leaf_log?.[0].emergedAt, '2026-09-01T08:00:00.000Z');
+  assert.equal(mirror.load().plants[0].leafLog?.length, 1);
+});
+
+test('logged in: the second tap finds the leaf the first tap made', async () => {
+  const { repo, rows } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species });
+  if (!saved.ok) return assert.fail('save failed');
+
+  const logged = await repo.logLeaf(saved.plant.id, Date.parse('2026-09-01T08:00:00.000Z'));
+  if (!logged.ok) return assert.fail('leaf not logged');
+  const leafId = logged.plant.leafLog![0].id;
+
+  const grown = await repo.markLeafGrown(
+    saved.plant.id,
+    leafId,
+    Date.parse('2026-09-21T08:00:00.000Z')
+  );
+  assert.equal(grown.ok, true);
+  assert.equal(rows.get(saved.plant.id)?.leaf_log?.[0].maturedAt, '2026-09-21T08:00:00.000Z');
+});
+
+test('logged in: undo clears the cloud row back to empty', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species });
+  if (!saved.ok) return assert.fail('save failed');
+
+  await repo.logLeaf(saved.plant.id, Date.parse('2026-09-01T08:00:00.000Z'));
+  const undone = await repo.undoLeaf(saved.plant.id);
+  assert.equal(undone.ok, true);
+
+  assert.deepEqual(rows.get(saved.plant.id)?.leaf_log, []);
+  // The mirror drops the key entirely, matching what the guest store writes.
+  assert.equal('leafLog' in mirror.load().plants[0], false);
+});
+
+test('logged in: a leaf the cloud refuses is not shown as recorded', async () => {
+  const { repo: broken } = makeRepo({ hint: true, cloudFail: { update: true } });
+  const saved = await broken.saveManual({ photoUri: '', species });
+  if (!saved.ok) return assert.fail('save failed');
+
+  const logged = await broken.logLeaf(saved.plant.id, Date.now());
+  assert.equal(logged.ok, false);
+  assert.equal(broken.loadLocal().plants[0].leafLog, undefined);
+});
+
+// ─── A failed read is not an empty library ───────────────────────────────────
+
+test('a cloud fetch that fails leaves the mirror exactly as it was', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species });
+  if (!saved.ok) return assert.fail('save failed');
+  assert.equal(mirror.load().plants.length, 1);
+
+  /*
+   * A query that never landed - a bad column, an expired session, no network.
+   * The account still holds the plant, so the device must keep showing it.
+   * Before this guard, `fetchPlants` swallowed the error, returned [], and
+   * `refreshFromCloud` replaced the whole mirror with nothing: every plant
+   * vanished from the phone while the rows sat untouched in the cloud.
+   */
+  let failing = true;
+  const brokenCloud = createCloudPlantLibrary(
+    {
+      fetchPlants: async () => {
+        if (failing) throw new Error('column plants.leaf_log does not exist');
+        return [...rows.values()];
+      },
+      uploadPhoto: async (path) => path,
+      insertPlant: async () => true,
+      updatePlant: async () => true,
+      deletePlant: async () => true,
+    },
+    { newId: () => 'cloud-x' }
+  );
+  const brokenRepo = createPlantRepo({
+    guest: createPlantStore(memoryStorage()),
+    mirror,
+    cloud: brokenCloud,
+    photos: noPhotos,
+    getSessionHint: () => true,
+    getUserId: () => 'u1',
+  });
+
+  const afterFailure = await brokenRepo.refreshFromCloud();
+  assert.equal(afterFailure.plants.length, 1);
+  assert.equal(mirror.load().plants.length, 1);
+
+  /* ...and a read that really does come back empty still clears it, because
+   * that one is the account genuinely holding no plants. */
+  failing = false;
+  rows.clear();
+  const afterEmpty = await brokenRepo.refreshFromCloud();
+  assert.equal(afterEmpty.plants.length, 0);
 });

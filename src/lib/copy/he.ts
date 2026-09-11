@@ -454,8 +454,17 @@ export const he: Copy = {
       logged: (n: number) => (n === 1 ? 'תועד דישון אחד' : `תועדו ${n} דישונים`),
       noneThisMonth: 'לא תועדו דישונים החודש',
     },
+    leaf: {
+      short: 'עלים',
+      title: 'עלים חדשים',
+      empty: 'עוד לא תועדו עלים - הקישו על "עלה חדש הופיע" במסך הצמח כדי להתחיל.',
+      logged: (n: number) => (n === 1 ? 'תועד עלה אחד' : `תועדו ${n} עלים`),
+      noneThisMonth: 'לא תועדו עלים חדשים החודש',
+      emerged: 'עלה חדש',
+      matured: 'נפתח במלואו',
+    },
     allTitle: 'היסטוריית טיפול',
-    allEmpty: 'עוד לא תועד דבר - השקו, החליפו עציץ או דשנו כדי להתחיל.',
+    allEmpty: 'עוד לא תועד דבר - השקו, החליפו עציץ, דשנו או עקבו אחרי עלה חדש כדי להתחיל.',
     allLogged: (n: number) => (n === 1 ? 'תועד טיפול אחד' : `תועדו ${n} טיפולים`),
     allNoneThisMonth: 'לא תועד דבר החודש',
     daysOfCare: (n: number) => (n === 1 ? 'יום אחד של טיפול החודש' : `${n} ימי טיפול החודש`),
@@ -660,6 +669,27 @@ export const he: Copy = {
       (p.conditionLabel ? `, אובחן ${p.conditionLabel}` : ', לא אובחן') +
       `, נשמר ${p.when}` +
       (p.watering ? `, השקיה ${p.watering}` : ''),
+  },
+  leafCard: {
+    title: 'עלים חדשים',
+    note: 'עקבו אחרי עלה מהיום שהציץ ועד שנפתח במלואו.',
+    logNew: 'עלה חדש הופיע',
+    logNewA11y: (name: string) => `מעקב אחרי עלה חדש ב${name}`,
+    opening: (n: number) => (n === 1 ? 'עלה אחד נפתח עכשיו' : `${n} עלים נפתחים עכשיו`),
+    appearedToday: 'הופיע היום',
+    appearedYesterday: 'הופיע אתמול',
+    appearedDaysAgo: (n: number) => `הופיע לפני ${n} ימים`,
+    markGrown: 'נפתח במלואו',
+    /* No lowercasing - Hebrew has no letter case. */
+    markGrownA11y: (when: string) => `לסמן שהעלה ש${when} נפתח במלואו`,
+    grown: (n: number) => (n === 1 ? 'עלה אחד נפתח במלואו' : `${n} עלים נפתחו במלואם`),
+    average: (n: number) => (n === 1 ? 'בערך יום אחד עד הפתיחה' : `בערך ${n} ימים עד הפתיחה`),
+    empty: 'עוד לא תועד דבר. הקישו כשאתם מזהים עלה חדש.',
+    undo: 'ביטול האחרון',
+    undoA11y: 'ביטול הרישום האחרון של עלה',
+    history: 'היסטוריה',
+    historyA11y: 'היסטוריית העלים החדשים',
+    failTitle: 'זה לא נשמר',
   },
   scheduleCard: {
     water: {
