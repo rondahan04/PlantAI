@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Animated, Linking, Alert, ActivityIndicator } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import MapView, { Marker } from 'react-native-maps';
@@ -339,10 +339,6 @@ export default function NurseriesScreen({ navigation, route }: Props) {
   const deliveryCount = deliveryList.length;
   const pickupCount = pickupList.length;
   const mapNurseries = visible.filter(hasCoords);
-
-  /* How many were checked and ruled out. Not rows, just a quiet reassurance
-   * that the search was wider than the list suggests. */
-  const ruledOut = nurseries.length - worthShowing.length;
 
   const handleOrder = (nursery: Nursery) => {
     /*

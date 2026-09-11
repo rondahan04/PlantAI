@@ -83,7 +83,7 @@ test('a cached genus costs no fetch, even for a different species in it', async 
       setItem: (k, v) => void store.set(k, v),
       removeItem: (k) => void store.delete(k),
     },
-    fetchPlan: async (genus, family) => {
+    fetchPlan: async (genus, _family) => {
       calls++;
       return { bySoil: fullPlan(genus).bySoil };
     },

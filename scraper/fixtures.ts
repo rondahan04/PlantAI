@@ -45,7 +45,7 @@ export function readFixture(name: string | null): string {
 }
 
 /* Every captured fixture, labelled ones included. */
-export function loadFixtures(): PriceFixture[] {
+function loadFixtures(): PriceFixture[] {
   const manifest = path.join(DIR, 'manifest.json');
   if (!fs.existsSync(manifest)) return [];
   return JSON.parse(fs.readFileSync(manifest, 'utf8'));

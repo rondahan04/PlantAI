@@ -38,13 +38,13 @@ import type { GenusCarePlan, SoilCarePlan } from './genusCarePlan.ts';
 /* Every 3 weeks - the middle of the usual "every 2-4 weeks in the growing
  * season" advice, and harmless if the user feeds a little late. */
 export const FERTILIZE_EVERY_DAYS = 21;
-export const FERTILIZE_EVERY_DAYS_MAX = 28;
+const FERTILIZE_EVERY_DAYS_MAX = 28;
 
 /* 18 months. Most houseplants want a bigger pot every 1-2 years; erring long
  * matters more than erring short, because repotting on schedule rather than on
  * need is how a happy root-bound plant gets disturbed for nothing. */
 export const REPOT_EVERY_DAYS = 540;
-export const REPOT_EVERY_DAYS_MAX = 730;
+const REPOT_EVERY_DAYS_MAX = 730;
 
 /* One definition of the three kinds, owned by the store that persists them.
  * Type-only, so this stays a pure module with no storage behind it. */
@@ -129,14 +129,7 @@ export function soilPlanFor(
  */
 export function soilAdjustedPlan(
   carePlan: CarePlan | undefined,
-  medium: SoilMediumId | undefined,
-  /*
-   * The medium's display name, passed in rather than read from soilMedia here,
-   * because this module is pure and must not know which language the app is
-   * speaking. Defaults to the English label so every pre-Hebrew caller and
-   * test behaves exactly as before.
-   */
-  mediumLabel?: string
+  medium: SoilMediumId | undefined
 ): CarePlan | undefined {
   if (!carePlan) return undefined;
   const multiplier = soilMediumById(medium)?.waterMultiplier;

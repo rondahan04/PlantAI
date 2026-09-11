@@ -20,7 +20,7 @@
  * that screen for why the answer comes back through route params.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -28,7 +28,6 @@ import {
   Pressable,
   ScrollView,
   TextInput,
-  Image,
   Alert,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';

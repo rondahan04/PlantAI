@@ -20,7 +20,7 @@
  * keystroke-adjacent change would upload three pictures to keep the last.
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -28,7 +28,6 @@ import {
   Pressable,
   ScrollView,
   TextInput,
-  Image,
   Alert,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';

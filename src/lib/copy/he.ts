@@ -722,7 +722,7 @@ export const he: Copy = {
     /* Names the action rather than the button, matching `earlyHint` above:
      * "החזיקו כדי לתעד השקיה מוקדם" reads as Hebrew, while threading the
      * button's own past-tense label ("הושקה") through it does not. */
-    earlyNote: (done: string, title: string) => `החזיקו כדי לתעד ${title} מוקדם`,
+    earlyNote: (_done: string, title: string) => `החזיקו כדי לתעד ${title} מוקדם`,
     reminderSet: 'תזכורת נקבעה',
     /* No lowercasing, for the same reason as historyA11y above: Hebrew has no
      * letter case. */

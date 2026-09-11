@@ -68,14 +68,14 @@ interface NurseryResultJSON {
  * from "service did not answer" - two different sentences to the user, and only
  * one of them is worth a retry.
  */
-export class NurserySearchTimeout extends Error {
+class NurserySearchTimeout extends Error {
   constructor() {
     super('NURSERY_SEARCH_TIMEOUT');
     this.name = 'TimeoutError';
   }
 }
 
-export class NurseryServiceError extends Error {
+class NurseryServiceError extends Error {
   readonly detail: string;
   constructor(detail: string) {
     super('NURSERY_SERVICE_ERROR');

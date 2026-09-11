@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Alert } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { photoCacheKey } from '../../lib/media/photoCacheKey';
@@ -23,7 +23,7 @@ import {
 import { SERVER_MAX_BODY_BYTES, megabytes } from '../../lib/media/uploadLimit';
 import { copy, localeTag } from '../../services/language';
 import { plantPhotos } from '../../services/media/photos';
-import { intervalLabel, wateringState } from '../../lib/care/watering';
+import { wateringState } from '../../lib/care/watering';
 import { treatmentProduct, treatmentProductLabel } from '../../lib/diagnosis/treatments';
 import { CARE_KINDS, plantCarePlan, soilPlanFor } from '../../lib/care/care';
 import type { GenusCarePlan } from '../../lib/care/genusCarePlan';

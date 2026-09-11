@@ -248,7 +248,7 @@ export function createRateLimiter(
 }
 
 /* How long the next Firecrawl request would queue for the minute window. */
-export function firecrawlWaitMs(): number {
+function firecrawlWaitMs(): number {
   return firecrawlRate?.waitEstimateMs() ?? 0;
 }
 
@@ -320,7 +320,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  *
  * A timed-out request is NOT retried - see isTimeout.
  */
-export const FIRECRAWL_TIMEOUT_MS = Number(env('FIRECRAWL_TIMEOUT_MS')) || 25000;
+const FIRECRAWL_TIMEOUT_MS = Number(env('FIRECRAWL_TIMEOUT_MS')) || 25000;
 
 /*
  * Firecrawl keeps a copy of every page it renders and hands it back in
@@ -527,7 +527,7 @@ export function tavilyLeads(opts: { waitFor?: number; tavilyKey?: string }): boo
 export const FIRECRAWL_RESCUE_BUDGET_MS = 10_000;
 
 /* True when Firecrawl can answer soon enough to be worth asking. */
-export function firecrawlReady(budgetMs = FIRECRAWL_RESCUE_BUDGET_MS): boolean {
+function firecrawlReady(budgetMs = FIRECRAWL_RESCUE_BUDGET_MS): boolean {
   return firecrawlWaitMs() <= budgetMs;
 }
 
@@ -593,7 +593,7 @@ const BROWSER_UA =
  *
  * `status: 0` means the request never completed (DNS, TLS, timeout).
  */
-export async function fetchRawHtmlResult(
+async function fetchRawHtmlResult(
   url: string,
   fetchImpl: typeof fetch = fetch,
   /*
@@ -630,7 +630,7 @@ export async function fetchRawHtmlResult(
  * no credentials, no cookies, no user data. The alternative is reporting a shop
  * as unreachable when it is simply old.
  */
-export async function fetchRawHtmlWithSchemeFallback(
+async function fetchRawHtmlWithSchemeFallback(
   url: string,
   fetchImpl: typeof fetch = fetch,
   keepUnreadable = false
@@ -704,7 +704,7 @@ export function normalizePlatform(name: string): string {
 }
 
 /* Load previously learned platform→template pairs (merged over built-ins). */
-export function loadLearnedPlatforms(file: string): void {
+function loadLearnedPlatforms(file: string): void {
   try {
     if (fs.existsSync(file)) learnedTemplates = JSON.parse(fs.readFileSync(file, 'utf8'));
   } catch {
@@ -995,7 +995,7 @@ const MIN_JUDGEABLE_CHARS = 2000;
  * searches at all. Latin-script and meaningless on purpose: a Hebrew word risks
  * matching something, and a match would make a working search look broken.
  */
-export const CONTROL_QUERY = 'zzqxwvplant';
+const CONTROL_QUERY = 'zzqxwvplant';
 
 /* Share of lines two reads must have in common to be called the same page. */
 const SAME_PAGE_OVERLAP = 0.85;
@@ -1056,7 +1056,7 @@ export function answeredQuery(opts: {
   homeText?: string;
   query: string;
 }): boolean | undefined {
-  const { searchText, controlText = '', homeText = '', query } = opts;
+  const { searchText, controlText = '', homeText = '' } = opts;
   if (!searchText.trim()) return undefined;
   /*
    * The control read settles it. Ask the same URL for a plant that does not
@@ -1091,7 +1091,7 @@ export function answeredQuery(opts: {
 
 /* Does this page show a shelf at all? Prices or product permalinks - the same
  * two signals scoreMarkdown counts, asked as a yes/no. */
-export function hasProducts(text: string): boolean {
+function hasProducts(text: string): boolean {
   return countPrices(text) > 0 || new RegExp(PRODUCT_LINK_RE.source).test(text);
 }
 
@@ -1304,7 +1304,7 @@ function coercePlants(items: any): Plant[] {
  * the name, the price and the stock flag, and ranking already established that
  * this row is the plant. Every field here is copied, none is inferred.
  */
-export function plantFromStructured(p: StructuredProduct): Plant {
+function plantFromStructured(p: StructuredProduct): Plant {
   return {
     name: p.name,
     price: formatPrice(p),
@@ -1345,7 +1345,7 @@ Content:\n${excerpt}`;
 
 /* Verification pass: the model acts strictly as an auditor. It cross-references
  * the extracted JSON against the source text and returns a strict verdict. */
-export async function verifyPlantsWithGPT(
+async function verifyPlantsWithGPT(
   excerpt: string,
   plants: Plant[],
   query: string,
@@ -2230,13 +2230,13 @@ export interface SearcherOpts {
  * SEARCH_MAX_AGE_MS next door is for a live results page, which is a stricter
  * question than "what does this shop sell".
  */
-export const CATALOGUE_TTL_MS = 6 * 60 * 60 * 1000;
+const CATALOGUE_TTL_MS = 6 * 60 * 60 * 1000;
 /* LRU bound. A fan-out touches a handful of Shopify shops; this exists so a
  * long-lived process cannot accumulate catalogues without limit. */
-export const MAX_CATALOGUE_HOSTS = 8;
+const MAX_CATALOGUE_HOSTS = 8;
 /* Past this a "nursery" is a general marketplace and the catalogue route is the
  * wrong tool - the cost stops being worth the exactness. */
-export const MAX_CATALOGUE_PRODUCTS = 2000;
+const MAX_CATALOGUE_PRODUCTS = 2000;
 
 interface CachedCatalogue {
   products: StructuredProduct[];
@@ -2279,7 +2279,7 @@ export type HostPlatforms = Record<
 >;
 
 /* See HostPlatforms.api. Shorter than HOST_PLATFORM_TTL_MS by design. */
-export const HOST_API_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const HOST_API_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function loadHostPlatforms(file: string): HostPlatforms {
   try {

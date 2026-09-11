@@ -12,7 +12,7 @@
  * decision that follows.
  */
 const RAW_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
-export const API_BASE = RAW_BASE.replace(/\/+$/, '');
+const API_BASE = RAW_BASE.replace(/\/+$/, '');
 
 const API_SECRET = process.env.EXPO_PUBLIC_API_SECRET ?? '';
 

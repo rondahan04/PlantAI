@@ -41,7 +41,6 @@ import {
   createRateLimiter,
   rateLimitWaitMs,
   tavilyLeads,
-  FIRECRAWL_RESCUE_BUDGET_MS,
   isTimeout,
   fetchRawHtml,
   structuredCatalog,

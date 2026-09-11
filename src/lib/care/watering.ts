@@ -42,10 +42,6 @@ export interface WateringState {
   label: string;
 }
 
-export function hasSchedule(carePlan: CarePlan | undefined): boolean {
-  return typeof carePlan?.waterEveryDays === 'number';
-}
-
 /* "Every 7-10 days" / "Every 14 days" - the interval as the user reads it. */
 
 /*

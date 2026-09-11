@@ -1,10 +1,10 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Theme, useTheme } from '../theme';
 import type { CarePlan } from '../types';
 import type { SoilCarePlan } from '../lib/care/genusCarePlan';
-import { soilMediumById, type SoilMediumId } from '../lib/care/soilMedia';
+import type { SoilMediumId } from '../lib/care/soilMedia';
 import { copy } from '../services/language';
 import { iconRow } from '../lib/i18n/rtl';
 

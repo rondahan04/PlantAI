@@ -884,7 +884,7 @@ export const en = {
      * ("Watered"). Both are passed so neither language has to bend to the
      * other's grammar.
      */
-    earlyNote: (done: string, title: string) => `hold ${done} to log an early one`,
+    earlyNote: (done: string, _title: string) => `hold ${done} to log an early one`,
     /*
      * Proof the OS reminder actually exists. Shown only when one does - see the
      * note in ScheduleCard on why silence is the right answer otherwise.

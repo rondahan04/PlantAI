@@ -179,11 +179,6 @@ export function loadRetrievalFixtures(): RetrievalFixture[] {
   return loadRetrievalManifest().fixtures;
 }
 
-/* Only the fixtures carrying ground truth - the only ones that can be scored. */
-export function labelledRetrievalFixtures(): RetrievalFixture[] {
-  return loadRetrievalFixtures().filter((f) => f.truth !== undefined);
-}
-
 export const RETRIEVAL_FIXTURE_DIR = DIR;
 
 /*

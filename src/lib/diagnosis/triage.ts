@@ -32,7 +32,7 @@ const BUCKET: Record<string, TriageKey> = {
 
 /* English defaults; the caller passes translated titles - same seam as the
  * other pure modules. */
-export const EN_TRIAGE_TITLES: Record<TriageKey, string> = {
+const EN_TRIAGE_TITLES: Record<TriageKey, string> = {
   attention: 'Needs attention',
   watching: 'Watching',
   healthy: 'Healthy',

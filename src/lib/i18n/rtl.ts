@@ -25,7 +25,7 @@ export const isRTL = I18nManager.isRTL;
  * An empty array rather than `undefined` so it composes inside a style array
  * without a conditional at every call site.
  */
-export const mirrorInRTL = isRTL ? ([{ scaleX: -1 }] as const) : ([] as const);
+const mirrorInRTL = isRTL ? ([{ scaleX: -1 }] as const) : ([] as const);
 
 export const directionalIconStyle = { transform: mirrorInRTL } as const;
 

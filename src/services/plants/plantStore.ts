@@ -396,7 +396,7 @@ export type Migrations = Record<number, Migration>;
  * not itself write; broken records are the filter's job afterwards, and a step
  * that throws costs the user their whole library to quarantine.
  */
-export const MIGRATIONS: Migrations = {
+const MIGRATIONS: Migrations = {
   /*
    * v1 → v2: stamp `addedVia`.
    *

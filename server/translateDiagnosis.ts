@@ -67,7 +67,7 @@ export interface TranslateDeps {
  */
 export const MAX_FIELD_CHARS = 2000;
 export const MAX_LIST = 12;
-export const MAX_TOTAL_CHARS = 12000;
+const MAX_TOTAL_CHARS = 12000;
 
 const LANGUAGE_NAME: Record<Lang, string> = { en: 'English', he: 'Hebrew' };
 

@@ -1,5 +1,4 @@
 import type { PlantDiagnosis } from '../../types/index';
-import type { SoilMediumId } from '../../lib/care/soilMedia';
 import type { CareKind, PlantStore, StoredPlant, LoadResult } from './plantStore';
 import type { CloudPlantLibrary, ImportBatchResult, ManualInput } from './plantCloud';
 /* Runtime import with its extension, same rule as plantStore's: `node --test`

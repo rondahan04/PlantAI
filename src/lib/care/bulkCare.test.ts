@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { diagnoseTargets, waterTargets } from './bulkCare.ts';
-import type { DueItem } from '../portfolio.ts';
-import type { CareKind, StoredPlant } from '../../services/plants/plantStore.ts';
+import type { StoredPlant } from '../../services/plants/plantStore.ts';
 import type { PlantDiagnosis } from '../../types/index.ts';
 
 const diagnosis = {
@@ -23,10 +22,6 @@ function plant(id: string, opts: { photo?: boolean; diagnosed?: boolean } = {}):
     addedVia: 'manual',
     ...(diagnosed ? { diagnosis } : {}),
   } as StoredPlant;
-}
-
-function due(p: StoredPlant, kind: CareKind, daysUntilDue: number): DueItem {
-  return { plant: p, kind, daysUntilDue, label: `${kind} ${daysUntilDue}` };
 }
 
 // --- diagnoseTargets -------------------------------------------------------

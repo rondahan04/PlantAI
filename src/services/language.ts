@@ -81,10 +81,3 @@ export function setLanguage(next: Language): void {
   }
 }
 
-/*
- * True when the layout the user is looking at no longer matches the language
- * they chose - i.e. they changed it and have not relaunched yet.
- */
-export function relaunchPending(): boolean {
-  return needsDirectionChange(language, I18nManager.isRTL);
-}

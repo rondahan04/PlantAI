@@ -41,7 +41,7 @@ export interface FreshnessCopy {
 }
 
 /* English, so every existing caller and test behaves exactly as before. */
-export const EN_FRESHNESS_COPY: FreshnessCopy = {
+const EN_FRESHNESS_COPY: FreshnessCopy = {
   justNow: 'Stock checked just now',
   minutesAgo: (minutes) => `Stock checked ${minutes} min ago`,
   hoursAgo: (hours) => `Stock checked ${hours} ${hours === 1 ? 'hour' : 'hours'} ago`,

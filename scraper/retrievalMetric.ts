@@ -20,7 +20,7 @@ import { buildQueryPlan, rankCandidates, isDecisive, canonical } from './queryPl
 
 /* The national shippers. They are the entire Deliver tab, so they are held to a
  * higher bar than a nursery that merely happens to be nearby. */
-export const NATIONAL_HOSTS = new Set(['al-haderech.co.il', 'rootine.co.il']);
+const NATIONAL_HOSTS = new Set(['al-haderech.co.il', 'rootine.co.il']);
 
 /*
  * `undecided` is a real outcome now, not a footnote.
@@ -148,7 +148,7 @@ export function retrieve(fixtures: RetrievalFixture[], plantId: string, strategy
 
 /* Did we return one of the products the judge accepted? Compared on canonical
  * tokens, so a title differing only by whitespace or entities still counts. */
-export function sameProduct(a: string, b: string): boolean {
+function sameProduct(a: string, b: string): boolean {
   const ta = canonical(cleanName(a)).join(' ');
   const tb = canonical(cleanName(b)).join(' ');
   if (!ta || !tb) return false;

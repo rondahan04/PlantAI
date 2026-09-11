@@ -26,7 +26,7 @@ import type { StoredPlant } from '../plants/plantStore';
  * request below it: polling and any other screen share the same budget, and
  * spending the last token on a bulk job would rate-limit the user out of the
  * single diagnosis they take by hand. */
-export const REQUESTS_PER_MINUTE = 5;
+const REQUESTS_PER_MINUTE = 5;
 export const SPACING_MS = Math.ceil(60_000 / REQUESTS_PER_MINUTE);
 
 export interface BulkProgress {

@@ -175,7 +175,7 @@ export interface IdentifyHint {
  * the species name: the tier the user would have been shown as "we could not
  * identify this plant" is exactly the tier worth a second opinion.
  */
-export const LOW_MATCH_BELOW = 40;
+const LOW_MATCH_BELOW = 40;
 
 /*
  * The vision model only gets to overrule PlantNet when it is genuinely sure.
@@ -183,7 +183,7 @@ export const LOW_MATCH_BELOW = 40;
  * swapping a weak botanical match for an equally weak visual guess buys the
  * user nothing and loses PlantNet's herbarium grounding.
  */
-export const LLM_ID_ACCEPT_AT_OR_ABOVE = 70;
+const LLM_ID_ACCEPT_AT_OR_ABOVE = 70;
 
 /*
  * Below this the SPECIES is not really named, even when the genus is certain.
@@ -199,7 +199,7 @@ export const LLM_ID_ACCEPT_AT_OR_ABOVE = 70;
  * decision: the point at which the app stops presenting the species plainly is
  * the point at which the species is worth a second opinion.
  */
-export const SPECIES_UNSURE_BELOW = 70;
+const SPECIES_UNSURE_BELOW = 70;
 
 /*
  * What the identification is actually worth, as one number.
@@ -209,7 +209,7 @@ export const SPECIES_UNSURE_BELOW = 70;
  * confident identification, and re-running it through a vision model would
  * spend a call to be told the same thing less reliably.
  */
-export function effectiveMatch(id: Identification): number {
+function effectiveMatch(id: Identification): number {
   return Math.max(id.confidence, id.genusConfidence ?? 0);
 }
 
@@ -978,7 +978,7 @@ function isWaterDays(value: unknown): value is number {
   );
 }
 
-export function isCarePlan(value: unknown): value is CarePlan {
+function isCarePlan(value: unknown): value is CarePlan {
   if (typeof value !== 'object' || value === null) return false;
   const c = value as Record<string, unknown>;
   // Non-empty on purpose: `{soil: ""}` renders a labelled row with nothing

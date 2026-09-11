@@ -24,7 +24,6 @@
  * confusing one - queries run against an empty tree.
  */
 import { describe, it, expect } from '@jest/globals';
-import React from 'react';
 import { render, screen } from '@testing-library/react-native';
 import ScheduleCard from './ScheduleCard';
 import { copy } from '../services/language';
