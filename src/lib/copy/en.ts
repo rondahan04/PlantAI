@@ -33,7 +33,7 @@ export const en = {
     back: 'Back',
   },
   /*
-   * Display names for the growing media. `src/lib/soilMedia.ts` stays the
+   * Display names for the growing media. `src/lib/care/soilMedia.ts` stays the
    * structural source - ids and the watering multipliers that are physics, not
    * language - and this is the translation overlay keyed by its ids. A test
    * asserts the overlay covers every SOIL_MEDIUM_ID, so adding a ninth medium
@@ -229,7 +229,6 @@ export const en = {
     loginPromptA11y: 'Log in or sign up',
     loggedOutBlurb:
       'Create an account to save your profile and manage your details. Diagnosis works fine without one.',
-    deviceSection: 'This device',
     profileSettings: 'Profile settings',
     fullName: 'Full name',
     username: 'Username',
@@ -567,7 +566,6 @@ export const en = {
     nextMonth: 'Next month',
     nextDue: 'Next due',
     recent: 'Recent',
-    dayA11y: (date: string, done: string, due: string) => `${date}${done}${due}`,
     doneSuffix: (kind: string) => `, ${kind.toLowerCase()} logged`,
     dueSuffix: (kind: string) => `, ${kind.toLowerCase()} due`,
   },
@@ -794,7 +792,6 @@ export const en = {
   },
   plantCard: {
     needsWatering: 'Needs watering',
-    diagnosedBadge: 'Diagnosed',
     /*
      * ONE label rather than four nodes: a screen reader user wants the plant
      * and its state in a single utterance, not a tour of the row.
@@ -884,7 +881,7 @@ export const en = {
      * ("Watered"). Both are passed so neither language has to bend to the
      * other's grammar.
      */
-    earlyNote: (done: string, title: string) => `hold ${done} to log an early one`,
+    earlyNote: (done: string, _title: string) => `hold ${done} to log an early one`,
     /*
      * Proof the OS reminder actually exists. Shown only when one does - see the
      * note in ScheduleCard on why silence is the right answer otherwise.

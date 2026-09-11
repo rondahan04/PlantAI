@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { samePlantCard, sameSlots } from './plantCardEquality.ts';
-import type { StoredPlant } from '../services/plantStore.ts';
+import type { StoredPlant } from '../services/plants/plantStore.ts';
 import type { CareSlot } from './portfolio.ts';
 
 const NOW = Date.parse('2026-09-05T12:00:00.000Z');

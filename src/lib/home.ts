@@ -7,7 +7,7 @@
  * eyeballed on a device at 6pm. The screen is a renderer over this file.
  */
 import { plantDisplayName, type DueItem } from './portfolio.ts';
-import type { CareKind, StoredPlant } from '../services/plantStore';
+import type { CareKind, StoredPlant } from '../services/plants/plantStore';
 
 export type Greeting = 'morning' | 'afternoon' | 'evening';
 
@@ -41,7 +41,7 @@ export interface TaskGroup {
  * next. "Water plants - Fern + 2 others" is one trip to the sink; three
  * separate watering rows would be the same trip listed three times.
  */
-export const HOME_TASK_CAP = 2;
+const HOME_TASK_CAP = 2;
 
 export function taskGroups(due: DueItem[], cap: number = HOME_TASK_CAP): TaskGroup[] {
   const byKind = new Map<CareKind, TaskGroup>();
@@ -103,7 +103,7 @@ export function needsCareCount(due: DueItem[]): number {
  * rather than drawn as an empty square: the strip is meant to be recognisable
  * at 40pt, and a row of grey boxes is not.
  */
-export const STRIP_FACES = 3;
+const STRIP_FACES = 3;
 
 export function stripFaces(
   plants: StoredPlant[],

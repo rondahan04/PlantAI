@@ -1,5 +1,5 @@
-import type { Language } from '../lib/language';
-import type { DiagnosisProse } from '../lib/diagnosisProse';
+import type { Language } from '../lib/i18n/language';
+import type { DiagnosisProse } from '../lib/diagnosis/diagnosisProse';
 
 export interface PlantDiagnosis {
   plantName: string;
@@ -56,7 +56,7 @@ export interface PlantDiagnosis {
    *
    * Optional in both directions on purpose: an older server never sends these,
    * and every plant saved before this field existed has none. Read them through
-   * `identityConfidence()` in src/lib/confidence.ts, which falls back to the
+   * `identityConfidence()` in src/lib/diagnosis/confidence.ts, which falls back to the
    * species-only behaviour when they are absent.
    */
   genus?: string;
@@ -152,7 +152,7 @@ export interface Nursery {
   /* A final LLM pass did not trust this price, so plantPrice is '-'. */
   priceSuspect?: boolean;
   priceNote?: string;
-  /* Structured availability - see src/lib/availability.ts for presentation. */
+  /* Structured availability - see src/lib/nursery/availability.ts for presentation. */
   availability?: {
     kind: 'estimate' | 'unreadable' | 'error' | 'stock_unknown' | 'no_catalogue' | 'no_website';
     confidence?: number;

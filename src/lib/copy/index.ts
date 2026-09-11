@@ -1,4 +1,4 @@
-import type { Language } from '../language';
+import type { Language } from '../i18n/language';
 import { en, type Copy } from './en.ts';
 import { he } from './he.ts';
 

@@ -468,7 +468,7 @@ test('a confident genus with an unnamed species asks the NARROW question', async
         genus: 'Anthurium',
         genusConfidence: 91,
       }),
-    async (hint) =>
+    async (_hint) =>
       ident({ scientificName: 'Anthurium clarinervium', genus: 'Anthurium', confidence: 84 })
   );
   const id = await resolveIdentification(img, d);

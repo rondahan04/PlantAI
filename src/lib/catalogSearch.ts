@@ -69,7 +69,7 @@ export function catalogDisplayName(entry: CatalogEntry, lang: 'en' | 'he'): stri
 }
 
 /* Same rule for a taxon name (family / genus / group). */
-export function taxonDisplayName(name: string, lang: 'en' | 'he'): string {
+function taxonDisplayName(name: string, lang: 'en' | 'he'): string {
   return lang === 'he' ? (HEBREW_TAXA[name] ?? name) : name;
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { supabase } from '../services/supabase';
-import { setSessionHint } from '../services/sessionHint';
+import { supabase } from '../services/auth/supabase';
+import { setSessionHint } from '../services/auth/sessionHint';
 
 /*
  * Resolves the real session asynchronously (there is no synchronous way to

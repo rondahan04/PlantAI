@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -21,7 +21,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
 import { copy } from '../services/language';
-import { directionalIconStyle } from '../lib/rtl';
+import { directionalIconStyle } from '../lib/i18n/rtl';
 import { APP_LOGO } from '../brand';
 import { FEATURES } from '../content/features';
 import { onboarding } from '../services/onboarding';

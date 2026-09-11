@@ -1,7 +1,7 @@
-import type { StorageDeps } from './plantStore';
+import type { StorageDeps } from './plants/plantStore';
 
 /* Same storage seam as the library - re-exported so callers bind one shape. */
-export type { StorageDeps } from './plantStore';
+export type { StorageDeps } from './plants/plantStore';
 
 /*
  * First-run onboarding state.

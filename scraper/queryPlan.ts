@@ -50,7 +50,7 @@ export const WEAK_MATCH = 0.45;
  * dropped at 0.10). What separates a real answer from a wrong cultivar is a
  * judgement about words, so it is asked of a model rather than of a threshold.
  */
-export const PLAUSIBLE_MATCH = 0.05;
+const PLAUSIBLE_MATCH = 0.05;
 
 export interface QueryTokens {
   /* The genus. Required in a title for it to be a candidate at all. */
@@ -160,7 +160,7 @@ export function stripSizeTokens(s: string): string {
 
 /* Words worth comparing. Single characters are dropped: they carry no evidence
  * and match everything. */
-export function tokenize(s: string): string[] {
+function tokenize(s: string): string[] {
   return (s || '')
     .split(/[^\p{L}\p{N}]+/u)
     .map((t) => t.trim())
@@ -271,7 +271,7 @@ export function buildQueryPlan(opts: {
 
 /* The rung to send first when only one request is affordable. The genus is what
  * a shop's search can actually answer, so it is the default, not a fallback. */
-export function broadTerm(plan: QueryPlan): string {
+function broadTerm(plan: QueryPlan): string {
   return plan.hebrew.split(/\s+/).filter(Boolean)[0] || plan.terms[0] || plan.original;
 }
 

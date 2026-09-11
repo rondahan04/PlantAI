@@ -1,0 +1,626 @@
+import { useState, useRef, useEffect, useMemo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  Animated,
+  ActivityIndicator,
+  Alert,
+} from 'react-native';
+import { Image as ExpoImage } from 'expo-image';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RouteProp } from '@react-navigation/native';
+import { RootStackParamList, DeliveryMode } from '../../types/index';
+import { Theme, useTheme } from '../../theme/index';
+import { directionalIconStyle, iconRow } from '../../lib/i18n/rtl';
+import { conditionLabel } from '../../lib/diagnosis/conditionLabel';
+import { useNurserySearch } from '../../hooks/useNurserySearch';
+import { plantRepo } from '../../services/plants/plantRepoInstance';
+import { plantLibrary } from '../../services/plants/plantLibrary';
+import { plantPhotos } from '../../services/media/photos';
+import { identityConfidence } from '../../lib/diagnosis/confidence';
+import { treatmentProduct, treatmentProductLabel } from '../../lib/diagnosis/treatments';
+import { useSession } from '../../hooks/useSession';
+import { getSessionHint } from '../../services/auth/sessionHint';
+import { copy } from '../../services/language';
+
+type Props = {
+  navigation: NativeStackNavigationProp<RootStackParamList, 'Diagnosis'>;
+  route: RouteProp<RootStackParamList, 'Diagnosis'>;
+};
+
+type IconName = keyof typeof Ionicons.glyphMap;
+
+// Condition scale icons (used for badge/dot/bar, never as low-contrast body
+// text). Accent colors come from theme tokens (t.color.condition*) so they
+// stay readable in both light and dark.
+const CONDITION_ICON: Record<string, IconName> = {
+  healthy: 'checkmark-circle',
+  mild: 'alert-circle-outline',
+  moderate: 'warning-outline',
+  severe: 'warning',
+  critical: 'skull-outline',
+};
+
+export default function DiagnosisScreen({ navigation, route }: Props) {
+  const t = useTheme();
+  const s = useMemo(() => makeStyles(t), [t]);
+  // Side effect only - keeps sessionHint fresh even if this screen is
+  // somehow reached before Home's own useSession() instance has run.
+  useSession();
+  const { imageUri, diagnosis } = route.params;
+  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('delivery');
+  const { busy: findingNurseries, search: findNurseries, prefetch } = useNurserySearch();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(24)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  /*
+   * Warm the scrape as soon as the diagnosis is shown, so the 30-90s run is
+   * already in flight by the time the user taps Find.
+   */
+  useEffect(() => {
+    prefetch(diagnosis.plantName);
+
+    /*
+     * Warm the treatment searches too, not just the replacement one. The
+     * scrape now persists server-side for a week, so this is the moment that
+     * makes "where do I buy Confidor" instant tomorrow, or next Tuesday -
+     * which is when people actually go looking for it, long after this
+     * screen is gone.
+     *
+     * URGENT treatments only. Every scrape is a paid job, and urgency is the
+     * diagnosis's own statement about what the user will act on; warming the
+     * optional "wipe it down" advice would double the bill for the case
+     * nobody rushes to buy.
+     */
+    for (const treatment of diagnosis.treatments) {
+      if (!treatment.urgent) continue;
+      const product = treatmentProduct(treatment);
+      if (product) prefetch(product);
+    }
+  }, [prefetch, diagnosis.plantName, diagnosis.treatments]);
+
+  const conditionColor: Record<string, string> = {
+    healthy: t.color.conditionHealthy,
+    mild: t.color.conditionMild,
+    moderate: t.color.conditionModerate,
+    severe: t.color.conditionSevere,
+    critical: t.color.conditionCritical,
+  };
+  const condition = {
+    icon: CONDITION_ICON[diagnosis.condition] || CONDITION_ICON.moderate,
+    color: conditionColor[diagnosis.condition] || conditionColor.moderate,
+  };
+
+  const identity = identityConfidence(
+    diagnosis.confidence,
+    diagnosis.plantName,
+    { genus: diagnosis.genus, genusPercent: diagnosis.genusConfidence },
+    copy.identity
+  );
+
+  const handleFindReplacement = () => findNurseries(diagnosis.plantName, deliveryMode);
+
+  /*
+   * The same scrape with a different search term: what treats this plant,
+   * rather than a replacement for it. Only rendered for treatments that name
+   * something buyable (see `treatmentProduct`) - "wipe the scale off by hand"
+   * has nothing to sell.
+   */
+  const handleFindTreatment = (product: string) => findNurseries(product, deliveryMode);
+
+
+  /*
+   * Save to the plant library (TODOS item 7).
+   *
+   * Placement is the header icon rather than a fourth button: this screen
+   * already carries three actions and up to two URGENT badges, and "Find a
+   * replacement" is the commerce CTA that has to keep the accent colour. The
+   * header had a reserved empty slot opposite Back, which is exactly the
+   * weight a bookmark action deserves.
+   *
+   * `saved` is set BEFORE the write, not after. A double-tap on a slow device
+   * would otherwise run save() twice and put two identical plants in the
+   * library; the flag is rolled back if the write actually fails.
+   */
+  const [saved, setSaved] = useState(false);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
+
+  const handleSave = async () => {
+    if (saved) return;
+    setSaved(true);
+
+    const result = await plantRepo.save({ photoUri: imageUri, diagnosis });
+    if (!result.ok) {
+      setSaved(false);
+      // The store already distinguishes this from every other failure: the
+      // write did not land, and retrying after freeing space will work.
+      Alert.alert(
+        copy.diagnosis.saveFailedTitle,
+        result.reason === 'network'
+          ? copy.diagnosis.saveFailedNetwork
+          : copy.diagnosis.saveFailedStorage,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    setSavedId(result.plant.id);
+
+    /*
+     * Photo persistence (TODOS item 9), deliberately AFTER the synchronous
+     * write and deliberately not awaited. Guest-only: a cloud save already
+     * uploaded the photo as part of `plantRepo.save()`, so re-adopting it
+     * into the local document directory would be pointless (and would
+     * repoint a mirror-only record's local field to a local file path).
+     *
+     * `imageUri` points into the cache directory, which iOS empties whenever it
+     * wants the space - so the record would outlive its picture. The copy is
+     * async in expo-file-system 56, and putting an await in front of the save
+     * would trade a guaranteed record for a nicer photo: killed mid-copy, the
+     * plant itself would be gone. This way the worst case is a plant whose
+     * photo never made it across, which the next load repairs or forgets.
+     */
+    const id = result.plant.id;
+    if (!getSessionHint()) {
+      void plantPhotos.adopt(id, imageUri).then((persisted) => {
+        if (persisted) plantLibrary.update(id, { photoUri: persisted });
+      });
+    }
+  };
+
+  const handleUnsave = async () => {
+    if (!savedId || removing) return;
+    setRemoving(true);
+    try {
+      const result = await plantRepo.remove(savedId);
+      if (!result.ok) return;
+      // Only after the record is gone - a failed removal must not cost the photo
+      // of a plant that is still in the library. Guest-only: a cloud save's
+      // photo lives in Supabase Storage, which `discard()` has no way to reach.
+      if (!getSessionHint()) {
+        plantPhotos.discard(savedId);
+      }
+      setSaved(false);
+      setSavedId(null);
+    } finally {
+      setRemoving(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
+        {/* Header */}
+        <View style={s.header}>
+          <Pressable style={s.backBtn} onPress={() => navigation.navigate('Home')} accessibilityRole="button" accessibilityLabel={copy.diagnosis.backToHomeA11y}>
+            <Ionicons name="chevron-back" size={22} color={t.color.primary} style={directionalIconStyle} />
+            <Text style={s.backText}>{copy.diagnosis.back}</Text>
+          </Pressable>
+          <Text style={s.headerTitle}>{copy.diagnosis.headerTitle}</Text>
+          <Pressable
+            style={s.saveBtn}
+            onPress={saved ? handleUnsave : handleSave}
+            accessibilityRole="button"
+            accessibilityLabel={saved ? copy.diagnosis.savedA11y : copy.diagnosis.saveA11y}
+            accessibilityState={{ selected: saved }}
+            hitSlop={8}
+          >
+            <Ionicons
+              name={saved ? 'bookmark' : 'bookmark-outline'}
+              size={22}
+              color={saved ? t.color.primary : t.color.foreground}
+            />
+            <Text style={[s.saveText, saved && s.saveTextActive]}>
+              {saved ? 'Saved' : 'Save'}
+            </Text>
+          </Pressable>
+        </View>
+
+        <Animated.View style={{ opacity: fadeAnim }}>
+          <View style={s.imageWrap}>
+            <ExpoImage
+            source={{ uri: imageUri }}
+            style={s.plantImage}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={160}
+          />
+            <View style={s.conditionBadge}>
+              <Ionicons name={condition.icon} size={16} color={condition.color} />
+              <Text style={[s.conditionBadgeText, { color: condition.color }]}>
+                {conditionLabel(diagnosis.condition, diagnosis.conditionLabel, copy.condition)}
+              </Text>
+            </View>
+          </View>
+        </Animated.View>
+
+        {/* Plant name + species-match confidence.
+            The bar is NOT tinted with condition.color: that conflated "how sure
+            are we what this plant is" with "how sick is it". */}
+        <Animated.View style={[s.plantInfo, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+          {!!identity.namePrefix && <Text style={s.namePrefix}>{identity.namePrefix}</Text>}
+          <Text
+            style={s.plantName}
+            accessibilityLabel={
+              /* The bar below can carry two numbers. A screen reader gets none
+                 of that from geometry, so the label states both explicitly. */
+              copy.diagnosis.identityA11y({
+                prefix: identity.namePrefix ?? '',
+                headline: identity.headline,
+                genusLabel: identity.genusLed ? identity.genusLabel : '',
+                species: identity.genusLed ? diagnosis.plantName : '',
+                label: identity.label,
+                caveat: identity.needsCaveat ? identity.noteTitle : '',
+              })
+            }
+          >
+            {identity.headline}
+          </Text>
+          {/* The variety is shown in BOTH branches. It used to be dropped
+              whenever the headline fell back to the genus, which threw away the
+              most specific thing we had at exactly the moment the user was
+              being told we could not be specific - "Alocasia" alone on screen
+              while the model had already named the cultivar. */}
+          {identity.genusLed && (
+            <Text style={s.variety}>{copy.diagnosis.closestSpecies(diagnosis.plantName)}</Text>
+          )}
+          {!!diagnosis.variety && <Text style={s.variety}>{diagnosis.variety}</Text>}
+          <View style={s.confidenceRow}>
+            <View style={s.confidenceBar}>
+              {/* Two layers when we have a genus: the muted fill is how sure we
+                  are of the group, the darker one how sure of the species. */}
+              {identity.genusLed && (
+                <View
+                  style={[
+                    s.confidenceFill,
+                    {
+                      position: 'absolute',
+                      width: `${diagnosis.genusConfidence ?? 0}%`,
+                      backgroundColor: t.color.border,
+                    },
+                  ]}
+                />
+              )}
+              <View
+                style={[
+                  s.confidenceFill,
+                  { width: `${diagnosis.confidence}%`, backgroundColor: t.color.textSecondary },
+                ]}
+              />
+            </View>
+            <Text style={s.confidenceText}>
+              {identity.genusLed ? identity.genusLabel : identity.label}
+            </Text>
+          </View>
+        </Animated.View>
+
+        {/* Uncertainty caveat - a card, not a color, so it cannot be scanned past
+            and does not depend on color vision. */}
+        {identity.needsCaveat && (
+          <Animated.View style={[s.caveatCard, { opacity: fadeAnim }]}>
+            <View style={s.caveatHeader}>
+              <Ionicons name="help-circle-outline" size={20} color={t.color.warning} />
+              <Text style={s.caveatTitle}>{identity.noteTitle}</Text>
+            </View>
+            <Text style={s.caveatBody}>{identity.noteBody}</Text>
+            <Pressable
+              style={({ pressed }) => [s.caveatBtn, pressed && s.caveatBtnPressed]}
+              onPress={() => navigation.replace('Camera')}
+              accessibilityRole="button"
+              accessibilityLabel={copy.diagnosis.retakeA11y}
+            >
+              <Ionicons name="camera-outline" size={18} color={t.color.foreground} />
+              <Text style={s.caveatBtnText}>{copy.diagnosis.retake}</Text>
+            </Pressable>
+          </Animated.View>
+        )}
+
+        {/* Description */}
+        <Animated.View style={[s.card, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+          <Text style={s.descText}>{diagnosis.description}</Text>
+        </Animated.View>
+
+        {/* Issues */}
+        {diagnosis.issues.length > 0 && (
+          <Animated.View style={[s.section, { opacity: fadeAnim }]}>
+            <View style={s.sectionTitleRow}>
+              <Ionicons name="search-outline" size={18} color={t.color.foreground} />
+              <Text style={s.sectionTitle}>{copy.diagnosis.issues}</Text>
+            </View>
+            {diagnosis.issues.map((issue, i) => (
+              <View key={i} style={s.issueRow}>
+                <View style={[s.issueDot, { backgroundColor: condition.color }]} />
+                <Text style={s.issueText}>{issue}</Text>
+              </View>
+            ))}
+          </Animated.View>
+        )}
+
+        {/* Treatments */}
+        {diagnosis.canBeSaved && diagnosis.treatments.length > 0 && (
+          <Animated.View style={[s.section, { opacity: fadeAnim }]}>
+            <View style={s.sectionTitleRow}>
+              <Ionicons name="medkit-outline" size={18} color={t.color.foreground} />
+              <Text style={s.sectionTitle}>{copy.diagnosis.treatments}</Text>
+            </View>
+            {diagnosis.treatments.map((tr, i) => {
+              const product = treatmentProduct(tr);
+              /* Read on the button, searched for in the shop - see the note on
+               * `productLabel` in src/types/index.ts. */
+              const productName = product ? treatmentProductLabel(tr, product) : '';
+              return (
+                <View key={i} style={[s.treatmentCard, tr.urgent && s.treatmentUrgent]}>
+                  {tr.urgent && (
+                    <View style={s.urgentBadge}>
+                      <Text style={s.urgentText}>{copy.diagnosis.urgent}</Text>
+                    </View>
+                  )}
+                  <Text style={s.treatmentTitle}>{tr.title}</Text>
+                  <Text style={s.treatmentDesc}>{tr.description}</Text>
+                  {product && (
+                    <Pressable
+                      style={({ pressed }) => [s.shopBtn, pressed && s.shopBtnPressed]}
+                      onPress={() => handleFindTreatment(product)}
+                      accessibilityRole="button"
+                      accessibilityLabel={copy.diagnosis.findProductA11y(productName)}
+                    >
+                      <Ionicons name="storefront-outline" size={16} color={t.color.primary} />
+                      <Text style={s.shopBtnText}>{copy.diagnosis.findProduct(productName)}</Text>
+                    </Pressable>
+                  )}
+                </View>
+              );
+            })}
+          </Animated.View>
+        )}
+
+        {/* Replace Section */}
+        <Animated.View style={[s.replaceCard, { opacity: fadeAnim }]}>
+          <Text style={s.replaceSectionTitle}>
+            {diagnosis.canBeSaved ? copy.diagnosis.replaceOr : copy.diagnosis.replaceTitle}
+          </Text>
+          {!diagnosis.canBeSaved && (
+            <Text style={s.replaceDesc}>
+              {copy.diagnosis.replaceDesc(diagnosis.plantName)}
+            </Text>
+          )}
+
+          {/* Delivery toggle */}
+          <View style={s.toggleRow}>
+            {(['delivery', 'pickup'] as DeliveryMode[]).map((mode) => {
+              const active = deliveryMode === mode;
+              return (
+                <Pressable
+                  key={mode}
+                  style={[s.toggleBtn, active && s.toggleBtnActive]}
+                  onPress={() => setDeliveryMode(mode)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Ionicons
+                    name={mode === 'delivery' ? 'rocket-outline' : 'storefront-outline'}
+                    size={22}
+                    color={active ? t.color.primary : t.color.textMuted}
+                  />
+                  <Text style={[s.toggleBtnText, active && s.toggleBtnTextActive]}>
+                    {mode === 'delivery' ? copy.diagnosis.delivered : copy.diagnosis.pickup}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          <Pressable
+            style={({ pressed }) => [s.findBtn, pressed && s.btnPressed]}
+            onPress={handleFindReplacement}
+            disabled={findingNurseries}
+            accessibilityRole="button"
+            accessibilityLabel={copy.diagnosis.findNurseriesA11y}
+          >
+            {findingNurseries ? (
+              <ActivityIndicator color={t.color.onPrimary} />
+            ) : (
+              <Text style={s.findBtnText}>
+                {deliveryMode === 'delivery' ? copy.diagnosis.findDelivery : copy.diagnosis.findNearby}
+              </Text>
+            )}
+          </Pressable>
+        </Animated.View>
+
+        {/* Scan again */}
+        <Pressable style={s.scanAgainBtn} onPress={() => navigation.navigate('Camera')} accessibilityRole="button">
+          <Ionicons name="camera-outline" size={18} color={t.color.primary} />
+          <Text style={s.scanAgainText}>{copy.diagnosis.scanAnother}</Text>
+        </Pressable>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function makeStyles(t: Theme) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: t.color.background },
+    scroll: { paddingBottom: t.space['2xl'], paddingHorizontal: t.space.xl },
+    header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: t.space.md },
+    backBtn: { flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingEnd: t.space.sm },
+    backText: { ...t.type.label, color: t.color.primary },
+    // Mirrors backBtn's 44pt target and width so the title stays centred.
+    saveBtn: {
+      ...iconRow,
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      minWidth: 60,
+      minHeight: 44,
+      paddingStart: t.space.sm,
+    },
+    saveText: { ...t.type.label, color: t.color.foreground, marginStart: 4 },
+    saveTextActive: { color: t.color.primary },
+    headerTitle: { ...t.type.heading, color: t.color.foreground },
+    imageWrap: { borderRadius: t.radius.xl, overflow: 'hidden', height: 240, ...t.elevation.card },
+    plantImage: { width: '100%', height: '100%' },
+    conditionBadge: {
+      position: 'absolute',
+      bottom: t.space.md,
+      start: t.space.md,
+      ...iconRow,
+      alignItems: 'center',
+      gap: t.space.xs,
+      paddingHorizontal: t.space.md,
+      paddingVertical: t.space.xs,
+      borderRadius: t.radius.pill,
+      backgroundColor: t.color.surface,
+      ...t.elevation.card,
+    },
+    conditionBadgeText: { ...t.type.label, fontWeight: '700' },
+    plantInfo: { paddingTop: t.space.lg, paddingBottom: t.space.sm },
+    plantName: { ...t.type.title, fontSize: 26, lineHeight: 32, color: t.color.foreground, marginBottom: t.space.sm, writingDirection: 'auto' },
+    namePrefix: { ...t.type.label, color: t.color.textMuted, marginBottom: 2 },
+    variety: { ...t.type.body, color: t.color.textSecondary, marginTop: -t.space.sm / 2, marginBottom: t.space.sm, writingDirection: 'auto' },
+    caveatCard: {
+      backgroundColor: t.color.warningWash,
+      borderRadius: t.radius.lg,
+      padding: t.space.lg,
+      marginTop: t.space.lg,
+    },
+    caveatHeader: { ...iconRow, alignItems: 'center', gap: t.space.sm, marginBottom: t.space.sm },
+    caveatTitle: { ...t.type.bodyStrong, color: t.color.foreground, flex: 1 },
+    caveatBody: { ...t.type.label, color: t.color.textSecondary, fontWeight: '400', marginBottom: t.space.lg },
+    caveatBtn: {
+      ...iconRow,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: t.space.sm,
+      minHeight: 44,
+      borderRadius: t.radius.md,
+      borderWidth: 1,
+      borderColor: t.color.border,
+      backgroundColor: t.color.surface,
+    },
+    caveatBtnPressed: { backgroundColor: t.color.surfaceMuted },
+    caveatBtnText: { ...t.type.label, color: t.color.foreground },
+
+    confidenceRow: { flexDirection: 'row', alignItems: 'center', gap: t.space.md },
+    confidenceBar: { flex: 1, height: 6, backgroundColor: t.color.surfaceMuted, borderRadius: t.radius.pill, overflow: 'hidden' },
+    confidenceFill: { height: '100%', borderRadius: t.radius.pill },
+    confidenceText: { ...t.type.caption, color: t.color.textSecondary },
+    card: {
+      marginTop: t.space.md,
+      backgroundColor: t.color.surface,
+      borderRadius: t.radius.lg,
+      padding: t.space.lg,
+      borderWidth: 1,
+      borderColor: t.color.border,
+      ...t.elevation.card,
+    },
+    descText: { ...t.type.body, fontSize: 14, lineHeight: 21, color: t.color.textSecondary, writingDirection: 'auto' },
+    section: { marginTop: t.space.xl },
+    sectionTitleRow: { ...iconRow, alignItems: 'center', gap: t.space.sm, marginBottom: t.space.md },
+    sectionTitle: { ...t.type.heading, fontSize: 16, color: t.color.foreground },
+    issueRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: t.space.sm, gap: t.space.md },
+    issueDot: { width: 8, height: 8, borderRadius: 4, marginTop: 7 },
+    issueText: { flex: 1, ...t.type.body, fontSize: 14, lineHeight: 20, color: t.color.textSecondary, writingDirection: 'auto' },
+    treatmentCard: {
+      backgroundColor: t.color.surface,
+      borderRadius: t.radius.md,
+      padding: t.space.lg,
+      marginBottom: t.space.md,
+      borderWidth: 1,
+      borderColor: t.color.border,
+      ...t.elevation.card,
+    },
+    treatmentUrgent: { borderColor: t.color.danger },
+    urgentBadge: {
+      backgroundColor: t.color.danger,
+      paddingHorizontal: t.space.sm,
+      paddingVertical: 3,
+      borderRadius: t.radius.sm,
+      alignSelf: 'flex-start',
+      marginBottom: t.space.sm,
+    },
+    urgentText: { ...t.type.caption, fontSize: 10, fontWeight: '800', color: t.color.onDanger, letterSpacing: 1 },
+    treatmentTitle: { ...t.type.bodyStrong, fontSize: 15, color: t.color.foreground, marginBottom: t.space.xs, writingDirection: 'auto' },
+    treatmentDesc: { ...t.type.label, fontWeight: '400', fontSize: 13, lineHeight: 19, color: t.color.textSecondary, writingDirection: 'auto' },
+
+    /*
+     * A quiet outline button inside the card, not a second filled CTA: the
+     * accent colour on this screen belongs to "find a replacement", and buying
+     * a treatment must not compete with it visually.
+     */
+    shopBtn: {
+      ...iconRow,
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: t.space.xs,
+      marginTop: t.space.sm,
+      paddingVertical: t.space.xs,
+      paddingHorizontal: t.space.sm,
+      borderRadius: t.radius.md,
+      borderWidth: 1,
+      borderColor: t.color.primary,
+    },
+    shopBtnPressed: { opacity: 0.6 },
+    shopBtnText: { ...t.type.label, color: t.color.primary, writingDirection: 'auto' },
+    replaceCard: {
+      marginTop: t.space.xl,
+      backgroundColor: t.color.surfaceMuted,
+      borderRadius: t.radius.xl,
+      padding: t.space.xl,
+      borderWidth: 1,
+      borderColor: t.color.border,
+    },
+    replaceSectionTitle: { ...t.type.heading, color: t.color.foreground, marginBottom: t.space.sm },
+    replaceDesc: { ...t.type.body, fontSize: 14, lineHeight: 20, color: t.color.textSecondary, marginBottom: t.space.lg },
+    toggleRow: { flexDirection: 'row', gap: t.space.md, marginVertical: t.space.md },
+    toggleBtn: {
+      flex: 1,
+      alignItems: 'center',
+      gap: t.space.sm,
+      paddingVertical: t.space.md,
+      paddingHorizontal: t.space.md,
+      borderRadius: t.radius.md,
+      borderWidth: 2,
+      borderColor: t.color.border,
+      backgroundColor: t.color.surface,
+      minHeight: 44,
+    },
+    toggleBtnActive: { borderColor: t.color.primary, backgroundColor: t.color.primaryWash },
+    toggleBtnText: { ...t.type.caption, color: t.color.textMuted, textAlign: 'center' },
+    toggleBtnTextActive: { color: t.color.primary, fontWeight: '700' },
+    findBtn: {
+      backgroundColor: t.color.primary,
+      borderRadius: t.radius.md,
+      paddingVertical: t.space.lg,
+      minHeight: 52,
+      alignItems: 'center',
+      justifyContent: 'center',
+      ...t.elevation.raised,
+    },
+    btnPressed: { backgroundColor: t.color.primaryPressed, transform: [{ scale: 0.98 }] },
+    findBtnText: { ...t.type.bodyStrong, color: t.color.onPrimary, fontWeight: '700' },
+    scanAgainBtn: {
+      ...iconRow,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: t.space.sm,
+      marginTop: t.space.lg,
+      paddingVertical: t.space.md,
+      minHeight: 44,
+      borderRadius: t.radius.md,
+      borderWidth: 1,
+      borderColor: t.color.border,
+    },
+    scanAgainText: { ...t.type.label, color: t.color.primary, fontWeight: '600' },
+  });
+}

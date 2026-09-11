@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Animated, Linking, Alert, ActivityIndicator } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import MapView, { Marker } from 'react-native-maps';
@@ -9,13 +9,13 @@ import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, Nursery, DeliveryMode } from '../types';
 import { Theme, useTheme } from '../theme';
 import { copy } from '../services/language';
-import { directionalIconStyle, iconRow } from '../lib/rtl';
+import { directionalIconStyle, iconRow } from '../lib/i18n/rtl';
 import { fetchNearbyNurseries } from '../services/nurseryService';
-import { stockAgeLabel } from '../lib/freshness';
-import { waMeLink } from '../lib/whatsapp';
+import { stockAgeLabel } from '../lib/care/freshness';
+import { waMeLink } from '../lib/nursery/whatsapp';
 import StatusView from '../components/StatusView';
-import { availabilityBadge, isWorthShowing } from '../lib/availability';
-import { nurseryLogo } from '../lib/nurseryLogos';
+import { availabilityBadge, isWorthShowing } from '../lib/nursery/availability';
+import { nurseryLogo } from '../lib/nursery/nurseryLogos';
 
 type Styles = ReturnType<typeof makeStyles>;
 
@@ -339,10 +339,6 @@ export default function NurseriesScreen({ navigation, route }: Props) {
   const deliveryCount = deliveryList.length;
   const pickupCount = pickupList.length;
   const mapNurseries = visible.filter(hasCoords);
-
-  /* How many were checked and ruled out. Not rows, just a quiet reassurance
-   * that the search was wider than the list suggests. */
-  const ruledOut = nurseries.length - worthShowing.length;
 
   const handleOrder = (nursery: Nursery) => {
     /*

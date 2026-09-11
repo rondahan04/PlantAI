@@ -2,15 +2,15 @@ import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
-import { photoCacheKey } from '../lib/photoCacheKey';
+import { photoCacheKey } from '../lib/media/photoCacheKey';
 import { Theme, useTheme } from '../theme';
 import { copy } from '../services/language';
-import { directionalIconStyle, iconRow } from '../lib/rtl';
-import { conditionLabel as labelForCondition } from '../lib/conditionLabel';
+import { directionalIconStyle, iconRow } from '../lib/i18n/rtl';
+import { conditionLabel as labelForCondition } from '../lib/diagnosis/conditionLabel';
 import { LOGO_GLYPH } from '../brand';
 import { plantDisplayName, plantSecondaryName, type CareSlot } from '../lib/portfolio';
 import { samePlantCard } from '../lib/plantCardEquality';
-import type { StoredPlant } from '../services/plantStore';
+import type { StoredPlant } from '../services/plants/plantStore';
 
 /*
  * One row in the plant library.

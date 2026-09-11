@@ -1,10 +1,10 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Theme, useTheme } from '../theme';
 import { copy } from '../services/language';
-import { directionalIconStyle, iconRow } from '../lib/rtl';
-import { averageGrowthDays, leafAgeDays, leafCounts, pendingLeaves, type LeafEvent } from '../lib/leaves';
+import { directionalIconStyle, iconRow } from '../lib/i18n/rtl';
+import { averageGrowthDays, leafAgeDays, leafCounts, pendingLeaves, type LeafEvent } from '../lib/care/leaves';
 import { withAlpha } from './SoilMediumIcon';
 
 /*

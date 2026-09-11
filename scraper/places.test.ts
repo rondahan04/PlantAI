@@ -142,7 +142,7 @@ test('discoverNurseries: asks for a full page, then caps what it keeps', async (
   const fetchImpl = (async (_url: string, init: any) => {
     sent = JSON.parse(init.body);
     const places = [
-      ...Array.from({ length: 8 }, (_, i) => place({ websiteUri: '' })),
+      ...Array.from({ length: 8 }, () => place({ websiteUri: '' })),
       ...Array.from({ length: 6 }, (_, i) => place({ websiteUri: `https://n${i}.co.il` })),
     ];
     return { ok: true, status: 200, json: async () => ({ places }) } as any;

@@ -1,15 +1,15 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Image } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
-import { photoCacheKey } from '../lib/photoCacheKey';
+import { photoCacheKey } from '../lib/media/photoCacheKey';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import type { RootStackParamList } from '../types';
 import { Theme, useTheme } from '../theme';
-import { plantRepo } from '../services/plantRepoInstance';
-import { genusCarePlans } from '../services/genusCarePlans';
+import { plantRepo } from '../services/plants/plantRepoInstance';
+import { genusCarePlans } from '../services/plants/genusCarePlans';
 import { dueSoon, plantDisplayName } from '../lib/portfolio';
 import {
   greetingFor,
@@ -20,12 +20,12 @@ import {
   taskSubtitle,
   type TaskGroup,
 } from '../lib/home';
-import { directionalIconStyle, iconRow } from '../lib/rtl';
+import { directionalIconStyle, iconRow } from '../lib/i18n/rtl';
 import { onboarding } from '../services/onboarding';
 import { useSession } from '../hooks/useSession';
 import { copy, localeTag } from '../services/language';
 import { LOGO_GLYPH } from '../brand';
-import type { CareKind } from '../services/plantStore';
+import type { CareKind } from '../services/plants/plantStore';
 import { TAB_BAR_CLEARANCE } from '../navigation/tabBarMetrics';
 
 /*

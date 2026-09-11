@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { runNurserySearch, parsePrice, cheapestMatch, type PipelineDeps } from './pipeline.ts';
-import type { ExtractFunnel, Plant } from './core.ts';
+import type { ExtractFunnel } from './core.ts';
 
 /* runNurserySearch reads only `plants`; the rest of PipelineResult is padding
  * these fixtures have to carry to satisfy the type. */

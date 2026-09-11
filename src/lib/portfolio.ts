@@ -1,5 +1,5 @@
-import type { StoredPlant, CareKind } from '../services/plantStore';
-import type { GenusCarePlan } from './genusCarePlan.ts';
+import type { StoredPlant, CareKind } from '../services/plants/plantStore';
+import type { GenusCarePlan } from './care/genusCarePlan.ts';
 import {
   CARE_KINDS,
   EN_CARE_COPY,
@@ -8,8 +8,8 @@ import {
   plantCarePlan,
   soilPlanFor,
   type CareCopy,
-} from './care.ts';
-import { EN_WATERING_COPY, type WateringCopy, type WateringState } from './watering.ts';
+} from './care/care.ts';
+import { EN_WATERING_COPY, type WateringCopy, type WateringState } from './care/watering.ts';
 
 /*
  * Everything the Portfolio tab decides, decided here.
@@ -128,7 +128,7 @@ export interface DueItem {
 
 /* A week, because the strip is called "Due this week" and because a longer
  * window turns a short list of things to do today into a standing backlog. */
-export const DUE_WINDOW_DAYS = 7;
+const DUE_WINDOW_DAYS = 7;
 
 /*
  * Everything due within the window, across every kind of care, most overdue
@@ -267,7 +267,7 @@ export interface ScheduleCopy {
   none: string;
 }
 
-export const EN_SCHEDULE_COPY: ScheduleCopy = {
+const EN_SCHEDULE_COPY: ScheduleCopy = {
   today: 'Today',
   tomorrow: 'Tomorrow',
   overdue: 'Overdue',

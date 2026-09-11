@@ -190,7 +190,6 @@ export const he: Copy = {
     loginPromptA11y: 'התחברות או הרשמה',
     loggedOutBlurb:
       'צרו חשבון כדי לשמור את הפרופיל שלכם ולנהל את הפרטים. האבחון עובד מצוין גם בלי חשבון.',
-    deviceSection: 'במכשיר הזה',
     profileSettings: 'הגדרות פרופיל',
     fullName: 'שם מלא',
     username: 'שם משתמש',
@@ -476,7 +475,6 @@ export const he: Copy = {
     nextMonth: 'החודש הבא',
     nextDue: 'הטיפול הבא',
     recent: 'אחרונים',
-    dayA11y: (date: string, done: string, due: string) => `${date}${done}${due}`,
     /* No lowercasing - Hebrew has no letter case. */
     doneSuffix: (kind: string) => `, ${kind} בוצע`,
     dueSuffix: (kind: string) => `, ${kind} נדרש`,
@@ -657,7 +655,6 @@ export const he: Copy = {
   },
   plantCard: {
     needsWatering: 'זקוק להשקיה',
-    diagnosedBadge: 'אובחן',
     a11y: (p: {
       name: string;
       secondary: string;
@@ -722,7 +719,7 @@ export const he: Copy = {
     /* Names the action rather than the button, matching `earlyHint` above:
      * "החזיקו כדי לתעד השקיה מוקדם" reads as Hebrew, while threading the
      * button's own past-tense label ("הושקה") through it does not. */
-    earlyNote: (done: string, title: string) => `החזיקו כדי לתעד ${title} מוקדם`,
+    earlyNote: (_done: string, title: string) => `החזיקו כדי לתעד ${title} מוקדם`,
     reminderSet: 'תזכורת נקבעה',
     /* No lowercasing, for the same reason as historyA11y above: Hebrew has no
      * letter case. */

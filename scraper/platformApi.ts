@@ -81,7 +81,7 @@ const BROWSER_UA =
  * that was asked for. A truncated shelf turns a broad query from a strength
  * into a silent miss.
  */
-export const WOO_DEFAULT_PER_PAGE = 100;
+const WOO_DEFAULT_PER_PAGE = 100;
 
 /* Shopify's own maximum. Fewer pages beats smaller pages. */
 export const SHOPIFY_PAGE_SIZE = 250;

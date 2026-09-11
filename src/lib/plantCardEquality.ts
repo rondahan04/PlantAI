@@ -15,7 +15,7 @@
  * tested under `node --test`.
  */
 
-import type { StoredPlant } from '../services/plantStore';
+import type { StoredPlant } from '../services/plants/plantStore';
 import { plantDisplayName, plantSecondaryName, type CareSlot } from './portfolio.ts';
 
 export interface PlantCardShape {

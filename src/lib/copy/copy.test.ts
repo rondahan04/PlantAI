@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TREES } from './index.ts';
-import { SOIL_MEDIUM_IDS } from '../soilMedia.ts';
-import { EN_IDENTITY_COPY } from '../confidence.ts';
+import { SOIL_MEDIUM_IDS } from '../care/soilMedia.ts';
+import { EN_IDENTITY_COPY } from '../diagnosis/confidence.ts';
 
 test('every language names itself in its own script', () => {
   // A picker that offers "Hebrew" to someone who only reads Hebrew is a picker
@@ -113,7 +113,6 @@ const SHARED_OUTPUT = new Set<string>([
   'copy.speciesPicker.rowA11y', //      `${name}, ${scientific}`
   'copy.statusView.a11y', //            `${title}. ${body}`
   'copy.nurseries.pillA11y', //         `${text}. ${detail}`
-  'copy.careHistory.dayA11y', //        `${date}${done}${due}`
   'copy.carePlan.rowA11y', //           `${label}: ${text}`
   'copy.soilCard.optionA11y', //        `${label}. ${description}`
   'copy.portfolio.filterCount', //      `${label} (${n})`

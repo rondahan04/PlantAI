@@ -6,7 +6,7 @@
  * Alocasias would otherwise pay for nine near-identical calls. The genus is
  * also the one identity the catalog, PlantNet and the vision model actually
  * agree on, which makes it the only key a client cache can be built on without
- * fragmenting into near-duplicates. See src/lib/genusCarePlan.ts, which caches
+ * fragmenting into near-duplicates. See src/lib/care/genusCarePlan.ts, which caches
  * the response of this module forever.
  *
  * WHY ALL EIGHT MEDIA IN ONE ANSWER. The user changes medium by tapping a
@@ -24,7 +24,7 @@
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 
 /*
- * The growing media, DUPLICATED from src/lib/soilMedia.ts rather than imported.
+ * The growing media, DUPLICATED from src/lib/care/soilMedia.ts rather than imported.
  *
  * Server code cannot import from src/: pulling an app module into the
  * tsconfig.node.json program redefines React Native globals and breaks the
@@ -62,7 +62,7 @@ const MEDIUM_DESCRIPTIONS: Record<SoilMediumId, string> = {
   water: 'roots sitting in plain water, no substrate at all',
 };
 
-/* Mirrors `SoilCarePlan` in src/lib/genusCarePlan.ts. The client validates this
+/* Mirrors `SoilCarePlan` in src/lib/care/genusCarePlan.ts. The client validates this
  * shape again on arrival - it treats our response as untrusted input like any
  * other - so the two definitions must stay in step. */
 export interface SoilCarePlan {
@@ -112,7 +112,7 @@ const MAX_INTERVAL_DAYS = 365;
 
 /*
  * The languages the API answers in. Kept here rather than imported from the
- * client's src/lib/language.ts: server/ and src/ are separate TypeScript
+ * client's src/lib/i18n/language.ts: server/ and src/ are separate TypeScript
  * programs (tsconfig.node.json), and reaching across would drag React Native's
  * globals into the server build - the same reason src/types is hand-written
  * rather than importing from @react-navigation.

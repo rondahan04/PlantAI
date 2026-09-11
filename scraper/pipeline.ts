@@ -117,7 +117,7 @@ export interface SearchInput {
  * The raced-out work is not cancellable - it keeps running until its own
  * deadlines fire - but it no longer holds up the result the user is waiting on.
  */
-export const SITE_BUDGET_MS = Number(env('NURSERY_SITE_BUDGET_MS')) || 45_000;
+const SITE_BUDGET_MS = Number(env('NURSERY_SITE_BUDGET_MS')) || 45_000;
 
 export interface PipelineDeps {
   /* Override the per-site ceiling; tests set it small. */
@@ -190,7 +190,7 @@ export interface PipelineDeps {
     query: string,
     candidates: { site: string; name: string; price: string }[]
   ) => Promise<{ plausible: boolean; reason: string }[]>;
-  readFallbackUrls: () => string[]; // nurseries-fallback.txt
+  readFallbackUrls: () => string[]; // data/nurseries-fallback.txt
   nationalUrls: string[]; // ship-to-home shippers
   /*
    * Optional observer: called once per site with where that site's read
@@ -206,7 +206,7 @@ export interface PipelineDeps {
 
 const R_KM = 6371;
 const toRad = (d: number) => (d * Math.PI) / 180;
-export function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
+function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
   const dLat = toRad(bLat - aLat);
   const dLng = toRad(bLng - aLng);
   const a =

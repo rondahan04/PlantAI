@@ -42,7 +42,6 @@ import {
   PLANTS,
   RETRIEVAL_FIXTURE_DIR,
   type RetrievalFixture,
-  type RetrievalRoute,
   type TermVariant,
 } from '../scraper/retrievalFixtures.ts';
 

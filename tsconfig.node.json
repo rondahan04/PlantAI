@@ -8,6 +8,13 @@
   // directly, so nothing is emitted; this config only ever reports.
   "compilerOptions": {
     "strict": true,
+    /*
+     * Dead code cannot regrow quietly: an unused import, local or parameter is
+     * an error, not a lint warning nobody runs. Added 2026-09-11 with the
+     * cleanup that removed the last of them.
+     */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "noEmit": true,
     // esnext/bundler rather than nodenext: these files use import.meta and
     // Node 26 runs them directly as ESM, but nodenext infers CommonJS from the
