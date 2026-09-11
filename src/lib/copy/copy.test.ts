@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { TREES } from './index.ts';
-import { SOIL_MEDIUM_IDS } from '../soilMedia.ts';
-import { EN_IDENTITY_COPY } from '../confidence.ts';
+import { SOIL_MEDIUM_IDS } from '../care/soilMedia.ts';
+import { EN_IDENTITY_COPY } from '../diagnosis/confidence.ts';
 
 test('every language names itself in its own script', () => {
   // A picker that offers "Hebrew" to someone who only reads Hebrew is a picker

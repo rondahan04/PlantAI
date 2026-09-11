@@ -1,5 +1,5 @@
-import type { StoredPlant, CareKind } from '../services/plantStore';
-import type { GenusCarePlan } from './genusCarePlan.ts';
+import type { StoredPlant, CareKind } from '../services/plants/plantStore';
+import type { GenusCarePlan } from './care/genusCarePlan.ts';
 import {
   CARE_KINDS,
   EN_CARE_COPY,
@@ -8,8 +8,8 @@ import {
   plantCarePlan,
   soilPlanFor,
   type CareCopy,
-} from './care.ts';
-import { EN_WATERING_COPY, type WateringCopy, type WateringState } from './watering.ts';
+} from './care/care.ts';
+import { EN_WATERING_COPY, type WateringCopy, type WateringState } from './care/watering.ts';
 
 /*
  * Everything the Portfolio tab decides, decided here.

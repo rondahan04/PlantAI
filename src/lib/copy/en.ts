@@ -33,7 +33,7 @@ export const en = {
     back: 'Back',
   },
   /*
-   * Display names for the growing media. `src/lib/soilMedia.ts` stays the
+   * Display names for the growing media. `src/lib/care/soilMedia.ts` stays the
    * structural source - ids and the watering multipliers that are physics, not
    * language - and this is the translation overlay keyed by its ids. A test
    * asserts the overlay covers every SOIL_MEDIUM_ID, so adding a ninth medium

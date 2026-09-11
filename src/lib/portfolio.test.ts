@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DAY_MS } from './watering.ts';
-import { SOIL_MEDIUM_IDS } from './soilMedia.ts';
+import { DAY_MS } from './care/watering.ts';
+import { SOIL_MEDIUM_IDS } from './care/soilMedia.ts';
 import {
   dueSoon,
   filterPortfolio,
@@ -13,8 +13,8 @@ import {
   plantSecondaryName,
   showsLibraryLayout,
 } from './portfolio.ts';
-import type { GenusCarePlan, SoilCarePlan } from './genusCarePlan.ts';
-import type { StoredPlant } from '../services/plantStore.ts';
+import type { GenusCarePlan, SoilCarePlan } from './care/genusCarePlan.ts';
+import type { StoredPlant } from '../services/plants/plantStore.ts';
 
 const NOW = Date.parse('2026-08-29T12:00:00.000Z');
 

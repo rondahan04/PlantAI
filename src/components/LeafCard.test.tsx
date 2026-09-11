@@ -14,7 +14,7 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react-native';
 import LeafCard from './LeafCard';
 import { copy } from '../services/language';
-import type { LeafEvent } from '../lib/leaves';
+import type { LeafEvent } from '../lib/care/leaves';
 
 const DAY = 86_400_000;
 const iso = (msAgo: number) => new Date(Date.now() - msAgo).toISOString();

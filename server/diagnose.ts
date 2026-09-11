@@ -171,7 +171,7 @@ export interface IdentifyHint {
 /*
  * Below this, PlantNet has not really identified the plant - it has ranked
  * guesses. Deliberately the same number as `UNSURE_BELOW` in
- * src/lib/confidence.ts, which is the point at which the app stops leading with
+ * src/lib/diagnosis/confidence.ts, which is the point at which the app stops leading with
  * the species name: the tier the user would have been shown as "we could not
  * identify this plant" is exactly the tier worth a second opinion.
  */
@@ -344,7 +344,7 @@ export async function resolveIdentification(
 /*
  * True when PlantNet is sure of the group and not of the species - the state in
  * which the app shows a bare genus as the plant's name. Mirrors `genusLed` in
- * src/lib/confidence.ts; if that rule moves, this one moves with it, because
+ * src/lib/diagnosis/confidence.ts; if that rule moves, this one moves with it, because
  * the tiebreak exists precisely to stop that headline from happening.
  */
 function isGenusLed(id: Identification): boolean {

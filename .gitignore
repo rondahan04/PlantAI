@@ -79,3 +79,6 @@ TODOS.english.md
 
 # graphify knowledge-graph output - regenerated on demand, not source
 graphify-out/
+
+# local test photos - inputs for manual diagnosis runs, not source
+photos_for_testing/

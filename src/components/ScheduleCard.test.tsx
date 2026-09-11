@@ -28,8 +28,8 @@ import React from 'react';
 import { render, screen } from '@testing-library/react-native';
 import ScheduleCard from './ScheduleCard';
 import { copy } from '../services/language';
-import { REPOT_EVERY_DAYS } from '../lib/care';
-import { DAY_MS } from '../lib/watering';
+import { REPOT_EVERY_DAYS } from '../lib/care/care';
+import { DAY_MS } from '../lib/care/watering';
 
 const daysAgo = (n: number) => new Date(Date.now() - n * DAY_MS).toISOString();
 

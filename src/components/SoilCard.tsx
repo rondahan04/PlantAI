@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { Theme, useTheme } from '../theme';
-import { SOIL_MEDIA, soilMediumById, type SoilMediumId } from '../lib/soilMedia';
+import { SOIL_MEDIA, soilMediumById, type SoilMediumId } from '../lib/care/soilMedia';
 import { copy } from '../services/language';
 import SoilMediumIcon, { withAlpha } from './SoilMediumIcon';
 

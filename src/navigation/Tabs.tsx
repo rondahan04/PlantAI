@@ -27,8 +27,8 @@ import { useTheme } from '../theme';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { MainTabParamList, RootStackParamList } from '../types';
 import HomeScreen from '../screens/HomeScreen';
-import PortfolioScreen from '../screens/PortfolioScreen';
-import PlantSearchScreen from '../screens/PlantSearchScreen';
+import PortfolioScreen from '../screens/plants/PortfolioScreen';
+import PlantSearchScreen from '../screens/plants/PlantSearchScreen';
 import { copy } from '../services/language';
 import { TAB_BAR_HEIGHT, TAB_BAR_MARGIN } from './tabBarMetrics';
 

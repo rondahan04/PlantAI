@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DAY_MS } from './watering.ts';
+import { DAY_MS } from './care/watering.ts';
 import { greetingFor, needsCareCount, pickHeroPhoto, stripFaces, taskGroups, taskSubtitle } from './home.ts';
 import type { DueItem } from './portfolio.ts';
-import type { CareKind, StoredPlant } from '../services/plantStore.ts';
+import type { CareKind, StoredPlant } from '../services/plants/plantStore.ts';
 
 const NOW = Date.parse('2026-08-29T12:00:00.000Z');
 

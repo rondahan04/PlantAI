@@ -1,0 +1,693 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createPlantRepo } from './plantRepo.ts';
+import { createPlantStore, type StorageDeps } from './plantStore.ts';
+import { createCloudPlantLibrary, type CloudDeps, type CloudRow } from './plantCloud.ts';
+import type { PlantDiagnosis } from '../../types/index.ts';
+
+const diagnosis: PlantDiagnosis = {
+  plantName: 'Mini monstera',
+  scientificName: 'Rhaphidophora tetrasperma',
+  condition: 'moderate',
+  conditionLabel: 'Moderate Stress',
+  issues: [],
+  treatments: [],
+  canBeSaved: true,
+  confidence: 50,
+  description: '',
+};
+
+function memoryStorage(): StorageDeps {
+  const data = new Map<string, string>();
+  return {
+    getItem: (k) => data.get(k) ?? null,
+    setItem: (k, v) => void data.set(k, v),
+    removeItem: (k) => void data.delete(k),
+  };
+}
+
+function fakeCloudDeps(
+  fail: { insert?: boolean; upload?: boolean; insertIds?: Set<string>; update?: boolean; delete?: boolean } = {}
+) {
+  const rows = new Map<string, CloudRow>();
+  const deps: CloudDeps = {
+    fetchPlants: async () => [...rows.values()],
+    uploadPhoto: async (path) => (fail.upload ? null : path),
+    insertPlant: async (row) => {
+      if (fail.insert || fail.insertIds?.has(row.id)) return false;
+      rows.set(row.id, row);
+      return true;
+    },
+    updatePlant: async (id, patch) => {
+      if (fail.update) return false;
+      const existing = rows.get(id);
+      if (!existing) return false;
+      rows.set(id, { ...existing, ...patch });
+      return true;
+    },
+    deletePlant: async (id) => {
+      if (fail.delete) return false;
+      return rows.delete(id);
+    },
+  };
+  return { deps, rows };
+}
+
+/*
+ * The photo half of RepoDeps, for the tests that never reach it. `adopt` is
+ * required, so leaving it out made these four cases compile-only-by-accident:
+ * they passed at runtime because their paths never call it, while `tsc` had
+ * been reporting them as errors the whole time.
+ */
+const noPhotos = { adopt: async () => null };
+
+
+function makeRepo(
+  opts: {
+    hint?: boolean;
+    cloudFail?: { insert?: boolean; upload?: boolean; insertIds?: Set<string>; update?: boolean; delete?: boolean };
+    adoptFails?: boolean;
+  } = {}
+) {
+  let hint = opts.hint ?? false;
+  const guest = createPlantStore(memoryStorage());
+  const mirror = createPlantStore(memoryStorage());
+  const { deps, rows } = fakeCloudDeps(opts.cloudFail);
+  const cloud = createCloudPlantLibrary(deps, { newId: () => `cloud-${rows.size + 1}` });
+
+  /* Records what the guest half was asked to adopt, and answers with the
+   * "stored" path so a test can tell an adopted copy from the raw picker URI. */
+  const adopted: string[] = [];
+  let leafSeq = 0;
+  const photos = {
+    adopt: async (id: string, sourceUri: string) => {
+      adopted.push(sourceUri);
+      return opts.adoptFails ? null : `file:///photos/${id}.jpg`;
+    },
+  };
+
+  const repo = createPlantRepo({
+    guest,
+    mirror,
+    cloud,
+    photos,
+    getSessionHint: () => hint,
+    getUserId: () => (hint ? 'u1' : null),
+    /* Deterministic leaf ids, so the second tap can name the leaf the first
+     * one made without reading it back out first. */
+    newId: () => `leaf-${++leafSeq}`,
+  });
+  return { repo, guest, mirror, rows, adopted, setHint: (v: boolean) => (hint = v) };
+}
+
+test('logged out: save() passes straight through to the guest store', async () => {
+  const { repo, guest } = makeRepo({ hint: false });
+  const result = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  assert.equal(result.ok, true);
+  assert.equal(guest.load().plants.length, 1);
+});
+
+test('logged in: save() writes to cloud first, then mirrors locally', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const result = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  assert.equal(result.ok, true);
+  assert.equal(rows.size, 1);
+  assert.equal(mirror.load().plants.length, 1);
+});
+
+test('logged in: a cloud write failure applies nowhere, not even the mirror', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true, cloudFail: { insert: true } });
+  const result = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  assert.equal(result.ok, false);
+  assert.equal(rows.size, 0);
+  assert.equal(mirror.load().plants.length, 0);
+});
+
+test('hasUnimportedGuestPlants() is true only when the guest key has entries', async () => {
+  const { repo, guest } = makeRepo({ hint: true });
+  assert.equal(repo.hasUnimportedGuestPlants(), false);
+  guest.save({ photoUri: 'a.jpg', diagnosis });
+  assert.equal(repo.hasUnimportedGuestPlants(), true);
+});
+
+test('guestPlantCount() reports how many local plants are unimported', () => {
+  const { repo, guest } = makeRepo({ hint: true });
+  assert.equal(repo.guestPlantCount(), 0);
+  guest.save({ photoUri: 'a.jpg', diagnosis });
+  guest.save({ photoUri: 'b.jpg', diagnosis });
+  assert.equal(repo.guestPlantCount(), 2);
+});
+
+test('importGuestPlants() clears the guest key only when every plant imports', async () => {
+  const { repo, guest, mirror, rows } = makeRepo({ hint: true });
+  guest.save({ photoUri: 'a.jpg', diagnosis });
+  guest.save({ photoUri: 'b.jpg', diagnosis });
+
+  const result = await repo.importGuestPlants();
+  assert.equal(result.failed.length, 0);
+  assert.equal(rows.size, 2);
+  assert.equal(guest.load().plants.length, 0);
+  assert.equal(mirror.load().plants.length, 2);
+});
+
+test('importGuestPlants() leaves the guest key untouched on partial failure', async () => {
+  const guest = createPlantStore(memoryStorage());
+  const mirror = createPlantStore(memoryStorage());
+  const first = guest.save({ photoUri: 'a.jpg', diagnosis });
+  const second = guest.save({ photoUri: 'b.jpg', diagnosis });
+  assert.ok(first.ok && second.ok);
+  const secondId = second.ok ? second.plant.id : '';
+
+  const { deps, rows } = fakeCloudDeps({ insertIds: new Set([secondId]) });
+  const cloud = createCloudPlantLibrary(deps);
+  const repo = createPlantRepo({
+    guest,
+    mirror,
+    cloud,
+    photos: noPhotos,
+    getSessionHint: () => true,
+    getUserId: () => 'u1',
+  });
+
+  const result = await repo.importGuestPlants();
+  assert.deepEqual(result.failed, [secondId]);
+  assert.equal(rows.size, 1);
+  assert.equal(guest.load().plants.length, 2);
+  assert.equal(mirror.load().plants.length, 0);
+});
+
+test('wipeMirror() clears the mirror but never the guest key', async () => {
+  const { repo, guest, mirror } = makeRepo({ hint: true });
+  guest.save({ photoUri: 'a.jpg', diagnosis });
+  mirror.save({ photoUri: 'b.jpg', diagnosis });
+
+  repo.wipeMirror();
+  assert.equal(mirror.load().plants.length, 0);
+  assert.equal(guest.load().plants.length, 1);
+});
+
+test('wipeAllLocal() clears the guest key as well - account deletion erases everything', async () => {
+  const { repo, guest, mirror } = makeRepo({ hint: true });
+  guest.save({ photoUri: 'a.jpg', diagnosis });
+  mirror.save({ photoUri: 'b.jpg', diagnosis });
+
+  repo.wipeAllLocal();
+  assert.equal(mirror.load().plants.length, 0);
+  assert.equal(guest.load().plants.length, 0);
+});
+
+test('loadLocal() reads the guest key when logged out, the mirror when logged in', () => {
+  const { repo, guest, mirror, setHint } = makeRepo({ hint: false });
+  guest.save({ photoUri: 'a.jpg', diagnosis });
+  assert.equal(repo.loadLocal().plants.length, 1);
+
+  setHint(true);
+  assert.equal(repo.loadLocal().plants.length, 0);
+  mirror.save({ photoUri: 'b.jpg', diagnosis });
+  assert.equal(repo.loadLocal().plants.length, 1);
+});
+
+test('logged in: markWatered() updates the mirror and clears any pending reminder', async () => {
+  const { repo, mirror } = makeRepo({ hint: true });
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  assert.ok(saved.ok);
+  const id = saved.ok ? saved.plant.id : '';
+
+  const at = Date.parse('2026-01-01T00:00:00.000Z');
+  const result = await repo.markWatered(id, at);
+  assert.equal(result.ok, true);
+
+  const plant = mirror.load().plants.find((p) => p.id === id);
+  assert.equal(plant?.lastWateredAt, new Date(at).toISOString());
+  assert.deepEqual(plant?.wateringLog, [new Date(at).toISOString()]);
+});
+
+test('logged in: markWatered() leaves the mirror untouched on a cloud failure', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  assert.ok(saved.ok);
+  const id = saved.ok ? saved.plant.id : '';
+  const before = mirror.load().plants.find((p) => p.id === id);
+
+  const { deps, rows: failRows } = fakeCloudDeps({ update: true });
+  for (const [rowId, row] of rows) failRows.set(rowId, row);
+  const cloud = createCloudPlantLibrary(deps);
+  const failingRepo = createPlantRepo({
+    guest: createPlantStore(memoryStorage()),
+    mirror,
+    cloud,
+    photos: noPhotos,
+    getSessionHint: () => true,
+    getUserId: () => 'u1',
+  });
+
+  const result = await failingRepo.markWatered(id, Date.now());
+  assert.equal(result.ok, false);
+  const after = mirror.load().plants.find((p) => p.id === id);
+  assert.deepEqual(after, before);
+});
+
+test('logged in: markWatered() on an unknown id reports not_found', async () => {
+  const { repo } = makeRepo({ hint: true });
+  const result = await repo.markWatered('missing', Date.now());
+  assert.deepEqual(result, { ok: false, reason: 'not_found' });
+});
+
+test('logged in: update() sets a reminderId in the mirror', async () => {
+  const { repo, mirror } = makeRepo({ hint: true });
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  assert.ok(saved.ok);
+  const id = saved.ok ? saved.plant.id : '';
+
+  const result = await repo.update(id, { reminderId: 'rem-1' });
+  assert.equal(result.ok, true);
+  assert.equal(mirror.load().plants.find((p) => p.id === id)?.reminderId, 'rem-1');
+});
+
+test('logged in: update() explicitly clearing reminderId removes it from the mirror', async () => {
+  const { repo, mirror } = makeRepo({ hint: true });
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  assert.ok(saved.ok);
+  const id = saved.ok ? saved.plant.id : '';
+
+  await repo.update(id, { reminderId: 'rem-1' });
+  const result = await repo.update(id, { reminderId: undefined });
+  assert.equal(result.ok, true);
+  assert.equal(mirror.load().plants.find((p) => p.id === id)?.reminderId, undefined);
+});
+
+test('logged in: update() on an unknown id reports not_found', async () => {
+  const { repo } = makeRepo({ hint: true });
+  const result = await repo.update('missing', { reminderId: 'rem-1' });
+  assert.deepEqual(result, { ok: false, reason: 'not_found' });
+});
+
+test('logged in: remove() deletes from cloud and the mirror on success', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  assert.ok(saved.ok);
+  const id = saved.ok ? saved.plant.id : '';
+
+  const result = await repo.remove(id);
+  assert.equal(result.ok, true);
+  assert.equal(mirror.load().plants.find((p) => p.id === id), undefined);
+  assert.equal(rows.has(id), false);
+});
+
+test('logged in: remove() leaves the mirror untouched on a cloud failure', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  assert.ok(saved.ok);
+  const id = saved.ok ? saved.plant.id : '';
+
+  const { deps, rows: failRows } = fakeCloudDeps({ delete: true });
+  for (const [rowId, row] of rows) failRows.set(rowId, row);
+  const cloud = createCloudPlantLibrary(deps);
+  const failingRepo = createPlantRepo({
+    guest: createPlantStore(memoryStorage()),
+    mirror,
+    cloud,
+    photos: noPhotos,
+    getSessionHint: () => true,
+    getUserId: () => 'u1',
+  });
+
+  const result = await failingRepo.remove(id);
+  assert.equal(result.ok, false);
+  assert.ok(mirror.load().plants.find((p) => p.id === id));
+});
+
+/*
+ * The Portfolio tab's paths through the facade. Everything below exercises a
+ * plant that was typed in rather than photographed, and the care kinds that
+ * schedule nothing - the two doors added after Epic 3a was first written, and
+ * the two that would have silently stayed guest-only.
+ */
+
+const species = {
+  name: 'Monstera Deliciosa',
+  scientificName: 'Monstera deliciosa',
+  genus: 'Monstera',
+  family: 'Araceae',
+};
+
+test('logged out: saveManual() passes straight through to the guest store', async () => {
+  const { repo, guest } = makeRepo({ hint: false });
+  const result = await repo.saveManual({ photoUri: '', species, nickname: 'Steve' });
+  assert.equal(result.ok, true);
+  assert.equal(guest.load().plants.length, 1);
+  assert.equal(guest.load().plants[0].addedVia, 'manual');
+});
+
+test('logged in: saveManual() writes the whole record to the cloud', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const result = await repo.saveManual({
+    photoUri: '',
+    species,
+    catalogId: 'cat-1',
+    soilMedium: 'leca',
+    nickname: 'Steve',
+  });
+
+  assert.equal(result.ok, true);
+  const row = [...rows.values()][0];
+  assert.equal(row.added_via, 'manual');
+  assert.equal(row.nickname, 'Steve');
+  assert.equal(row.soil_medium, 'leca');
+  assert.equal(row.catalog_id, 'cat-1');
+  assert.equal(row.diagnosis, null);
+  // The mirror is the read path for every screen - a field that reached the
+  // cloud but not the mirror looks like data loss until the next cold start.
+  assert.equal(mirror.load().plants[0].nickname, 'Steve');
+});
+
+test('logged in: a failed manual save leaves nothing behind, not even locally', async () => {
+  const { repo, guest, mirror, rows } = makeRepo({ hint: true, cloudFail: { insert: true } });
+  const result = await repo.saveManual({ photoUri: '', species });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.reason, 'network');
+  assert.equal(rows.size, 0);
+  assert.equal(mirror.load().plants.length, 0);
+  // The guest key in particular: a plant stranded there is invisible to
+  // wipeMirror() and to account deletion.
+  assert.equal(guest.load().plants.length, 0);
+});
+
+test('logged in: markCare() logs a repot to the cloud and the mirror together', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species });
+  assert.equal(saved.ok, true);
+  if (!saved.ok) return;
+
+  const at = Date.parse('2026-08-20T09:00:00.000Z');
+  const logged = await repo.markCare(saved.plant.id, 'repot', at);
+  assert.equal(logged.ok, true);
+
+  const row = rows.get(saved.plant.id);
+  assert.equal(row?.last_repotted_at, '2026-08-20T09:00:00.000Z');
+  assert.deepEqual(row?.repot_log, ['2026-08-20T09:00:00.000Z']);
+  assert.equal(mirror.load().plants[0].lastRepottedAt, '2026-08-20T09:00:00.000Z');
+});
+
+test('logged in: two repots on the same day count once, exactly as the guest store folds them', async () => {
+  const { repo, rows } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species });
+  assert.equal(saved.ok, true);
+  if (!saved.ok) return;
+
+  const morning = new Date(2026, 7, 20, 9, 0, 0);
+  const evening = new Date(2026, 7, 20, 18, 0, 0);
+  await repo.markCare(saved.plant.id, 'repot', morning.getTime());
+  await repo.markCare(saved.plant.id, 'repot', evening.getTime());
+
+  assert.deepEqual(rows.get(saved.plant.id)?.repot_log, [evening.toISOString()]);
+});
+
+test('logged in: a repot that fails in the cloud is not shown as recorded', async () => {
+  const { repo, mirror } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species });
+  assert.equal(saved.ok, true);
+  if (!saved.ok) return;
+
+  const { repo: broken } = makeRepo({ hint: true, cloudFail: { update: true } });
+  const loggedOnBroken = await broken.markCare('missing', 'fertilizer', Date.now());
+  assert.equal(loggedOnBroken.ok, false);
+  assert.equal(mirror.load().plants[0].lastFertilizedAt, undefined);
+});
+
+test('logged in: update() carries a growing-medium change to the cloud', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species, soilMedium: 'potting_mix' });
+  assert.equal(saved.ok, true);
+  if (!saved.ok) return;
+
+  const updated = await repo.update(saved.plant.id, { soilMedium: 'leca' });
+  assert.equal(updated.ok, true);
+  assert.equal(rows.get(saved.plant.id)?.soil_medium, 'leca');
+  assert.equal(mirror.load().plants[0].soilMedium, 'leca');
+});
+
+test('logged in: clearing a nickname clears it in the cloud, rather than leaving the old one', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species, nickname: 'Steve' });
+  assert.equal(saved.ok, true);
+  if (!saved.ok) return;
+
+  const updated = await repo.update(saved.plant.id, { nickname: undefined });
+  assert.equal(updated.ok, true);
+  assert.equal(rows.get(saved.plant.id)?.nickname, null);
+  assert.equal(mirror.load().plants[0].nickname, undefined);
+});
+
+test('logged in: a watered plant carries its full record back from the cloud', async () => {
+  const { repo, rows } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species, nickname: 'Steve' });
+  assert.equal(saved.ok, true);
+  if (!saved.ok) return;
+
+  await repo.markWatered(saved.plant.id, Date.parse('2026-08-20T09:00:00.000Z'));
+  const refreshed = await repo.refreshFromCloud();
+
+  // The round trip through `fetchAll` is where a column missing from `toRow`
+  // or `toStoredPlant` shows up as a field the user silently loses.
+  const plant = refreshed.plants.find((p) => p.id === saved.plant.id);
+  assert.equal(plant?.nickname, 'Steve');
+  assert.equal(plant?.addedVia, 'manual');
+  assert.equal(plant?.lastWateredAt, '2026-08-20T09:00:00.000Z');
+  assert.equal(rows.get(saved.plant.id)?.added_via, 'manual');
+});
+
+test('importGuestPlants() without a user id reports every plant as failed, never as an empty success', async () => {
+  // `{imported: [], failed: []}` is what importing zero plants returns, so a
+  // caller cannot tell it from "all of them landed". ImportBanner read it as
+  // success and dismissed itself, leaving the user staring at an empty
+  // Portfolio with their plants still on disk and no way back to them.
+  const guest = createPlantStore(memoryStorage());
+  const mirror = createPlantStore(memoryStorage());
+  const saved = guest.save({ photoUri: 'a.jpg', diagnosis });
+  assert.ok(saved.ok);
+
+  const { deps, rows } = fakeCloudDeps();
+  const repo = createPlantRepo({
+    guest,
+    mirror,
+    cloud: createCloudPlantLibrary(deps),
+    photos: noPhotos,
+    getSessionHint: () => true,
+    getUserId: () => null,
+  });
+
+  const result = await repo.importGuestPlants();
+  assert.equal(result.failed.length, 1);
+  assert.equal(result.imported.length, 0);
+  assert.equal(rows.size, 0);
+  // And above all: the plants are still there.
+  assert.equal(guest.load().plants.length, 1);
+});
+
+// --- setPhoto: two genuinely different stories -----------------------------
+
+test('logged out: setPhoto adopts the picker URI and stores the adopted copy', async () => {
+  const { repo, guest, adopted } = makeRepo({ hint: false });
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  assert.equal(saved.ok, true);
+  const id = saved.ok ? saved.plant.id : '';
+
+  const result = await repo.setPhoto(id, 'file:///cache/new-shot.jpg');
+  assert.equal(result.ok, true);
+  // The cache URI was copied rather than stored as-is: a cache path is deleted
+  // by the OS whenever it likes.
+  assert.deepEqual(adopted, ['file:///cache/new-shot.jpg']);
+  assert.equal(guest.load().plants.find((p) => p.id === id)?.photoUri, `file:///photos/${id}.jpg`);
+});
+
+test('logged out: a failed adopt still stores the picture rather than losing the edit', async () => {
+  const { repo, guest } = makeRepo({ hint: false, adoptFails: true });
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  const id = saved.ok ? saved.plant.id : '';
+
+  const result = await repo.setPhoto(id, 'file:///cache/new-shot.jpg');
+  assert.equal(result.ok, true);
+  // Falls back to the picker URI: it renders this session, and Home re-adopts.
+  assert.equal(guest.load().plants.find((p) => p.id === id)?.photoUri, 'file:///cache/new-shot.jpg');
+});
+
+test('logged in: setPhoto uploads, then points the row at the new object path', async () => {
+  const { repo, rows, setHint } = makeRepo({ hint: true });
+  setHint(true);
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  assert.equal(saved.ok, true);
+  const id = saved.ok ? saved.plant.id : '';
+  const before = rows.get(id)?.photo_path;
+
+  const result = await repo.setPhoto(id, 'file:///cache/second.png');
+  assert.equal(result.ok, true);
+  const after = rows.get(id)?.photo_path;
+  assert.notEqual(after, before);
+  // The key reuses the plant id, so replacing a photo overwrites rather than
+  // accumulating one object per edit.
+  assert.equal(after, `u1/${id}.png`);
+});
+
+test('logged in: a failed upload leaves the stored photo untouched', async () => {
+  const { repo, rows, setHint } = makeRepo({ hint: true, cloudFail: { upload: true } });
+  setHint(true);
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  const id = saved.ok ? saved.plant.id : '';
+  const before = rows.get(id)?.photo_path;
+
+  const result = await repo.setPhoto(id, 'file:///cache/second.png');
+  assert.equal(result.ok, false);
+  assert.equal(result.ok === false && result.reason, 'network');
+  assert.equal(rows.get(id)?.photo_path, before); // no half-applied edit
+});
+
+test('setPhoto on a plant that is gone reports it rather than inventing a row', async () => {
+  const { repo, setHint } = makeRepo({ hint: true });
+  setHint(true);
+  const result = await repo.setPhoto('nope', 'file:///cache/x.jpg');
+  assert.equal(result.ok, false);
+  assert.equal(result.ok === false && result.reason, 'not_found');
+});
+
+test('clearing a nickname removes it, so the plant goes back to its species name', async () => {
+  const { repo, guest } = makeRepo({ hint: false });
+  const saved = await repo.save({ photoUri: 'a.jpg', diagnosis });
+  const id = saved.ok ? saved.plant.id : '';
+  await repo.update(id, { nickname: 'Big Bertha' });
+  assert.equal(guest.load().plants.find((p) => p.id === id)?.nickname, 'Big Bertha');
+
+  const cleared = await repo.update(id, { nickname: undefined });
+  assert.equal(cleared.ok, true);
+  const after = guest.load().plants.find((p) => p.id === id);
+  // Absent, not the empty string: plantDisplayName falls back to the species
+  // only when there is no nickname key at all.
+  assert.equal(after?.nickname, undefined);
+});
+
+// ─── New growth ───────────────────────────────────────────────────────────────
+
+/*
+ * Leaves take the same guest/cloud split as the care logs, with one difference
+ * that is worth a test each way: the transformation is NOT re-implemented in
+ * the repo, both sides call `lib/leaves.ts`. So what is checked here is the
+ * wiring - that the cloud row and the mirror end up holding the same list, and
+ * that a leaf logged in the cloud can still be marked grown afterwards.
+ */
+
+test('logged out: logLeaf() goes straight to the guest store', async () => {
+  const { repo, guest } = makeRepo({ hint: false });
+  const saved = await repo.saveManual({ photoUri: '', species });
+  if (!saved.ok) return assert.fail('save failed');
+
+  const logged = await repo.logLeaf(saved.plant.id, Date.parse('2026-09-01T08:00:00.000Z'));
+  assert.equal(logged.ok, true);
+  assert.equal(guest.load().plants[0].leafLog?.length, 1);
+});
+
+test('logged in: a leaf lands in the cloud row and the mirror together', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species });
+  if (!saved.ok) return assert.fail('save failed');
+
+  const at = Date.parse('2026-09-01T08:00:00.000Z');
+  const logged = await repo.logLeaf(saved.plant.id, at);
+  assert.equal(logged.ok, true);
+
+  assert.equal(rows.get(saved.plant.id)?.leaf_log?.length, 1);
+  assert.equal(rows.get(saved.plant.id)?.leaf_log?.[0].emergedAt, '2026-09-01T08:00:00.000Z');
+  assert.equal(mirror.load().plants[0].leafLog?.length, 1);
+});
+
+test('logged in: the second tap finds the leaf the first tap made', async () => {
+  const { repo, rows } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species });
+  if (!saved.ok) return assert.fail('save failed');
+
+  const logged = await repo.logLeaf(saved.plant.id, Date.parse('2026-09-01T08:00:00.000Z'));
+  if (!logged.ok) return assert.fail('leaf not logged');
+  const leafId = logged.plant.leafLog![0].id;
+
+  const grown = await repo.markLeafGrown(
+    saved.plant.id,
+    leafId,
+    Date.parse('2026-09-21T08:00:00.000Z')
+  );
+  assert.equal(grown.ok, true);
+  assert.equal(rows.get(saved.plant.id)?.leaf_log?.[0].maturedAt, '2026-09-21T08:00:00.000Z');
+});
+
+test('logged in: undo clears the cloud row back to empty', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species });
+  if (!saved.ok) return assert.fail('save failed');
+
+  await repo.logLeaf(saved.plant.id, Date.parse('2026-09-01T08:00:00.000Z'));
+  const undone = await repo.undoLeaf(saved.plant.id);
+  assert.equal(undone.ok, true);
+
+  assert.deepEqual(rows.get(saved.plant.id)?.leaf_log, []);
+  // The mirror drops the key entirely, matching what the guest store writes.
+  assert.equal('leafLog' in mirror.load().plants[0], false);
+});
+
+test('logged in: a leaf the cloud refuses is not shown as recorded', async () => {
+  const { repo: broken } = makeRepo({ hint: true, cloudFail: { update: true } });
+  const saved = await broken.saveManual({ photoUri: '', species });
+  if (!saved.ok) return assert.fail('save failed');
+
+  const logged = await broken.logLeaf(saved.plant.id, Date.now());
+  assert.equal(logged.ok, false);
+  assert.equal(broken.loadLocal().plants[0].leafLog, undefined);
+});
+
+// ─── A failed read is not an empty library ───────────────────────────────────
+
+test('a cloud fetch that fails leaves the mirror exactly as it was', async () => {
+  const { repo, mirror, rows } = makeRepo({ hint: true });
+  const saved = await repo.saveManual({ photoUri: '', species });
+  if (!saved.ok) return assert.fail('save failed');
+  assert.equal(mirror.load().plants.length, 1);
+
+  /*
+   * A query that never landed - a bad column, an expired session, no network.
+   * The account still holds the plant, so the device must keep showing it.
+   * Before this guard, `fetchPlants` swallowed the error, returned [], and
+   * `refreshFromCloud` replaced the whole mirror with nothing: every plant
+   * vanished from the phone while the rows sat untouched in the cloud.
+   */
+  let failing = true;
+  const brokenCloud = createCloudPlantLibrary(
+    {
+      fetchPlants: async () => {
+        if (failing) throw new Error('column plants.leaf_log does not exist');
+        return [...rows.values()];
+      },
+      uploadPhoto: async (path) => path,
+      insertPlant: async () => true,
+      updatePlant: async () => true,
+      deletePlant: async () => true,
+    },
+    { newId: () => 'cloud-x' }
+  );
+  const brokenRepo = createPlantRepo({
+    guest: createPlantStore(memoryStorage()),
+    mirror,
+    cloud: brokenCloud,
+    photos: noPhotos,
+    getSessionHint: () => true,
+    getUserId: () => 'u1',
+  });
+
+  const afterFailure = await brokenRepo.refreshFromCloud();
+  assert.equal(afterFailure.plants.length, 1);
+  assert.equal(mirror.load().plants.length, 1);
+
+  /* ...and a read that really does come back empty still clears it, because
+   * that one is the account genuinely holding no plants. */
+  failing = false;
+  rows.clear();
+  const afterEmpty = await brokenRepo.refreshFromCloud();
+  assert.equal(afterEmpty.plants.length, 0);
+});

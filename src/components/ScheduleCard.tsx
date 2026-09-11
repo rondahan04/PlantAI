@@ -3,12 +3,12 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Theme, useTheme } from '../theme';
 import { copy } from '../services/language';
-import { directionalIconStyle, iconRow } from '../lib/rtl';
+import { directionalIconStyle, iconRow } from '../lib/i18n/rtl';
 import type { CarePlan } from '../types';
-import type { CareKind } from '../services/plantStore';
-import type { SoilCarePlan } from '../lib/genusCarePlan';
-import { careState, intervalPlanFor } from '../lib/care';
-import { intervalLabel } from '../lib/watering';
+import type { CareKind } from '../services/plants/plantStore';
+import type { SoilCarePlan } from '../lib/care/genusCarePlan';
+import { careState, intervalPlanFor } from '../lib/care/care';
+import { intervalLabel } from '../lib/care/watering';
 import { withAlpha } from './SoilMediumIcon';
 
 /*

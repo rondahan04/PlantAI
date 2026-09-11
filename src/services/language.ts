@@ -7,7 +7,7 @@ import {
   needsDirectionChange,
   resolveLanguage,
   type Language,
-} from '../lib/language';
+} from '../lib/i18n/language';
 import { TREES, type Copy } from '../lib/copy';
 
 /*

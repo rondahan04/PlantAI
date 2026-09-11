@@ -118,7 +118,7 @@ function readUrlList(file: string): string[] {
     .filter((l) => l.startsWith('http'));
 }
 
-const FALLBACK_URLS_PATH = path.join(ROOT, 'nurseries-fallback.txt');
+const FALLBACK_URLS_PATH = path.join(ROOT, 'data', 'nurseries-fallback.txt');
 
 /* The nurseries read when Places discovery comes back empty - a list of shops
  * to SEARCH, not a claim that any of them deliver. */
@@ -126,11 +126,11 @@ function readFallbackUrls(): string[] {
   return readUrlList(FALLBACK_URLS_PATH);
 }
 
-/* Its own file, not the dashboard's nurseries-fallback.txt: that list is a
+/* Its own file, not the dashboard's data/nurseries-fallback.txt: that list is a
  * benchmarking corpus of shops to READ, this one is the list of shops that
  * deliver. They drifted apart the moment the Deliver tab stopped being "every
  * nursery we know". */
-const SHIPPER_URLS_PATH = path.join(ROOT, 'nurseries-shippers.txt');
+const SHIPPER_URLS_PATH = path.join(ROOT, 'data', 'nurseries-shippers.txt');
 
 /* The shipper list, read from disk so adding a shop is an edit to a text file
  * rather than a deploy of new code. */
@@ -555,7 +555,7 @@ const server = http.createServer(async (req, res) => {
   // ── POST /api/translate-diagnosis ───────────────────────────────────────────
   // A diagnosis the user already has, in the language they now read. Billable
   // and gated like any other model call. The client only calls it for a record
-  // whose prose is in the WRONG language (src/lib/diagnosisLanguage.ts) and
+  // whose prose is in the WRONG language (src/lib/diagnosis/diagnosisLanguage.ts) and
   // saves the answer, so this is one call per stale plant per language change,
   // not one per screen open.
   if (u.pathname === '/api/translate-diagnosis' && req.method === 'POST') {
@@ -607,7 +607,7 @@ const server = http.createServer(async (req, res) => {
   // ── POST /api/care-plan ─────────────────────────────────────────────────────
   // Care guidance for a whole GENUS, covering every growing medium in one
   // answer. Billable and gated like any other model call. The client caches the
-  // result forever (src/lib/genusCarePlan.ts), so in practice this is one call
+  // result forever (src/lib/care/genusCarePlan.ts), so in practice this is one call
   // per genus per install, not one per plant.
   if (u.pathname === '/api/care-plan' && req.method === 'POST') {
     const decision = gate.check(ip, secret);

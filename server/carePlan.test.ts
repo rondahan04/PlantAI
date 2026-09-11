@@ -87,7 +87,7 @@ test('buildCarePlan surfaces a model answer that is not JSON', async () => {
  */
 test('the server medium ids are exactly the client medium ids', () => {
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const source = fs.readFileSync(path.join(here, '..', 'src', 'lib', 'soilMedia.ts'), 'utf8');
+  const source = fs.readFileSync(path.join(here, '..', 'src', 'lib', 'care', 'soilMedia.ts'), 'utf8');
 
   // The SOIL_MEDIA array literal is the client's source of truth; the union
   // type above it is a restatement of the same list, so parsing the entries is

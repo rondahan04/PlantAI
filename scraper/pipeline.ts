@@ -190,7 +190,7 @@ export interface PipelineDeps {
     query: string,
     candidates: { site: string; name: string; price: string }[]
   ) => Promise<{ plausible: boolean; reason: string }[]>;
-  readFallbackUrls: () => string[]; // nurseries-fallback.txt
+  readFallbackUrls: () => string[]; // data/nurseries-fallback.txt
   nationalUrls: string[]; // ship-to-home shippers
   /*
    * Optional observer: called once per site with where that site's read

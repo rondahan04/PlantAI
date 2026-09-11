@@ -7,7 +7,7 @@
  * eyeballed on a device at 6pm. The screen is a renderer over this file.
  */
 import { plantDisplayName, type DueItem } from './portfolio.ts';
-import type { CareKind, StoredPlant } from '../services/plantStore';
+import type { CareKind, StoredPlant } from '../services/plants/plantStore';
 
 export type Greeting = 'morning' | 'afternoon' | 'evening';
 

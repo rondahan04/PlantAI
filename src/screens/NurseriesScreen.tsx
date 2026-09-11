@@ -9,13 +9,13 @@ import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList, Nursery, DeliveryMode } from '../types';
 import { Theme, useTheme } from '../theme';
 import { copy } from '../services/language';
-import { directionalIconStyle, iconRow } from '../lib/rtl';
+import { directionalIconStyle, iconRow } from '../lib/i18n/rtl';
 import { fetchNearbyNurseries } from '../services/nurseryService';
-import { stockAgeLabel } from '../lib/freshness';
-import { waMeLink } from '../lib/whatsapp';
+import { stockAgeLabel } from '../lib/care/freshness';
+import { waMeLink } from '../lib/nursery/whatsapp';
 import StatusView from '../components/StatusView';
-import { availabilityBadge, isWorthShowing } from '../lib/availability';
-import { nurseryLogo } from '../lib/nurseryLogos';
+import { availabilityBadge, isWorthShowing } from '../lib/nursery/availability';
+import { nurseryLogo } from '../lib/nursery/nurseryLogos';
 
 type Styles = ReturnType<typeof makeStyles>;
 

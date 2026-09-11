@@ -2,13 +2,13 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme';
-import { soilMediumById, type SoilMediumId } from '../lib/soilMedia';
+import { soilMediumById, type SoilMediumId } from '../lib/care/soilMedia';
 
 /*
  * One growing medium, drawn.
  *
  * The medium is the single fact that changes every watering and feeding number
- * downstream (see src/lib/soilMedia.ts), so the picker has to be worth reading
+ * downstream (see src/lib/care/soilMedia.ts), so the picker has to be worth reading
  * rather than skimmed past. A bare Ionicons glyph would not carry that weight:
  * eight outline glyphs at the same size in the same grey are toolbar furniture,
  * and half of them (grid, apps, reorder) are near-identical shapes that a user
