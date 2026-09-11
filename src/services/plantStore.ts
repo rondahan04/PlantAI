@@ -1,5 +1,14 @@
 import type { PlantDiagnosis } from '../types';
 import type { SoilMediumId } from '../lib/soilMedia';
+/* Runtime import, so the specifier carries its extension - `node --test` needs
+ * it and Metro resolves it (see `bulkTranslate.ts`, which does the same). */
+import {
+  emergeLeaf,
+  matureLeaf,
+  normalizeLeaves,
+  undoLastLeaf,
+  type LeafEvent,
+} from '../lib/leaves.ts';
 
 /*
  * The plant library (TODOS item 5).
@@ -144,6 +153,16 @@ export interface StoredPlant {
   lastFertilizedAt?: string;
   fertilizerLog?: string[];
   /*
+   * New growth: every leaf the user has tracked, newest first. NOT a fourth
+   * care log, and deliberately a different shape - a leaf is an entity with two
+   * ends (it showed, then it finished opening), several can be open at once,
+   * and the pairing is the point. See lib/leaves.ts for the whole argument.
+   *
+   * Optional and absent-tolerant like the care logs, so plants saved before
+   * this feature load with no LIBRARY_VERSION bump and no migration step.
+   */
+  leafLog?: LeafEvent[];
+  /*
    * Identifier of the scheduled local notification, so the next watering can
    * cancel the one it replaces. Absent when nothing is scheduled: no OS
    * permission, no interval in the care plan, or the reminder already fired.
@@ -263,6 +282,16 @@ export function careHistory(plant: StoredPlant, kind: CareKind = 'water'): strin
 /* The watering-specific name this started as. Every existing caller uses it. */
 export function wateringHistory(plant: StoredPlant): string[] {
   return careHistory(plant, 'water');
+}
+
+/*
+ * Every tracked leaf, cleaned on the way out. Read through this rather than off
+ * `plant.leafLog`, for the same reason `careHistory` exists: the stored list
+ * can be unsorted, duplicated or damaged, and a screen that maps over it
+ * unguarded is a red screen rather than a missing row.
+ */
+export function leafHistory(plant: StoredPlant): LeafEvent[] {
+  return normalizeLeaves(plant.leafLog);
 }
 
 function isTreatmentish(v: unknown): boolean {
@@ -738,6 +767,46 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
     return markCare(id, 'water', at);
   }
 
+  /*
+   * The three leaf mutations, all one shape: read the plant, hand the list to a
+   * pure function in lib/leaves.ts, persist what comes back. No schedule and no
+   * reminder is touched - new growth is something the plant does, not something
+   * the app asks the user to do, so it must not move a watering due date.
+   */
+  function writeLeaves(id: string, next: (leaves: LeafEvent[]) => LeafEvent[]): UpdateResult {
+    const current = load().plants;
+    const target = current.find((p) => p.id === id);
+    if (!target) return { ok: false, reason: 'not_found' };
+
+    const leaves = next(normalizeLeaves(target.leafLog));
+    const updated: StoredPlant = { ...target, leafLog: leaves };
+    /* An empty list is written as an ABSENT key rather than `[]`, so undoing
+     * the only leaf leaves a record byte-identical to one that was never
+     * tracked - the same rule the optional fields follow in `saveManual`. */
+    if (leaves.length === 0) delete updated.leafLog;
+
+    const plants = current.map((p) => (p.id === id ? updated : p));
+    if (!persist(plants)) return { ok: false, reason: 'storage_full' };
+    return { ok: true, plant: updated, plants };
+  }
+
+  /* A leaf is showing. */
+  function logLeaf(id: string, at: number = now()): UpdateResult {
+    const leafId = newId();
+    return writeLeaves(id, (leaves) => emergeLeaf(leaves, leafId, at));
+  }
+
+  /* That leaf has finished opening. A second tap on a leaf already grown is
+   * absorbed by `matureLeaf`, which returns the list unchanged. */
+  function markLeafGrown(id: string, leafId: string, at: number = now()): UpdateResult {
+    return writeLeaves(id, (leaves) => matureLeaf(leaves, leafId, at));
+  }
+
+  /* Undo the last leaf tap, whichever kind it was. */
+  function undoLeaf(id: string): UpdateResult {
+    return writeLeaves(id, undoLastLeaf);
+  }
+
   function remove(id: string): RemoveResult {
     const current = load().plants;
     const next = current.filter((p) => p.id !== id);
@@ -760,7 +829,19 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
     return persist(plants.filter(isStoredPlant));
   }
 
-  return { load, save, saveManual, update, markWatered, markCare, remove, replace };
+  return {
+    load,
+    save,
+    saveManual,
+    update,
+    markWatered,
+    markCare,
+    logLeaf,
+    markLeafGrown,
+    undoLeaf,
+    remove,
+    replace,
+  };
 }
 
 export type PlantStore = ReturnType<typeof createPlantStore>;

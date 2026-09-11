@@ -78,11 +78,23 @@ const deps: CloudDeps = {
        * result to an unusable type. A field added to CloudRow must be added
        * here too, or it reads null forever. */
       .select(
-        'id, user_id, saved_at, photo_path, diagnosis, added_via, catalog_id, species, soil_medium, nickname, last_watered_at, watering_log, last_repotted_at, repot_log, last_fertilized_at, fertilizer_log, reminder_id'
+        'id, user_id, saved_at, photo_path, diagnosis, added_via, catalog_id, species, soil_medium, nickname, last_watered_at, watering_log, last_repotted_at, repot_log, last_fertilized_at, fertilizer_log, leaf_log, reminder_id'
       )
       .eq('user_id', userId)
       .order('saved_at', { ascending: false });
-    if (error || !data) return [];
+    /*
+     * THROW, never return []. An empty array here means "this account has no
+     * plants", and the repo acts on that by replacing the local mirror with
+     * nothing - so a query that merely FAILED used to erase every plant on the
+     * device. That is exactly what happened when a `leaf_log` column was
+     * selected before its migration had been applied: PostgREST rejected the
+     * whole query with 42703, this returned [], and the library emptied.
+     *
+     * The two cases are not the same fact and must not have the same shape.
+     * Failure is reported; `refreshFromCloud` keeps what it already has.
+     */
+    if (error) throw new Error(`plants fetch failed: ${error.message}`);
+    if (!data) throw new Error('plants fetch returned no data');
 
     const rows = data as CloudRow[];
     const urls = await resolvePhotoUrls(rows.map((row) => row.photo_path));
