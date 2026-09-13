@@ -69,7 +69,7 @@
   },
   "gordonflowers.co.il": {
     "platform": "woo",
-    "at": 1789289539497
+    "at": 1789302178039
   },
   "pasiflora-plants.co.il": {
     "platform": "woo",
@@ -87,7 +87,11 @@
   },
   "mashtela-urbanit.co.il": {
     "platform": "virtuemart",
-    "at": 1789293906573,
+    "at": 1789302167148,
     "template": "{origin}/component/search/?searchword={query}"
+  },
+  "allenby-flowers.co.il": {
+    "platform": "woo",
+    "at": 1789302166795
   }
 }
