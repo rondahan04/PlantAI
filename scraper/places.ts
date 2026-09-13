@@ -121,6 +121,45 @@ export async function resolvePhotoUrl(
   }
 }
 
+/* Degrees of latitude per kilometre is near enough constant; longitude narrows
+ * with the cosine of the latitude. */
+const KM_PER_DEG_LAT = 110.574;
+const KM_PER_DEG_LNG = 111.32;
+
+/*
+ * The smallest lat/lng box that CONTAINS the circle of this radius.
+ *
+ * Circumscribes rather than inscribes on purpose: a box inside the circle would
+ * silently crop shops that are genuinely within the radius the user asked for,
+ * and cropping is invisible - you cannot miss what you were never shown. The
+ * corners it adds are removed by the exact distance check instead.
+ */
+export function boundingBox(lat: number, lng: number, radiusM: number) {
+  const km = radiusM / 1000;
+  const dLat = km / KM_PER_DEG_LAT;
+  /* Guard the poles, where cos(lat) → 0 and the longitude span explodes. */
+  const cos = Math.max(Math.cos((lat * Math.PI) / 180), 0.01);
+  const dLng = km / (KM_PER_DEG_LNG * cos);
+  return {
+    low: { latitude: lat - dLat, longitude: lng - dLng },
+    high: { latitude: lat + dLat, longitude: lng + dLng },
+  };
+}
+
+const R_KM = 6371;
+const toRad = (d: number) => (d * Math.PI) / 180;
+
+/* Great-circle distance in km. The pipeline has its own copy for sorting whole
+ * results; this one decides what is in the answer at all. */
+function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const dLat = toRad(bLat - aLat);
+  const dLng = toRad(bLng - aLng);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
+  return R_KM * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export async function discoverNurseries(
   lat: number,
   lng: number,
@@ -165,7 +204,22 @@ export async function discoverNurseries(
        * cap still applies below, after the filtering.
        */
       pageSize: PLACES_PAGE_SIZE,
-      locationBias: { circle: { center: { latitude: lat, longitude: lng }, radius: radiusM } },
+      /*
+       * RESTRICT, not bias. `locationBias` only weights ranking, so the radius
+       * bounded nothing: measured from Mitzpe Ramon with a 10km radius, Places
+       * returned 18 nurseries, the farthest 174.6km away and 15 of the 18
+       * outside the radius we claimed to have searched. The app said "nearby".
+       *
+       * A rectangle, because Text Search rejects a circle here ("Unknown name
+       * \"circle\" at 'location_restriction'") - circles are searchNearby's.
+       * The box circumscribes the circle and `withinRadius` below removes its
+       * corners, so the bound the user is told about is the bound applied.
+       *
+       * It also finds MORE of what we want: far-away results no longer spend
+       * slots out of a 20-result page. Same Tel Aviv search, shops with a
+       * website: 9 under the bias, 15 under the restriction.
+       */
+      locationRestriction: { rectangle: boundingBox(lat, lng, radiusM) },
     }),
   });
 
@@ -189,6 +243,20 @@ export async function discoverNurseries(
   const contactOnly: DiscoveredNursery[] = [];
 
   for (const p of places) {
+    /*
+     * Inside the radius, not merely inside the box. The box has corners the
+     * circle does not, and a shop in one is further away than we told the user
+     * we were looking.
+     *
+     * A place with no coordinates is dropped rather than defaulted to 0,0:
+     * defaulting would place it off the coast of Africa, or - if we defaulted
+     * to the user instead - rank an unlocatable shop as the closest one.
+     */
+    const pLat = p?.location?.latitude;
+    const pLng = p?.location?.longitude;
+    if (typeof pLat !== 'number' || typeof pLng !== 'number') continue;
+    if (haversineKm(lat, lng, pLat, pLng) > radiusM / 1000) continue;
+
     const website: unknown = p?.websiteUri;
     const url = typeof website === 'string' ? website : '';
     /* No site, or a Facebook page standing in for one. Nothing to scrape - but
@@ -224,8 +292,8 @@ export async function discoverNurseries(
     const row: DiscoveredNursery = {
       name: p.displayName?.text ?? '',
       website: scrapable ? url : '',
-      lat: p.location?.latitude ?? 0,
-      lng: p.location?.longitude ?? 0,
+      lat: pLat,
+      lng: pLng,
       address: p.formattedAddress ?? '',
       ...rich,
     };

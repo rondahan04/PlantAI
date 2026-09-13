@@ -437,14 +437,17 @@ export const en = {
     deliverToday: 'Deliver Today',
     pickUp: 'Pick Up',
     searchingTitle: 'Searching nearby nurseries',
-    searchingBody: (plantName: string) =>
-      `Discovering shops within 10km and checking live stock for ${plantName}. This can take 30–60 seconds.`,
+    searchingBody: (plantName: string, km: number) =>
+      `Discovering shops within ${km}km and checking live stock for ${plantName}. This can take 30–60 seconds.`,
     tryAgain: 'Try again',
     backToHome: 'Back to home',
     emptyTitle: 'No nurseries found nearby',
-    emptyBody: (plantName: string) =>
-      `No shop within 10km came back with ${plantName} in stock. Stock changes often, so it is worth another look later.`,
+    emptyBody: (plantName: string, km: number) =>
+      `No shop within ${km}km came back with ${plantName} in stock. Stock changes often, so it is worth another look later.`,
     searchAgain: 'Search again',
+    /* Offered only when there IS a wider search to run - see nextRadius. A
+     * button that re-runs the identical search is the dead end this replaces. */
+    searchWider: (km: number) => `Search wider · ${km}km`,
     diagnoseAnother: 'Diagnose another plant',
     diagnoseAnotherCta: 'Diagnose Another Plant',
     reviews: (n: number) => `(${n} reviews)`,

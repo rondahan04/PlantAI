@@ -1,6 +1,7 @@
 import { Nursery } from '../types';
 import { apiFetch, apiHeaders, readApiError } from '../lib/api';
 import { hasInlineResults } from '../lib/nursery/jobResponse';
+import { clampRadius, DEFAULT_RADIUS_M } from '../lib/nursery/radius';
 
 /*
  * Live nursery lookup (TODOS E12).
@@ -156,14 +157,15 @@ async function startJob(
   plantName: string,
   lat: number,
   lng: number,
-  force: boolean
+  force: boolean,
+  radiusM: number
 ): Promise<{ jobId: string } | { search: NurserySearch }> {
   let res: Response;
   try {
     res = await apiFetch('/api/nurseries', {
       method: 'POST',
       headers: apiHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ plant: plantName, lat, lng, force }),
+      body: JSON.stringify({ plant: plantName, lat, lng, force, radius: radiusM }),
       timeoutMs: START_TIMEOUT_MS,
     });
   } catch (err: unknown) {
@@ -253,9 +255,10 @@ async function requestNurseries(
   plantName: string,
   lat: number,
   lng: number,
-  force: boolean
+  force: boolean,
+  radiusM: number
 ): Promise<NurserySearch> {
-  const started = await startJob(plantName, lat, lng, force);
+  const started = await startJob(plantName, lat, lng, force, radiusM);
   return 'search' in started ? started.search : awaitJob(started.jobId);
 }
 
@@ -274,8 +277,16 @@ interface CacheEntry {
 }
 const cache = new Map<string, CacheEntry>();
 
-const cacheKey = (plant: string, lat: number, lng: number) =>
-  `${plant.trim().toLowerCase()}|${lat.toFixed(3)}|${lng.toFixed(3)}`;
+/*
+ * The radius is part of the key, and leaving it out is not a missed
+ * optimisation - it is wrong. "Search wider" asks a different question, and
+ * without this it would be handed the 10km promise this map is still holding
+ * and shown the same empty list it was trying to escape. The server's
+ * searchKey has always included it; these two must agree on what "the same
+ * search" means.
+ */
+const cacheKey = (plant: string, lat: number, lng: number, radiusM: number) =>
+  `${plant.trim().toLowerCase()}|${lat.toFixed(3)}|${lng.toFixed(3)}|${Math.round(radiusM)}`;
 
 /*
  * Evict expired entries, then the oldest, so a long session with many distinct
@@ -303,12 +314,13 @@ export function fetchNearbyNurseries(
   plantName: string,
   userLat: number,
   userLng: number,
-  opts: { force?: boolean } = {}
+  opts: { force?: boolean; radiusM?: number } = {}
 ): Promise<NurserySearch> {
   const now = Date.now();
   evict(now);
 
-  const key = cacheKey(plantName, userLat, userLng);
+  const radiusM = clampRadius(opts.radiusM ?? DEFAULT_RADIUS_M);
+  const key = cacheKey(plantName, userLat, userLng, radiusM);
   const hit = cache.get(key);
   if (!opts.force && hit && now - hit.at < CACHE_TTL_MS) {
     return hit.promise;
@@ -317,7 +329,7 @@ export function fetchNearbyNurseries(
   // `force` reaches the server too, not just this in-memory map: a retry that
   // skipped the local cache only to be handed the same week-old row from the
   // durable one is not the refresh the user asked for.
-  const promise = requestNurseries(plantName, userLat, userLng, opts.force === true);
+  const promise = requestNurseries(plantName, userLat, userLng, opts.force === true, radiusM);
   // Evict on failure so a later call (retry) starts fresh instead of re-throwing
   // the same rejected promise.
   promise.catch(() => {

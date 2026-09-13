@@ -110,6 +110,30 @@ const nurseryCache = createNurseryCache<NurseryResult[]>({
 const CORS_ORIGIN = env('CORS_ORIGIN');
 
 /* Lines that are not a URL are comments - the files are edited by hand. */
+/*
+ * A radius the Places API will accept.
+ *
+ * Clamped rather than trusted: Places errors above 50km instead of clamping for
+ * us, and a 0 or negative radius buys a request that can only find nothing.
+ *
+ * Deliberately a second copy of src/lib/nursery/radius.ts rather than an import
+ * of it. The Dockerfile ships `server` and `scraper` and no part of `src`, so
+ * importing the app's copy would typecheck here and crash the container - the
+ * same boundary that keeps `hostOf` from being shared. The app owns the numbers
+ * the USER sees and derives its copy from them; this owns what the API will
+ * accept. They agree on 10km and 50km, and the values are simple enough that
+ * the duplication is cheaper than the coupling.
+ */
+const MAX_RADIUS_M = 50_000;
+const MIN_RADIUS_M = 1_000;
+const DEFAULT_RADIUS_M = 10_000;
+
+function clampRadius(m: unknown): number {
+  const n = Number(m);
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT_RADIUS_M;
+  return Math.min(MAX_RADIUS_M, Math.max(MIN_RADIUS_M, Math.round(n)));
+}
+
 function readUrlList(file: string): string[] {
   return fs
     .readFileSync(file, 'utf8')
@@ -690,7 +714,7 @@ const server = http.createServer(async (req, res) => {
       const plant = typeof body?.plant === 'string' ? body.plant.trim() : '';
       const lat = Number(body?.lat);
       const lng = Number(body?.lng);
-      const radiusM = Number(body?.radius) || 10000;
+      const radiusM = clampRadius(body?.radius);
       /* The user asked for fresh stock rather than what we last saw. */
       const force = body?.force === true;
       // Number(null) is 0 and 0 is finite, so a missing lat/lng would otherwise

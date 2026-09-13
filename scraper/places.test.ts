@@ -97,7 +97,21 @@ test('discoverNurseries: the scrapable cap does not stop contact-only rows being
   assert.deepEqual(out.map((n) => n.website), ['https://a.co.il', '']);
 });
 
-test('discoverNurseries: sends textQuery + circle bias + auth/mask headers', async () => {
+/*
+ * The radius has to RESTRICT, not merely hint.
+ *
+ * This sent `locationBias`, which only weights ranking - so the radius bounded
+ * nothing. Measured against the live API 2026-09-13 from Mitzpe Ramon with a
+ * 10km radius: 18 nurseries returned, the farthest 174.6km away, 15 of the 18
+ * outside the radius we claimed to have searched. The app would have told
+ * someone "18 nurseries nearby, shops within 10km" and listed shops in another
+ * region - and people drive to these.
+ *
+ * Text Search takes a RECTANGLE, not a circle (a circle here is a 400:
+ * "Unknown name \"circle\" at 'location_restriction'"), so the box circumscribes
+ * the circle and the exact distance filter below removes its corners.
+ */
+test('discoverNurseries: restricts to a box around the radius, not a bias', async () => {
   let url = '';
   let init: any = null;
   await discoverNurseries(
@@ -115,8 +129,54 @@ test('discoverNurseries: sends textQuery + circle bias + auth/mask headers', asy
   assert.match(init.headers['X-Goog-FieldMask'], /places\.websiteUri/);
   const sent = JSON.parse(init.body);
   assert.equal(sent.textQuery, 'plant nursery');
-  assert.deepEqual(sent.locationBias.circle.center, { latitude: 32.08, longitude: 34.78 });
-  assert.equal(sent.locationBias.circle.radius, 3000);
+  assert.equal(sent.locationBias, undefined, 'a bias bounds nothing - that was the bug');
+
+  const rect = sent.locationRestriction.rectangle;
+  assert.ok(rect, 'Text Search restricts by rectangle; a circle is a 400');
+  assert.ok(rect.low.latitude < 32.08 && rect.high.latitude > 32.08, 'the box straddles the point');
+  assert.ok(rect.low.longitude < 34.78 && rect.high.longitude > 34.78);
+  /* 3km is ~0.027 degrees of latitude. The box must CONTAIN the circle, so it
+   * is at least that half-height - a tighter box would silently crop shops
+   * inside the radius the user asked for. */
+  assert.ok(
+    rect.high.latitude - 32.08 >= 0.027,
+    `box must circumscribe the circle, got ${rect.high.latitude - 32.08}`
+  );
+});
+
+/*
+ * The box circumscribes the circle, so its corners lie outside the radius. A
+ * shop in a corner is further away than we told the user we were looking, so it
+ * does not belong in the answer.
+ */
+test('discoverNurseries: drops places beyond the radius, inside the box', async () => {
+  const rows = await discoverNurseries(
+    32.0,
+    34.0,
+    'KEY',
+    { radiusM: 10_000 },
+    fakeFetch(200, {
+      places: [
+        place({ displayName: { text: 'near' }, location: { latitude: 32.01, longitude: 34.01 }, websiteUri: 'https://near.co.il' }),
+        /* ~0.09 deg on both axes: inside the bounding box, ~13km away - a corner. */
+        place({ displayName: { text: 'corner' }, location: { latitude: 32.09, longitude: 34.09 }, websiteUri: 'https://corner.co.il' }),
+      ],
+    })
+  );
+  assert.deepEqual(rows.map((r) => r.name), ['near']);
+});
+
+/* A place Places returned without usable coordinates cannot be shown on the
+ * map or measured, and must not be silently treated as distance zero. */
+test('discoverNurseries: a place with no coordinates is not counted as on top of you', async () => {
+  const rows = await discoverNurseries(
+    32.0,
+    34.0,
+    'KEY',
+    { radiusM: 10_000 },
+    fakeFetch(200, { places: [place({ location: undefined, websiteUri: 'https://x.co.il' })] })
+  );
+  assert.deepEqual(rows, []);
 });
 
 test('discoverNurseries: dedups chains by website host (www / branch variants)', async () => {

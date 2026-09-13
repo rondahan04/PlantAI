@@ -371,14 +371,15 @@ export const he: Copy = {
     deliverToday: 'משלוח היום',
     pickUp: 'איסוף עצמי',
     searchingTitle: 'מחפשים משתלות בסביבה',
-    searchingBody: (plantName: string) =>
-      `מאתרים חנויות ברדיוס 10 ק"מ ובודקים מלאי בזמן אמת עבור ${plantName}. זה יכול לקחת 30–60 שניות.`,
+    searchingBody: (plantName: string, km: number) =>
+      `מאתרים חנויות ברדיוס ${km} ק"מ ובודקים מלאי בזמן אמת עבור ${plantName}. זה יכול לקחת 30–60 שניות.`,
     tryAgain: 'לנסות שוב',
     backToHome: 'חזרה למסך הבית',
     emptyTitle: 'לא נמצאו משתלות בסביבה',
-    emptyBody: (plantName: string) =>
-      `אף חנות ברדיוס 10 ק"מ לא החזירה ${plantName} במלאי. המלאי משתנה לעיתים קרובות, אז שווה לבדוק שוב מאוחר יותר.`,
+    emptyBody: (plantName: string, km: number) =>
+      `אף חנות ברדיוס ${km} ק"מ לא החזירה ${plantName} במלאי. המלאי משתנה לעיתים קרובות, אז שווה לבדוק שוב מאוחר יותר.`,
     searchAgain: 'לחפש שוב',
+    searchWider: (km: number) => `להרחיב ל-${km} ק"מ`,
     diagnoseAnother: 'לאבחן צמח אחר',
     diagnoseAnotherCta: 'אבחון צמח נוסף',
     reviews: (n: number) => `(${n} ביקורות)`,
