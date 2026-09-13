@@ -117,12 +117,30 @@ export function showsPrice(
 }
 
 /*
- * Pick Up order: the shops that answered the question, nearest first, then
- * everything else nearest first.
+ * ILS out of a displayed price string. Handles "₪1,499.90", '46.80 ש"ח' and
+ * bare numbers; returns Infinity for anything unparseable so a price we cannot
+ * read sorts last rather than winning the top of the list by accident.
  *
- * Distance stays the tie-break rather than price. This is the tab for driving
- * somewhere, and the cheapest shop across town is not the better result - the
- * Deliver tab is where price is the whole comparison.
+ * Mirrors parsePrice in scraper/pipeline.ts on purpose. The server sorts whole
+ * nurseries and this sorts rendered cards, but they must agree about what a
+ * number is - a client that read "₪1,499.90" as 1 would put the dearest shop
+ * first while showing the user the reason it should be last.
+ */
+export function priceOf(price: string | undefined): number {
+  const digits = (price || '').replace(/[^0-9.,]/g, '').replace(/,/g, '');
+  const n = Number.parseFloat(digits);
+  return Number.isFinite(n) && n > 0 ? n : Infinity;
+}
+
+/*
+ * Pick Up order: the shops that answered the question first, cheapest of those
+ * first, and everything we could not price after them, nearest first.
+ *
+ * Price leads over distance inside the priced block because that block is the
+ * comparison - every row in it can sell you the plant today, so the only
+ * question left is what it costs. Distance orders the rows below, where there
+ * is no price to compare and "which is closest to call in at" is all that is
+ * left, and it breaks ties between two shops charging the same.
  */
 export function byPickupOrder(
   a: Pick<Nursery, 'hasPlant' | 'plantPrice' | 'priceSuspect' | 'distanceKm'>,
@@ -131,6 +149,10 @@ export function byPickupOrder(
   const pa = showsPrice(a);
   const pb = showsPrice(b);
   if (pa !== pb) return pa ? -1 : 1;
+  if (pa && pb) {
+    const byPrice = priceOf(a.plantPrice) - priceOf(b.plantPrice);
+    if (byPrice !== 0 && Number.isFinite(byPrice)) return byPrice;
+  }
   return a.distanceKm - b.distanceKm;
 }
 

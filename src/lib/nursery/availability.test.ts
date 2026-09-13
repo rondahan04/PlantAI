@@ -6,6 +6,7 @@ import {
   isWorthShowing,
   showsPrice,
   byPickupOrder,
+  priceOf,
   LIKELY_AT_OR_ABOVE,
   MAYBE_AT_OR_ABOVE,
 } from './availability.ts';
@@ -167,18 +168,38 @@ test('showsPrice is about what the card displays, not what we scraped', () => {
   assert.equal(showsPrice(base({ hasPlant: true, plantPrice: '-' })), false);
 });
 
-test('byPickupOrder puts priced shops first, then the nearest', () => {
+test('byPickupOrder puts priced shops first, cheapest first, then the nearest', () => {
   const rows = [
     base({ id: 'far-unpriced', distanceKm: 9 }),
     base({ id: 'near-unpriced', distanceKm: 1 }),
-    base({ id: 'far-priced', distanceKm: 8, hasPlant: true, plantPrice: '₪80' }),
+    base({ id: 'dear-and-near', distanceKm: 1, hasPlant: true, plantPrice: '₪199' }),
     base({ id: 'suspect', distanceKm: 2, hasPlant: true, plantPrice: '₪80', priceSuspect: true }),
-    base({ id: 'near-priced', distanceKm: 5, hasPlant: true, plantPrice: '₪60' }),
+    base({ id: 'cheap-and-far', distanceKm: 8, hasPlant: true, plantPrice: '₪60' }),
   ];
   assert.deepEqual(
     [...rows].sort(byPickupOrder).map((n) => n.id),
-    ['near-priced', 'far-priced', 'near-unpriced', 'suspect', 'far-unpriced']
+    /* Cheapest leads even from 8km out; distance only orders the rows that
+     * have no price to compare. */
+    ['cheap-and-far', 'dear-and-near', 'near-unpriced', 'suspect', 'far-unpriced']
   );
+});
+
+test('priceOf reads the shapes a scraped price actually arrives in', () => {
+  assert.equal(priceOf('₪60'), 60);
+  assert.equal(priceOf('₪1,499.90'), 1499.9);
+  assert.equal(priceOf('46.80 ש"ח'), 46.8);
+  assert.equal(priceOf('-'), Infinity, 'unparseable must sort last, never first');
+  assert.equal(priceOf(''), Infinity);
+  assert.equal(priceOf(undefined), Infinity);
+});
+
+/* Two shops at the same price are still a choice, and the near one wins it. */
+test('byPickupOrder falls back to distance when two prices tie', () => {
+  const rows = [
+    base({ id: 'far', distanceKm: 7, hasPlant: true, plantPrice: '₪60' }),
+    base({ id: 'near', distanceKm: 2, hasPlant: true, plantPrice: '₪60' }),
+  ];
+  assert.deepEqual([...rows].sort(byPickupOrder).map((n) => n.id), ['near', 'far']);
 });
 
 test('a legacy note from an older server still renders', () => {
