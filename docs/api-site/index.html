@@ -6,257 +6,373 @@
 <title>PlantAI Stack</title>
 <style>
 :root{
-  --bg:#f7f5ee;
-  --surface:#ffffff;
-  --ink:#1d2a1e;
-  --ink-soft:#5a655a;
-  --accent:#3f6b43;
-  --accent-strong:#264a2a;
-  --warn:#a85a22;
-  --line:#ddd8c9;
-  --diagram-bg:#1c2419;
-}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --bg:#12160f;
-    --surface:#191f15;
-    --ink:#e7ede0;
-    --ink-soft:#a7b2a1;
-    --accent:#7fbf78;
-    --accent-strong:#a3d69b;
-    --warn:#e2965a;
-    --line:#2b3226;
-    --diagram-bg:#0e130c;
-  }
-}
-:root[data-theme="dark"]{
-  --bg:#12160f;
-  --surface:#191f15;
-  --ink:#e7ede0;
-  --ink-soft:#a7b2a1;
-  --accent:#7fbf78;
-  --accent-strong:#a3d69b;
-  --warn:#e2965a;
-  --line:#2b3226;
-  --diagram-bg:#0e130c;
+  --bg:#f4f2ef;
+  --panel:#ffffff;
+  --ink:#16181c;
+  --ink-soft:#6b7076;
+  --ink-faint:#9aa0a6;
+  --line:#e6e3de;
+  --line-soft:#efece7;
+  --accent:#e8590c;
+  --accent-soft:#fff1e8;
+  --track:#f2f0ec;
+  --radius:10px;
 }
 *{box-sizing:border-box;}
+html,body{height:100%;}
 body{
   margin:0;
   background:var(--bg);
   color:var(--ink);
-  font-family:-apple-system,"Segoe UI",Arial,sans-serif;
-  line-height:1.6;
+  font:14px/1.55 -apple-system,"Segoe UI",Inter,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
 }
-.wrap{max-width:780px;margin:0 auto;padding:48px 24px 80px;}
-h1{
-  font-family:"Iowan Old Style","Palatino Linotype",Georgia,serif;
-  font-size:1.9rem;
-  margin:0 0 6px;
-}
-.sub{color:var(--ink-soft);margin:0 0 40px;font-size:1rem;max-width:56ch;}
-h2{
-  font-size:1.1rem;
-  margin:0 0 14px;
-  border-bottom:1px solid var(--line);
-  padding-bottom:8px;
-}
-section{margin-bottom:44px;}
-code{
-  font-family:"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
-  font-size:0.86em;
-  background:var(--diagram-bg);
-  color:#e9ece7;
-  padding:0.1em 0.4em;
-  border-radius:4px;
-}
-
-/* diagram */
-figure{margin:0;background:var(--diagram-bg);border-radius:10px;padding:20px 16px 8px;}
-figure svg{width:100%;height:auto;display:block;color:#ffffff;}
-figure svg text{fill:#ffffff;font-size:15px;font-weight:600;}
-figure svg text.sub{font-size:12px;font-weight:500;fill:#d6dad2;}
-figure svg .accent{color:var(--accent);}
-figure svg text.accent{fill:var(--accent);}
-figure svg .warn{color:var(--warn);}
-figure svg text.warn{fill:var(--warn);}
-figcaption{font-size:0.8rem;color:var(--ink-soft);padding:10px 4px 4px;}
-
-/* tool list */
-ul.tools{list-style:none;margin:0;padding:0;display:grid;gap:10px;}
-ul.tools li{
-  display:flex;
-  gap:10px;
-  align-items:baseline;
-  background:var(--surface);
+.shell{
+  max-width:1180px;
+  margin:28px auto;
+  background:var(--panel);
   border:1px solid var(--line);
-  border-radius:8px;
-  padding:10px 14px;
-  font-size:0.94rem;
+  border-radius:var(--radius);
+  overflow:hidden;
 }
-ul.tools li b{white-space:nowrap;color:var(--accent-strong);}
-ul.tools li span{color:var(--ink-soft);}
 
-/* flow steps */
-ol.flow{margin:0;padding:0 0 0 1.3em;}
-ol.flow li{margin-bottom:8px;max-width:62ch;}
-ol.flow code{color:var(--accent-strong);background:transparent;padding:0;}
+/* header */
+.head{padding:26px 30px 0;}
+.eyebrow{
+  font:600 11px/1 ui-monospace,"SF Mono",Menlo,monospace;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--ink-faint);
+  margin:0 0 12px;
+}
+.head h1{font:600 25px/1.25 -apple-system,"Segoe UI",Inter,Arial,sans-serif;margin:0 0 20px;}
 
-footer{color:var(--ink-soft);font-size:0.82rem;border-top:1px solid var(--line);padding-top:16px;}
+/* tabs */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);padding:0 30px;overflow-x:auto;}
+.tab{
+  appearance:none;background:none;border:0;cursor:pointer;
+  font:500 14px/1 inherit;color:var(--ink-soft);
+  padding:14px 18px;border-bottom:2px solid transparent;margin-bottom:-1px;
+  white-space:nowrap;display:flex;align-items:center;gap:8px;
+}
+.tab:hover{color:var(--ink);}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent);font-weight:600;}
+.tab .dot{width:7px;height:7px;border-radius:50%;background:var(--ink-faint);}
+.tab[aria-selected="true"] .dot{background:var(--accent);}
+
+/* body split */
+.split{display:flex;min-height:560px;}
+.side{
+  width:216px;flex:none;border-right:1px solid var(--line);
+  padding:20px 12px;display:flex;flex-direction:column;gap:2px;
+}
+.side .group{
+  font:600 10px/1 ui-monospace,"SF Mono",Menlo,monospace;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);
+  padding:16px 12px 7px;
+}
+.side .group:first-child{padding-top:2px;}
+.nav{
+  appearance:none;background:none;border:0;cursor:pointer;text-align:left;
+  font:500 13.5px/1 inherit;color:var(--ink);
+  padding:9px 12px;border-radius:7px;width:100%;
+}
+.nav:hover{background:var(--line-soft);}
+.nav[aria-current="true"]{background:var(--track);font-weight:600;}
+.side .foot{
+  margin-top:auto;border-top:1px solid var(--line);padding:14px 12px 2px;
+  font-size:12px;color:var(--ink-faint);
+}
+
+.main{flex:1;padding:24px 30px 40px;min-width:0;}
+.panel[hidden]{display:none;}
+.panel h2{font:600 19px/1.3 inherit;margin:0 0 3px;}
+.panel .lede{color:var(--ink-soft);margin:0 0 20px;max-width:66ch;}
+.panel h3{
+  font:600 10px/1 ui-monospace,"SF Mono",Menlo,monospace;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);
+  margin:28px 0 10px;
+}
+.panel h3:first-of-type{margin-top:22px;}
+
+/* stat row */
+.stats{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-wrap:wrap;}
+.stat{flex:1 1 130px;padding:12px 16px;border-right:1px solid var(--line);min-width:0;}
+.stat:last-child{border-right:0;}
+.stat .k{
+  font:600 10px/1 ui-monospace,"SF Mono",Menlo,monospace;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);
+}
+.stat .v{font:600 21px/1.3 inherit;margin-top:5px;white-space:nowrap;}
+.stat.hot{background:var(--accent-soft);}
+.stat.hot .v,.stat.hot .k{color:var(--accent);}
+
+/* live strip */
+.strip{
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  border:1px solid var(--line);border-radius:8px;padding:11px 16px;margin-top:10px;
+  font:500 12px/1 ui-monospace,"SF Mono",Menlo,monospace;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);
+}
+.strip b{color:var(--ink);}
+.strip .led{width:8px;height:8px;border-radius:50%;background:var(--accent);}
+
+/* cards */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;}
+.card{border:1px solid var(--line);border-radius:8px;padding:13px 15px;}
+.card b{display:block;font-weight:600;margin-bottom:3px;}
+.card span{color:var(--ink-soft);font-size:13px;}
+.card code{color:var(--accent);}
+
+/* step rail */
+ol.steps{list-style:none;margin:0;padding:0;counter-reset:s;}
+ol.steps li{
+  counter-increment:s;position:relative;padding:0 0 16px 34px;
+  border-left:1px solid var(--line);margin-left:11px;
+}
+ol.steps li:last-child{border-left-color:transparent;padding-bottom:0;}
+ol.steps li::before{
+  content:counter(s);position:absolute;left:-11px;top:-1px;
+  width:22px;height:22px;border-radius:50%;
+  background:var(--panel);border:1px solid var(--line);color:var(--ink-soft);
+  font:600 11px/20px ui-monospace,"SF Mono",Menlo,monospace;text-align:center;
+}
+ol.steps li b{font-weight:600;}
+ol.steps li span{color:var(--ink-soft);}
+
+/* bars */
+.bars{display:grid;gap:7px;}
+.bar{display:grid;grid-template-columns:1fr auto;align-items:center;gap:12px;
+  background:var(--track);border-radius:6px;padding:8px 13px;position:relative;overflow:hidden;}
+.bar i{position:absolute;inset:0 auto 0 0;background:var(--line);border-radius:6px;}
+.bar.hot i{background:var(--accent-soft);}
+.bar span,.bar em{position:relative;font-style:normal;}
+.bar em{color:var(--ink-soft);font:600 12px/1 ui-monospace,"SF Mono",Menlo,monospace;}
+
+/* misc */
+code{font:0.86em/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  background:var(--track);padding:.18em .42em;border-radius:4px;}
+.note{color:var(--ink-soft);max-width:70ch;margin:12px 0 0;}
+.note b{color:var(--ink);}
+.asof{color:var(--ink-faint);font-size:12px;margin:10px 0 0;}
+
+@media (max-width:820px){
+  .split{flex-direction:column;}
+  .side{width:auto;border-right:0;border-bottom:1px solid var(--line);flex-direction:row;flex-wrap:wrap;}
+  .side .group{display:none;}
+  .side .foot{display:none;}
+  .nav{width:auto;}
+  .main{padding:20px;}
+}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>PlantAI Stack</h1>
-  <p class="sub">What's used, and which API gets called when.</p>
+<div class="shell">
+  <div class="head">
+    <p class="eyebrow">PlantAI &middot; how it works &middot; click the tabs</p>
+    <h1>Photo in, plant named, nursery found</h1>
+  </div>
 
-  <section>
-    <h2>Diagram</h2>
-    <figure>
-      <svg viewBox="0 0 760 310" role="img" aria-label="Phone app talks to one Node server, which calls PlantNet and OpenAI for diagnosis, and Google Places, Tavily or Firecrawl, and OpenAI again for nursery search. Both the app and the server also talk to Supabase: the app for the account and the plant library, the server for the shared scrape cache.">
-        <defs>
-          <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
-            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
-          </marker>
-        </defs>
-        <g stroke-width="1.4" font-family="-apple-system,Segoe UI,sans-serif">
-          <rect x="10" y="80" width="130" height="60" rx="8" fill="none" stroke="currentColor"/>
-          <text x="75" y="115" text-anchor="middle">Expo app</text>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-go="overview" aria-selected="true">Overview</button>
+    <button class="tab" role="tab" data-go="diagnose" aria-selected="false">Diagnose</button>
+    <button class="tab" role="tab" data-go="nurseries" aria-selected="false">Nursery search</button>
+    <button class="tab" role="tab" data-go="pipeline" aria-selected="false">Scraping</button>
+    <button class="tab" role="tab" data-go="health" aria-selected="false"><span class="dot"></span>Health</button>
+  </div>
 
-          <line x1="140" y1="110" x2="204" y2="110" stroke="currentColor" marker-end="url(#a)"/>
-          <text x="172" y="96" text-anchor="middle" class="sub">HTTPS</text>
+  <div class="split">
+    <nav class="side">
+      <div class="group">Observe</div>
+      <button class="nav" data-go="overview" aria-current="true">Overview</button>
+      <button class="nav" data-go="providers">Providers</button>
+      <button class="nav" data-go="routes">Routes</button>
 
-          <rect x="204" y="70" width="150" height="80" rx="8" fill="none" stroke="currentColor" class="accent" stroke-width="1.8"/>
-          <text x="279" y="102" text-anchor="middle" class="accent">Node server</text>
-          <text x="279" y="122" text-anchor="middle" class="accent sub">gate + routes</text>
+      <div class="group">Flows</div>
+      <button class="nav" data-go="diagnose">Diagnose</button>
+      <button class="nav" data-go="nurseries">Nursery search</button>
+      <button class="nav" data-go="care">Care plan</button>
+      <button class="nav" data-go="account">Account &amp; data</button>
 
-          <line x1="354" y1="92" x2="410" y2="30" stroke="currentColor" marker-end="url(#a)"/>
-          <rect x="410" y="6" width="150" height="52" rx="8" fill="none" stroke="currentColor"/>
-          <text x="485" y="37" text-anchor="middle">PlantNet</text>
+      <div class="group">Scrape</div>
+      <button class="nav" data-go="pipeline">Pipeline</button>
+      <button class="nav" data-go="health">Health</button>
 
-          <line x1="354" y1="110" x2="410" y2="110" stroke="currentColor" marker-end="url(#a)"/>
-          <rect x="410" y="84" width="150" height="52" rx="8" fill="none" stroke="currentColor"/>
-          <text x="485" y="115" text-anchor="middle">OpenAI</text>
+      <div class="foot">One server.<br>Six providers.<br>One database.</div>
+    </nav>
 
-          <line x1="354" y1="128" x2="410" y2="190" stroke="currentColor" marker-end="url(#a)"/>
-          <rect x="410" y="164" width="150" height="52" rx="8" fill="none" stroke="currentColor"/>
-          <text x="485" y="195" text-anchor="middle">Google Places</text>
+    <main class="main">
 
-          <line x1="560" y1="110" x2="600" y2="110" stroke="currentColor" marker-end="url(#a)"/>
-          <rect x="600" y="84" width="150" height="52" rx="8" fill="none" stroke="currentColor"/>
-          <text x="675" y="107" text-anchor="middle" class="sub">Tavily reads</text>
-          <text x="675" y="124" text-anchor="middle" class="sub">Firecrawl renders</text>
+      <section class="panel" id="p-overview">
+        <h2>Overview</h2>
+        <p class="lede">The phone app talks to one Node server. The server talks to every paid provider. The only thing the app reaches directly is Supabase, because the session belongs to the user, not the server.</p>
 
-          <!-- Supabase is the one box BOTH sides reach, and the two arrows into
-               it mean different things: the app holds the user's session and
-               writes its own rows under RLS, while the server holds the
-               service-role key and writes the shared scrape cache. -->
-          <polyline points="75,140 75,271 134,271" fill="none" stroke="currentColor" marker-end="url(#a)"/>
-          <text x="84" y="200" class="sub">account, library, photos</text>
+        <div class="stats">
+          <div class="stat"><div class="k">Providers</div><div class="v">6</div></div>
+          <div class="stat"><div class="k">Routes</div><div class="v">5</div></div>
+          <div class="stat"><div class="k">Scraper reads</div><div class="v">96%</div></div>
+          <div class="stat"><div class="k">Search time</div><div class="v">36.5s</div></div>
+          <div class="stat hot"><div class="k">Answer rate</div><div class="v">52%</div></div>
+        </div>
 
-          <line x1="279" y1="150" x2="279" y2="239" stroke="currentColor" marker-end="url(#a)"/>
-          <text x="288" y="200" class="sub">scrape cache</text>
+        <div class="strip">
+          <span class="led"></span> Measured live
+          &middot; 26 shops read &middot; <b>Tel Aviv 10km</b> &middot; 2 plants &middot; <b>2026-09-13</b>
+        </div>
 
-          <rect x="140" y="245" width="200" height="52" rx="8" fill="none" stroke="currentColor"/>
-          <text x="240" y="268" text-anchor="middle">Supabase</text>
-          <text x="240" y="285" text-anchor="middle" class="sub">Postgres + Auth + Storage</text>
-        </g>
-      </svg>
-      <figcaption>One server, five providers, one database. The app never talks to a provider directly - but it does talk to Supabase directly, because the session is the user's, not the server's.</figcaption>
-    </figure>
-  </section>
+        <h3>Path of one request</h3>
+        <ol class="steps">
+          <li><b>App</b> <span>- Expo / React Native. Holds no API keys.</span></li>
+          <li><b>Node server</b> <span>- plain <code>http</code>, one process. Holds every key, spends every credit.</span></li>
+          <li><b>Providers</b> <span>- PlantNet, OpenAI, Google Places, Tavily, Firecrawl.</span></li>
+          <li><b>Supabase</b> <span>- account, plant library, photos, and the scrape cache shared by all users.</span></li>
+        </ol>
+        <p class="note">Answer rate is end-to-end: of the nearby shops a user could plausibly be shown, the share that came back with a real product and price. It is lower than the read rate because most shops simply do not stock the plant.</p>
+      </section>
 
-  <section>
-    <h2>APIs, tools &amp; libraries</h2>
-    <ul class="tools">
-      <li><b>Expo / React Native</b><span>the phone app itself</span></li>
-      <li><b>Node <code>http</code></b><span>the backend - no framework, one process</span></li>
-      <li><b>PlantNet API</b><span>identifies the plant species from a photo</span></li>
-      <li><b>OpenAI (gpt-5.6-luna, vision)</b><span>diagnoses health from the photo; writes the per-genus care plans; also extracts product info from scraped text</span></li>
-      <li><b>Google Places API</b><span>finds nearby nurseries + their websites</span></li>
-      <li><b>Tavily</b><span>reads a nursery's page as the server sends it - the common case, and the fast one</span></li>
-      <li><b>Firecrawl</b><span>renders a page's JavaScript when reading it plainly is not enough; rescues a failed Tavily read</span></li>
-      <li><b>Supabase Auth</b><span>optional account - email sign-in. Nothing is behind a login wall</span></li>
-      <li><b>Supabase Postgres</b><span><code>plants</code> (the library, once you have an account), <code>profiles</code>, and <code>nursery_searches</code> (scrape cache shared across users)</span></li>
-      <li><b>Supabase Storage</b><span>plant photos for logged-in users - a private bucket, read through short-lived signed URLs</span></li>
-      <li><b>expo-sqlite / kv-store</b><span>the plant library on-device: the only store when logged out, a mirror of the account when logged in</span></li>
-      <li><b>expo-file-system</b><span>saves plant photos on-device</span></li>
-      <li><b>expo-notifications</b><span>schedules watering reminders</span></li>
-    </ul>
-  </section>
+      <section class="panel" id="p-providers" hidden>
+        <h2>Providers</h2>
+        <p class="lede">Six external services. Everything else is Expo's own on-device storage.</p>
+        <div class="cards">
+          <div class="card"><b>PlantNet</b><span>Species from a photo.</span></div>
+          <div class="card"><b>OpenAI &middot; gpt-5.6-luna</b><span>Health diagnosis (vision), care plans, product extraction from scraped text, Hebrew translation.</span></div>
+          <div class="card"><b>Google Places</b><span>Nearby nurseries and their websites.</span></div>
+          <div class="card"><b>Tavily</b><span>Reads a shop page as served. The fast, common path.</span></div>
+          <div class="card"><b>Firecrawl</b><span>Renders JavaScript when a plain read shows nothing. Rate limited to 10/min.</span></div>
+          <div class="card"><b>Supabase</b><span>Postgres, Auth, Storage. The one service the app calls directly.</span></div>
+        </div>
+        <h3>On device</h3>
+        <div class="cards">
+          <div class="card"><b>expo-sqlite</b><span>The plant library. Sole store when logged out, a mirror when logged in.</span></div>
+          <div class="card"><b>expo-file-system</b><span>Plant photos, offline.</span></div>
+          <div class="card"><b>expo-notifications</b><span>Watering reminders.</span></div>
+        </div>
+      </section>
 
-  <section>
-    <h2>Flow 1 - diagnose a plant</h2>
-    <ol class="flow">
-      <li>App takes a photo and checks its size before sending. Anything over the server's limit is refused on the spot, with the size and the reason - a photo too big to accept used to be discovered only after the upload had already failed, and reported as a lost network connection.</li>
-      <li>App sends it to <code>POST /api/diagnose</code>.</li>
-      <li>Server calls <b>PlantNet</b> → gets the species.</li>
-      <li>Server calls <b>OpenAI</b> with the same photo + species → gets health, issues, care plan.</li>
-      <li>The user decides whether to keep it. Saving adds the plant to the portfolio and starts its watering schedule; where the record goes - this device, or the account - is flow 4.</li>
-    </ol>
-  </section>
+      <section class="panel" id="p-routes" hidden>
+        <h2>Routes</h2>
+        <p class="lede">Five endpoints plus the job poll. Only the nursery search is asynchronous.</p>
+        <div class="cards">
+          <div class="card"><b><code>POST /api/diagnose</code></b><span>Photo &rarr; species + health. Calls PlantNet, then OpenAI.</span></div>
+          <div class="card"><b><code>POST /api/nurseries</code></b><span>Returns a job id immediately. Reading a dozen shops is far longer than a request should be held open.</span></div>
+          <div class="card"><b><code>GET /api/nurseries/job/:id</code></b><span>Polled until the scrape finishes.</span></div>
+          <div class="card"><b><code>POST /api/care-plan</code></b><span>Genus &rarr; watering, feeding, repotting for every growing medium at once.</span></div>
+          <div class="card"><b><code>POST /api/translate-diagnosis</code></b><span>Diagnosis text into Hebrew.</span></div>
+          <div class="card"><b><code>GET /health</code></b><span>Cache state, provider last-success, per-site scrape faults.</span></div>
+        </div>
+      </section>
 
-  <section>
-    <h2>Flow 2 - find a nursery</h2>
-    <ol class="flow">
-      <li>App sends location + plant name to <code>POST /api/nurseries</code> → gets a job id back right away, because reading a dozen shops takes far longer than a request should be held open for.</li>
-      <li>Server calls <b>Google Places</b> → nearby nurseries with websites.</li>
-      <li>For each one, the server reads the shop's search page - <b>Tavily</b> when the page is usable as served, <b>Firecrawl</b> when it has to be rendered first - then <b>OpenAI</b> to pull out product + price.</li>
-      <li>App polls <code>GET /api/nurseries/job/:id</code> until it's done, then shows the results on a map.</li>
-    </ol>
-    <p>A shop whose page lists the plant and its price but never says whether it is in stock is shown as <em>listed, stock not stated</em> rather than dropped. Removing it would hide a nursery that does sell the plant, on the grounds that the page did not prove it - saying what the page actually supports keeps the shop and keeps us honest.</p>
+      <section class="panel" id="p-diagnose" hidden>
+        <h2>Diagnose a plant</h2>
+        <p class="lede">Two provider calls, one round trip.</p>
+        <ol class="steps">
+          <li><b>App checks photo size first.</b> <span>Over the limit is refused on the spot with the size and the reason - it used to surface only after the upload failed, reported as a lost connection.</span></li>
+          <li><b>POST <code>/api/diagnose</code></b> <span>- photo goes to the server.</span></li>
+          <li><b>PlantNet</b> <span>&rarr; species.</span></li>
+          <li><b>OpenAI</b> <span>&rarr; same photo plus the species, back comes health, issues, care.</span></li>
+          <li><b>User decides.</b> <span>Saving starts the watering schedule. Where the record lands is under Account &amp; data.</span></li>
+        </ol>
+      </section>
 
-    <p>Step 2 onwards is skipped entirely when <b>Supabase</b> already holds a recent scrape for that plant and location - the cache is shared across every user, so the second person to look for a monstera this week pays nothing and waits seconds instead of minutes.</p>
-  </section>
+      <section class="panel" id="p-nurseries" hidden>
+        <h2>Nursery search</h2>
+        <p class="lede">The expensive flow, and the only asynchronous one.</p>
+        <ol class="steps">
+          <li><b>POST <code>/api/nurseries</code></b> <span>- location plus plant name. A job id comes back at once.</span></li>
+          <li><b>Google Places</b> <span>&rarr; nearby nurseries that have websites.</span></li>
+          <li><b>Read each shop</b> <span>- Tavily when the page is usable as served, Firecrawl when it has to be rendered.</span></li>
+          <li><b>OpenAI</b> <span>&rarr; product and price pulled out of the page text.</span></li>
+          <li><b>Poll <code>/api/nurseries/job/:id</code></b> <span>- results land on a map.</span></li>
+        </ol>
+        <h3>Where a search goes</h3>
+        <div class="bars">
+          <div class="bar hot"><i style="width:38%"></i><span>Answered - product and price found</span><em>10 / 26</em></div>
+          <div class="bar"><i style="width:42%"></i><span>Read fine, does not stock the plant</span><em>11 / 26</em></div>
+          <div class="bar"><i style="width:15%"></i><span>Rejected - wrong plant on the page</span><em>4 / 26</em></div>
+          <div class="bar"><i style="width:4%"></i><span>Unreadable page</span><em>1 / 26</em></div>
+        </div>
+        <p class="asof">Measured 2026-09-13, Tel Aviv 10km, monstera and alocasia regal shield.</p>
+        <p class="note"><b>Cached across users.</b> Everything from step 2 on is skipped when Supabase already holds a recent scrape for that plant and place, so the second person looking for a monstera this week pays nothing and waits seconds.</p>
+        <p class="note"><b>Listed, stock not stated.</b> A page with the plant and a price but no stock line is shown that way rather than dropped. Dropping it would hide a shop that does sell the plant on the grounds the page did not prove it.</p>
+      </section>
 
-  <section>
-    <h2>Flow 3 - care advice for a plant you own</h2>
-    <ol class="flow">
-      <li>App sends the genus (and family, if it knows it) to <code>POST /api/care-plan</code>.</li>
-      <li>Server calls <b>OpenAI</b> once and gets back watering, feeding and repotting guidance <em>for every growing medium at once</em> - potting mix, LECA, semi-hydro, and the rest.</li>
-      <li>App caches that answer forever, keyed on the genus. Switching a plant from soil to LECA reschedules it instantly and offline, with no second call.</li>
-    </ol>
-    <p>Keyed on the genus rather than the plant, because two monsteras in the same pot mix want the same thing. In practice that makes this roughly one call per genus per install, not one per plant.</p>
-  </section>
+      <section class="panel" id="p-care" hidden>
+        <h2>Care plan</h2>
+        <p class="lede">One OpenAI call per genus per install - not one per plant.</p>
+        <ol class="steps">
+          <li><b>POST <code>/api/care-plan</code></b> <span>- genus, and family if known.</span></li>
+          <li><b>OpenAI, once</b> <span>&rarr; watering, feeding and repotting for every growing medium at once: potting mix, LECA, semi-hydro, the rest.</span></li>
+          <li><b>App caches it forever</b> <span>- keyed on genus. Moving a plant from soil to LECA reschedules instantly, offline, with no second call.</span></li>
+        </ol>
+        <p class="note">Keyed on genus because two monsteras in the same mix want the same thing.</p>
+      </section>
 
-  <section>
-    <h2>Flow 4 - the library follows the account</h2>
-    <p>Accounts are optional and there is no login wall. Logged out, every plant lives in on-device storage and nothing leaves the phone. Signing in changes where the same library is kept.</p>
-    <ol class="flow">
-      <li>App signs in through <b>Supabase Auth</b> directly - the Node server is not in this path and never holds the user's session.</li>
-      <li>If the device already has saved plants, the app offers to import them once. Declining leaves them exactly where they are.</li>
-      <li>From then on every save, watering, repot and edit writes to <b>Supabase</b> first and only then to the on-device copy, which becomes a mirror rather than the source of truth. A write that fails never lands locally either, so the phone can't show a plant the account doesn't have.</li>
-      <li>Photos go to a private <b>Storage</b> bucket under the user's own folder. The app asks for a fresh signed URL to display one - there is no permanent public link.</li>
-      <li>Signing out wipes the mirror. Deleting the account cascades the rows and clears the bucket.</li>
-    </ol>
-    <p>Row-level security is what makes the direct app-to-database path safe: every policy on <code>plants</code> and on the photo bucket checks the row against the caller's own user id, so the app can only ever read and write its own.</p>
-  </section>
+      <section class="panel" id="p-account" hidden>
+        <h2>Account &amp; data</h2>
+        <p class="lede">Accounts are optional. There is no login wall - signing in only changes where the same library is kept.</p>
+        <ol class="steps">
+          <li><b>Logged out</b> <span>- every plant lives on the device. Nothing leaves the phone.</span></li>
+          <li><b>Sign-in goes app &rarr; Supabase Auth directly.</b> <span>The Node server is not in this path and never holds the session.</span></li>
+          <li><b>Existing plants are offered as a one-time import.</b> <span>Declining leaves them where they are.</span></li>
+          <li><b>Writes go to Supabase first, the device second.</b> <span>A failed write never lands locally, so the phone cannot show a plant the account does not have.</span></li>
+          <li><b>Photos live in a private bucket</b> <span>under the user's own folder, displayed through short-lived signed URLs. No permanent public link.</span></li>
+          <li><b>Signing out wipes the mirror.</b> <span>Deleting the account cascades the rows and clears the bucket.</span></li>
+        </ol>
+        <p class="note">Row-level security is what makes the direct app-to-database path safe: every policy checks the row against the caller's own user id.</p>
+      </section>
 
-  <section>
-    <h2>How the scraper adapts to each site</h2>
-    <p>Every nursery's website is built on one of a handful of platforms, and each platform has its own search URL and its own markup. Rather than one scraper trying to parse every possible layout, the pipeline first figures out which platform a site is running, then uses the URL pattern that platform already supports.</p>
-    <ol class="flow">
-      <li><b>Fingerprint the homepage.</b> The scraped markdown/HTML is checked for tells: <code>cdn.shopify.com</code> or <code>/products/</code> means Shopify, <code>wp-content</code> or <code>/product-category/</code> means WooCommerce, <code>wixstatic.com</code> means Wix.</li>
-      <li><b>Reuse a known search pattern.</b> Each platform maps to a search-URL template - Shopify is <code>/search?q=</code>, WooCommerce is <code>/?s=&amp;post_type=product</code>, Wix is <code>/search?q=</code>. Recognizing the platform means the scraper already knows the right URL to hit, no guessing per site.</li>
-      <li><b>Retry with the rendered page.</b> Some storefronts build their markup client-side, so a static fetch shows nothing recognizable. If the first pass comes back <code>unknown</code>, the scraper re-fetches with JS rendering turned on.</li>
-      <li><b>Ask OpenAI as a last resort.</b> If the platform is still unrecognized, the page's scripts/CDN hints are handed to OpenAI to classify and to guess a search URL. That answer is saved to disk, so the same unfamiliar platform is never paid to classify twice.</li>
-    </ol>
-    <p>Knowing the platform also decides <em>who reads the page</em>. Shopify and WooCommerce send a finished page, so Tavily fetches it as-is in well under a second. A storefront that builds itself in the browser has to be rendered, and only Firecrawl does that - so it leads there, with Tavily as the rescue if it fails.</p>
-    <p>That split is most of a recent speed win: a search went from 81s to 36.5s, and healthy shops from 26-41s each to about a second. The cause was never how many sites were read at once - it was that the renderer allows ten requests a minute, and a refused read looks exactly like an unrecognized platform, which is the path that spends three more requests on the same shop. The limit was feeding itself.</p>
-  </section>
+      <section class="panel" id="p-pipeline" hidden>
+        <h2>Scraping</h2>
+        <p class="lede">Every nursery site runs one of a handful of platforms. Identify the platform and the right search URL is already known - no per-site parser.</p>
+        <ol class="steps">
+          <li><b>Fingerprint the homepage.</b> <span><code>cdn.shopify.com</code> or <code>/products/</code> &rarr; Shopify. <code>wp-content</code> &rarr; WooCommerce. <code>wixstatic.com</code> &rarr; Wix.</span></li>
+          <li><b>Reuse that platform's search URL.</b> <span>Shopify <code>/search?q=</code>, WooCommerce <code>/?s=&amp;post_type=product</code>, Wix <code>/search?q=</code>.</span></li>
+          <li><b>Still unknown? Re-fetch rendered.</b> <span>Some storefronts build their markup client-side and show nothing to a static fetch.</span></li>
+          <li><b>Still unknown? Ask OpenAI.</b> <span>Scripts and CDN hints go to the model to classify and guess a search URL. The answer is written to disk, so an unfamiliar platform is never paid for twice.</span></li>
+        </ol>
+        <h3>Who reads the page</h3>
+        <div class="cards">
+          <div class="card"><b>Shopify, WooCommerce &rarr; Tavily</b><span>Page arrives finished. Well under a second.</span></div>
+          <div class="card"><b>Client-rendered &rarr; Firecrawl</b><span>Only Firecrawl renders. Tavily is the rescue if it fails.</span></div>
+        </div>
+        <p class="note"><b>81s &rarr; 36.5s.</b> Healthy shops went from 26-41s each to about a second. The cause was never concurrency - Firecrawl allows ten requests a minute, and a refused read looks exactly like an unrecognized platform, which is the path that spends three more requests on the same shop. The limit was feeding itself.</p>
+      </section>
 
-  <section>
-    <h2>How we know it is working</h2>
-    <p><code>GET /health</code> answers the questions that are otherwise invisible until they show up on a bill or in a bad review. Two of them cost money to get wrong:</p>
-    <ol class="flow">
-      <li><b>Is the shared scrape cache actually on?</b> Without its Supabase credentials the cache quietly answers "miss" forever. Nothing breaks, no error is logged, and every single search becomes a live paid scrape. <code>cache.enabled</code> says so directly rather than leaving it to be inferred from the bill.</li>
-      <li><b>Has a nursery stopped parsing?</b> A shop whose markup changed returns nothing forever while the search as a whole still succeeds - the results are simply quietly shorter. Each site's read is tracked, and a site we have failed to <em>read</em> several times running is flagged. A shop that we read fine and that merely does not stock the plant is not a fault and is never flagged.</li>
-      <li><b>Which providers are answering?</b> <code>lastSuccess</code> carries the last good call to each of PlantNet, the health assessment, and the nursery scrape, so an outage is visible without waiting for a user to hit it.</li>
-    </ol>
-    <p>The summary is public. The per-site detail and the recent-failure ring need the shared secret - an unauthenticated endpoint should not enumerate which shops we scrape or which of them are currently down.</p>
-  </section>
+      <section class="panel" id="p-health" hidden>
+        <h2>Health</h2>
+        <p class="lede"><code>GET /health</code> answers what is otherwise invisible until it shows up on a bill or in a bad review.</p>
+        <div class="cards">
+          <div class="card"><b>Is the shared cache on?</b><span>Without its Supabase credentials the cache answers "miss" forever. Nothing breaks, nothing is logged, and every search becomes a live paid scrape. <code>cache.enabled</code> says so outright.</span></div>
+          <div class="card"><b>Has a shop stopped parsing?</b><span>Changed markup returns nothing forever while the search still "succeeds" - results are just quietly shorter. A site failed several times running is flagged. A shop read fine that merely lacks the plant is not a fault.</span></div>
+          <div class="card"><b>Which providers answer?</b><span><code>lastSuccess</code> per provider, so an outage is visible before a user hits it.</span></div>
+        </div>
+        <p class="note">The summary is public. Per-site detail and the recent-failure ring need the shared secret - an open endpoint should not enumerate which shops we scrape or which are down.</p>
+      </section>
 
-  <footer>Update this page whenever a provider, route, or flow changes.</footer>
+    </main>
+  </div>
 </div>
+
+<script>
+(function(){
+  var panels = document.querySelectorAll('.panel');
+  var navs = document.querySelectorAll('.nav');
+  var tabs = document.querySelectorAll('.tab');
+
+  function go(id){
+    panels.forEach(function(p){ p.hidden = (p.id !== 'p-' + id); });
+    navs.forEach(function(n){ n.setAttribute('aria-current', String(n.dataset.go === id)); });
+    tabs.forEach(function(t){ t.setAttribute('aria-selected', String(t.dataset.go === id)); });
+    if (location.hash.slice(1) !== id) history.replaceState(null, '', '#' + id);
+  }
+
+  [].concat([].slice.call(navs), [].slice.call(tabs)).forEach(function(b){
+    b.addEventListener('click', function(){ go(b.dataset.go); });
+  });
+
+  var start = location.hash.slice(1);
+  go(document.getElementById('p-' + start) ? start : 'overview');
+})();
+</script>
 </body>
 </html>
