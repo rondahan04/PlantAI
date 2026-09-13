@@ -9,7 +9,7 @@ import { type DiscoveredNursery } from './places.ts';
 import type { StructuredProduct } from './structuredPrice.ts';
 import type { QueryPlan } from './queryPlan.ts';
 
-import { readable, type SiteStage } from '../server/scrapeHealth.ts';
+import { type SiteStage } from '../server/scrapeHealth.ts';
 
 export interface NurseryResult {
   id: string;
@@ -376,8 +376,35 @@ async function scrapeOne(
      * second is the one that stays broken until someone notices.
      */
     const stage = funnel?.stage ?? 'no_markdown';
-    const refusedSearch = searchStatus === 404 || searchStatus === 410;
-    noteSite(host, refusedSearch && !readable(stage) ? 'no_search' : stage);
+    /*
+     * Two ways to learn the shop never answered our question, and the second
+     * one is the only one most shops give us.
+     *
+     * `searchStatus` comes from the DIRECT read, which many shops refuse - and
+     * a shop that refuses us is exactly the kind whose search URL we had to
+     * guess. yahalomr.co.il is the case: platform unknown, so the URL is a
+     * guess, /search?q= is an IIS 404, and the direct read returns nothing, so
+     * the status test alone can never fire on it. The provider still hands back
+     * the 404 page, which parses like any other page and lands as `no_match` or
+     * `no_excerpt` depending on whether that particular 404 has headings.
+     *
+     * `answered === false` is the signal that survives all of it, and the
+     * outcome path below already trusts it for exactly this (see readCatalogue).
+     * Health has to trust it too, or the two disagree about whether we read a
+     * shop - and it is health that has to be right, because `no_match` counts
+     * as a SUCCESSFUL read and a shop stuck on 404 would report as one.
+     */
+    const refusedSearch = searchStatus === 404 || searchStatus === 410 || answered === false;
+    /*
+     * No `!readable(stage)` guard. That guard is what hid this: a 404 page is
+     * still a page, so it parses into `no_match` (or `rejected`) about as often
+     * as into nothing - and those two stages are precisely the ones readable()
+     * counts as a successful read. The guard therefore let through exactly the
+     * cases it most needed to catch, and only renamed the ones already counted
+     * as failures. If the shop did not answer the query, we did not read its
+     * catalogue, whatever the page we got back happened to parse into.
+     */
+    noteSite(host, refusedSearch ? 'no_search' : stage);
     if (plants.length > 0) {
       const best = cheapestMatch(plants);
       /*

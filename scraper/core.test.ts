@@ -70,6 +70,69 @@ test('detectPlatform: Wix markers', () => {
   assert.equal(detectPlatform('<div class="_wix-root">'), 'wix');
 });
 
+/*
+ * VirtueMart, measured on mashtela-urbanit.co.il 2026-09-13.
+ *
+ * It has to beat the Woo test, and that is the whole point of the ordering: a
+ * Joomla template serves /components/... and /images/..., and VirtueMart's own
+ * product URLs are `/component/virtuemart/`, so the generic `/product/` and
+ * `wp-content` markers had been matching it as WooCommerce. Remembered as Woo,
+ * every search went to `?s=`, which this shop answers with its homepage - a
+ * page full of products and prices, so the extractor read a "catalogue", found
+ * no match, and the shop was reported as not stocking plants it sells.
+ */
+test('detectPlatform: VirtueMart markers', () => {
+  assert.equal(detectPlatform('<a href="/index.php?option=com_virtuemart&view=category">'), 'virtuemart');
+  assert.equal(detectPlatform('https://x.co.il/component/virtuemart/?search=true'), 'virtuemart');
+  assert.equal(detectPlatform('<link href="/components/com_virtuemart/assets/css/vmsite.css">'), 'virtuemart');
+  assert.equal(detectPlatform('<div class="virtuemart_category_id">'), 'virtuemart');
+});
+
+test('detectPlatform: VirtueMart wins over the Woo markers a Joomla page also carries', () => {
+  const html =
+    '<a href="/index.php?option=com_virtuemart&view=category&virtuemart_category_id=3">' +
+    '<a href="https://x.co.il/product/monstera/">';
+  assert.equal(detectPlatform(html), 'virtuemart');
+});
+
+test('normalizePlatform: Joomla names fold onto virtuemart', () => {
+  assert.equal(normalizePlatform('Joomla'), 'virtuemart');
+  assert.equal(normalizePlatform('joomla/virtuemart'), 'virtuemart');
+  assert.equal(normalizePlatform('VirtueMart'), 'virtuemart');
+  assert.equal(normalizePlatform('com_virtuemart'), 'virtuemart');
+});
+
+/*
+ * Not one template, a short ordered probe - because VirtueMart's OWN keyword
+ * search is the one that does not work here. Measured against the live shop,
+ * same query vs a control term nobody stocks:
+ *
+ *   /component/search/?searchword=     27771 vs 25401 chars - it FILTERS
+ *   /component/virtuemart/?keyword=    41616 vs 41654 - identical, ignored
+ *   /index.php?option=com_virtuemart&  28868 vs 28853 - identical, ignored
+ *   /component/finder/?q=              27088 vs 27128 - identical, ignored
+ *
+ * So Joomla's core search goes first. The VirtueMart shapes stay behind it
+ * because com_search is removable and a shop that has dropped it needs
+ * somewhere to fall to - and a probe that returns the homepage is rejected by
+ * answeredQuery before it can be remembered as a template.
+ */
+test('searchUrlsFor: VirtueMart probes Joomla core search first', () => {
+  const urls = searchUrlsFor('https://x.co.il', 'mint', 'virtuemart');
+  assert.equal(urls[0], 'https://x.co.il/component/search/?searchword=mint');
+  assert.ok(urls.length > 1, 'com_search is removable, so there must be a fallback');
+  assert.ok(
+    urls.some((u) => u.includes('virtuemart') && u.includes('keyword=')),
+    "VirtueMart's own keyword search must remain as a fallback"
+  );
+});
+
+/* Joomla renders on the server, so a render wait is pure latency. */
+test('searchWaitFor: VirtueMart is server-rendered', () => {
+  assert.equal(searchWaitFor('virtuemart'), 0);
+  assert.equal(searchWaitFor('joomla'), 0);
+});
+
 test('detectPlatform: unknown / custom', () => {
   assert.equal(detectPlatform('# Welcome\nSome custom HTML with no platform markers'), 'unknown');
   assert.equal(detectPlatform(''), 'unknown');
@@ -129,6 +192,80 @@ test('identifyPlatform L3: endpoint fallback - Shopify /products.json', async ()
 test('identifyPlatform L3: endpoint fallback - WordPress /wp-json/', async () => {
   const scrape = fakeScrape({ '/wp-json/': '{"namespace":"wp/v2","routes":{}}' });
   assert.equal(await identifyPlatform('https://x.co.il', 'k', { scrape }), 'woo');
+});
+
+/*
+ * L1 reads the page twice, and the free read is the one that can see this.
+ *
+ * Markdown is a lossy view of a page, and what it discards - href targets, CSS
+ * and JS asset paths - is precisely where a platform names itself. Rendered to
+ * markdown, mashtela-urbanit.co.il carries no VirtueMart marker at all and
+ * detects as `woo` (measured 2026-09-13: 8112 chars, zero `com_virtuemart`
+ * hits), while its raw HTML says VirtueMart plainly. Identifying it as Woo sent
+ * every search to `?s=`, which it answers with its homepage.
+ */
+/*
+ * Learning a search URL must not forget WHICH platform we learned it for.
+ *
+ * `rememberTemplate` hardcoded `platform: 'unknown'`, which was true while only
+ * unknown sites ever probed. VirtueMart probes a short Joomla list by design,
+ * so a correctly identified shop wrote itself back to disk as `unknown` and
+ * re-paid identification on the next cold start - and worse, lost the platform
+ * that decides its render wait and its API route.
+ */
+test('a template learned for a known platform keeps that platform', async () => {
+  const hostsFile = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'plantai-hosts-')),
+    'known-hosts.json'
+  );
+  const searcher = createSearcher('k', {
+    hostsFile,
+    /* Joomla in the raw HTML, so L1 names it VirtueMart and the caller then
+     * probes the three Joomla search shapes. */
+    fetchHtml: async () => '<a href="/index.php?option=com_virtuemart&view=category">',
+    /* The second probe is the one that looks like a results page. */
+    scrape: async (url: string) =>
+      url.includes('searchword=')
+        ? ''
+        : url.includes('finder')
+          ? '# mint\n[mint](https://x.co.il/p/1) ₪25\n'.repeat(30)
+          : '',
+  });
+  await searcher.fetchSearchMarkdown('https://x.co.il', 'mint', 'x.co.il');
+
+  const saved = JSON.parse(fs.readFileSync(hostsFile, 'utf8'));
+  assert.equal(saved['x.co.il'].platform, 'virtuemart', 'the platform must survive learning a template');
+  assert.ok(saved['x.co.il'].template, 'and the template must still be recorded');
+});
+
+test('identifyPlatform L1: raw HTML names a platform the markdown hides', async () => {
+  const platform = await identifyPlatform('https://x.co.il', 'k', {
+    /* What Tavily/Firecrawl actually hand back for this shop: Joomla template
+     * prose plus a bare /product/ link, which reads as WooCommerce. */
+    scrape: async () => 'Welcome\n[a plant](https://x.co.il/product/monstera/)',
+    fetchHtml: async () =>
+      '<link href="/components/com_virtuemart/assets/css/vmsite.css">' +
+      '<a href="/index.php?option=com_virtuemart&view=category">',
+  });
+  assert.equal(platform, 'virtuemart');
+});
+
+test('identifyPlatform L1: markdown still decides when the raw read says nothing', async () => {
+  const platform = await identifyPlatform('https://x.co.il', 'k', {
+    scrape: async () => '[a plant](https://x.co.il/product/monstera/)',
+    fetchHtml: async () => '', // bot wall, or a shop that refuses us
+  });
+  assert.equal(platform, 'woo');
+});
+
+test('identifyPlatform L1: a raw read that throws cannot break identification', async () => {
+  const platform = await identifyPlatform('https://x.co.il', 'k', {
+    scrape: async () => '[a plant](https://x.co.il/product/monstera/)',
+    fetchHtml: async () => {
+      throw new Error('ECONNRESET');
+    },
+  });
+  assert.equal(platform, 'woo');
 });
 
 test('identifyPlatform: truly unknown stays unknown (caller will probe)', async () => {

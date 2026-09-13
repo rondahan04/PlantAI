@@ -42,7 +42,7 @@ import {
   type QueryPlan,
 } from './queryPlan.ts';
 
-export type Platform = 'shopify' | 'woo' | 'wix' | 'unknown';
+export type Platform = 'shopify' | 'woo' | 'wix' | 'virtuemart' | 'unknown';
 
 /*
  * Canonical host key: lowercase, no leading www. Lives here rather than in
@@ -666,6 +666,20 @@ export function detectPlatform(content: string | null): Platform {
     )
   )
     return 'shopify';
+  /*
+   * VirtueMart BEFORE Woo, and that ordering is the fix rather than a detail.
+   * A Joomla page carries `/component/...` paths and often a plain `/product/`
+   * link, so the Woo markers below match it, and mashtela-urbanit.co.il was
+   * remembered as WooCommerce for exactly that reason - which sent every search
+   * to `?s=`, a URL this shop answers with its homepage. A homepage is wall to
+   * wall products and prices, so nothing downstream could tell that no search
+   * had happened: the extractor read a "catalogue", matched nothing, and the
+   * shop was reported as not stocking plants it visibly sells.
+   */
+  if (
+    /com_virtuemart|virtuemart_category_id|\/component\/virtuemart|\/components\/com_virtuemart/.test(s)
+  )
+    return 'virtuemart';
   if (
     /wp-content|wp-json|woocommerce|wc-block|add-to-cart=|\/product-category\/|\/product\//.test(s)
   )
@@ -694,6 +708,12 @@ const PLATFORM_ALIASES: Record<string, string> = {
   wordpress: 'woo',
   'wordpress/woocommerce': 'woo',
   wixstores: 'wix',
+  /* Joomla is the CMS and VirtueMart the shop bolted onto it. The LLM
+   * classifier names either one, and for our purposes - which search URLs to
+   * try - they are the same answer. */
+  joomla: 'virtuemart',
+  'joomla/virtuemart': 'virtuemart',
+  com_virtuemart: 'virtuemart',
 };
 
 let learnedTemplates: Record<string, string> = {};
@@ -834,6 +854,12 @@ export interface IdentifyOpts {
    * when every layer came back empty.
    */
   onHomeMarkdown?: (markdown: string) => void;
+  /*
+   * The homepage AS SERVED, for L1's second opinion. Injectable so the layer is
+   * testable without network; defaults to the same free raw GET the searcher
+   * already uses.
+   */
+  fetchHtml?: (url: string) => Promise<string>;
 }
 
 export async function identifyPlatform(
@@ -841,12 +867,35 @@ export async function identifyPlatform(
   firecrawlKey: string,
   opts: IdentifyOpts = {}
 ): Promise<string> {
-  const { scrape = scrapeUrl, tavilyKey, openaiKey, learnedFile, classify, onHomeMarkdown } = opts;
+  const { scrape = scrapeUrl, tavilyKey, openaiKey, learnedFile, classify, onHomeMarkdown, fetchHtml } =
+    opts;
 
-  // L1 - fast static homepage. Resolves the common case for one scrape, so it
-  // stays alone in its own stage and costs exactly what it always did.
-  const home0 = await safeScrape(scrape, origin, firecrawlKey, 0, tavilyKey);
+  /*
+   * L1 - fast static homepage, read TWO ways at once.
+   *
+   * Markdown is a lossy view of a page and it throws away exactly where a
+   * platform names itself: href targets, and the CSS/JS asset paths under
+   * /components/ or /wp-content/. mashtela-urbanit.co.il is the case that
+   * forced this - as markdown it carries no VirtueMart marker at all and
+   * detects as `woo`, which sent every search to `?s=`, a URL it answers with
+   * its homepage. Its raw HTML says VirtueMart in the first kilobyte.
+   *
+   * The raw read is a plain GET: no credit, no Firecrawl slot, and fired
+   * alongside the scrape rather than after it, so it adds no wall-clock to a
+   * layer every site pays. When it names a platform it WINS, because a marker
+   * present in the source and absent from the markdown is evidence the markdown
+   * destroyed, not evidence against.
+   */
+  const readRaw = fetchHtml ?? (async (u: string) => (await fetchRawHtmlWithSchemeFallback(u)).html);
+  const [home0, rawHome] = await Promise.all([
+    safeScrape(scrape, origin, firecrawlKey, 0, tavilyKey),
+    /* Best-effort like every other layer: a shop that refuses a bare GET must
+     * cost us nothing but the second opinion. */
+    readRaw(origin).catch(() => ''),
+  ]);
   if (home0 && onHomeMarkdown) onHomeMarkdown(home0);
+  const fromRaw = detectPlatform(rawHome);
+  if (fromRaw !== 'unknown') return fromRaw;
   let p: string = detectPlatform(home0);
   if (p !== 'unknown') return p;
 
@@ -928,7 +977,16 @@ async function safeScrape(
  * with nothing that looks like results.
  */
 export const RENDER_WAIT_MS = 3500;
-const SERVER_RENDERED = new Set(['shopify', 'woo', 'magento', 'bigcommerce', 'prestashop', 'opencart']);
+const SERVER_RENDERED = new Set([
+  'shopify',
+  'woo',
+  'magento',
+  'bigcommerce',
+  'prestashop',
+  'opencart',
+  /* Joomla builds the page server-side; a render wait buys nothing but delay. */
+  'virtuemart',
+]);
 export function searchWaitFor(platform: string): number {
   return SERVER_RENDERED.has(normalizePlatform(platform)) ? 0 : RENDER_WAIT_MS;
 }
@@ -949,16 +1007,45 @@ export function searchUrlsFor(origin: string, query: string, platform: string): 
   const tpl = templateFor(platform);
   if (tpl) return [applyTemplate(tpl, origin, query)];
   const q = encodeURIComponent(query);
+
+  /*
+   * VirtueMart gets a SHORT PROBE, not a single template, because the search
+   * that works on it is not its own.
+   *
+   * Measured against mashtela-urbanit.co.il 2026-09-13, each URL asked for a
+   * real plant and then for a control term nobody stocks. A page that filters
+   * changes size between the two; a page that ignores the keyword does not:
+   *
+   *   /component/search/?searchword=    27771 vs 25401 chars - it FILTERS
+   *   /component/virtuemart/?keyword=   41616 vs 41654 - ignored
+   *   /index.php?option=com_virtuemart  28868 vs 28853 - ignored
+   *   /component/finder/?q=             27088 vs 27128 - ignored
+   *
+   * So Joomla's core search leads. VirtueMart's own keyword search stays as the
+   * fallback rather than being dropped: com_search is a removable component and
+   * a Joomla 4 shop may have only com_finder, so a single URL here would trade
+   * this shop's silence for another's. Probing costs nothing extra when the
+   * first candidate lands, and a probe that merely returns the homepage is
+   * thrown out by answeredQuery before it can be learned as a template.
+   */
+  if (normalizePlatform(platform) === 'virtuemart') {
+    return [
+      `${origin}/component/search/?searchword=${q}`,
+      `${origin}/component/finder/?q=${q}`,
+      `${origin}/component/virtuemart/?search=true&keyword=${q}`,
+    ];
+  }
+
   return [
     `${origin}/?s=${q}&post_type=product`,
     `${origin}/search?q=${q}`,
     `${origin}/?s=${q}`,
     /*
-     * Joomla/VirtueMart, which is not a rounding error among Israeli nurseries:
-     * mashtela-urbanit.co.il runs it, was remembered as WooCommerce, and every
-     * `?s=` search returned its homepage - which has product markup, so the
-     * extractor dutifully found products, none matched, and the shop was
-     * reported as not stocking plants it sells.
+     * Joomla/VirtueMart, kept here for a shop whose markers we did not catch.
+     * detectPlatform now names these directly and searchUrlsFor gives them
+     * their own Joomla probe above, so this is the safety net rather than the
+     * path - but a site can serve a homepage with no VirtueMart marker on it,
+     * and this line is what still finds its shop.
      */
     `${origin}/component/virtuemart/?search=true&keyword=${q}`,
   ];
@@ -2391,14 +2478,30 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
     saveHostPlatforms(opts.hostsFile, persisted);
   }
 
-  function rememberTemplate(host: string, picked: string, origin: string, query: string): void {
+  /*
+   * `platform` is not decoration. This wrote `platform: 'unknown'` flat, which
+   * was harmless while only unidentified sites ever probed - and stopped being
+   * harmless the moment VirtueMart got a short Joomla probe of its own. A
+   * correctly identified shop learned its search URL and wrote itself back to
+   * disk as unknown, throwing away the fact that decides its render wait
+   * (searchWaitFor) and its API route, and re-paying identification on the next
+   * cold start. Learning WHERE to search a shop is not unlearning WHAT it is.
+   */
+  function rememberTemplate(
+    host: string,
+    picked: string,
+    origin: string,
+    query: string,
+    platform = 'unknown'
+  ): void {
     const template = picked
       .replace(encodeURIComponent(query), '{query}')
       .replace(origin, '{origin}');
     if (!template.includes('{query}')) return;
     hostTemplates.set(host, template);
+    if (platform !== 'unknown') platformCache.set(host, platform);
     if (!opts.hostsFile) return;
-    persisted[host] = { platform: 'unknown', at: now(), template };
+    persisted[host] = { platform, at: now(), template };
     saveHostPlatforms(opts.hostsFile, persisted);
   }
 
@@ -2430,6 +2533,9 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
       openaiKey: opts.openaiKey,
       learnedFile: opts.learnedFile,
       onHomeMarkdown: (md) => homeCache.set(host, md),
+      /* The searcher's own raw reader, so a caller that injected `fetchHtml`
+       * keeps a hermetic identification instead of L1 reaching the network. */
+      fetchHtml: readHtml,
     });
     rememberHost(host, platform);
     return platform;
@@ -2889,7 +2995,7 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
       const score = scoreMarkdown(md, query);
       if (score > best.score) best = { md, platform, picked: u, score };
       if (score >= PROBE_CONFIDENT_SCORE) {
-        rememberTemplate(host, u, origin, query);
+        rememberTemplate(host, u, origin, query, platform);
         break;
       }
     }

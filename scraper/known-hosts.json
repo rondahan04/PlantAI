@@ -11,17 +11,15 @@
     "platform": "shopify",
     "at": 1788359077407
   },
-  "mashtela-urbanit.co.il": {
-    "platform": "woo",
-    "at": 1788359077410
-  },
   "lpflowers.co.il": {
     "platform": "woo",
-    "at": 1788359077559
+    "at": 1789290819570
   },
   "dizi-garden.co.il": {
     "platform": "woo",
-    "at": 1788359077826
+    "at": 1788359077826,
+    "api": "none",
+    "apiAt": 1789289542372
   },
   "al-haderech.co.il": {
     "platform": "woo",
@@ -68,5 +66,27 @@
   "plantit.co.il": {
     "platform": "woo",
     "at": 1788874175862
+  },
+  "gordonflowers.co.il": {
+    "platform": "woo",
+    "at": 1789289539497
+  },
+  "pasiflora-plants.co.il": {
+    "platform": "woo",
+    "at": 1789289544637
+  },
+  "balconi.co.il": {
+    "platform": "woo",
+    "at": 1789289547466
+  },
+  "yahalomr.co.il": {
+    "platform": "unknown",
+    "at": 1789289550993,
+    "api": "none",
+    "apiAt": 1789289550993
+  },
+  "mashtela-urbanit.co.il": {
+    "platform": "virtuemart",
+    "at": 1789290934861
   }
 }

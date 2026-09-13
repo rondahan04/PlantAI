@@ -60,7 +60,8 @@
     "price:capture": "npx tsx scripts/capture-price-fixtures.ts",
     "price:label": "npx tsx scripts/label-price-fixtures.ts",
     "nurseries:scrape": "npx tsx scripts/scrape-nurseries.ts",
-    "dashboard": "node dashboard/server.ts"
+    "dashboard": "node dashboard/server.ts",
+    "funnel:tally": "npx tsx scripts/funnel-tally.ts"
   },
   "jest": {
     "preset": "jest-expo",
