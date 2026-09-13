@@ -139,6 +139,14 @@ interface Observation {
   stage: SiteStage;
 }
 
+/*
+ * Per-host funnel detail, which the onSiteRead observer cannot carry - it is
+ * handed a stage and nothing else. `prices` is the one that decides whether a
+ * `no_match` may be reported to the user as "not stocked" (see
+ * PRICED_CATALOGUE_MIN), so a run has to be able to show it.
+ */
+const funnels = new Map<string, { prices: number; mdChars: number; excerptChars: number }>();
+
 const observations: Observation[] = [];
 
 /*
@@ -162,7 +170,15 @@ const deps: PipelineDeps = {
   discover: (lat, lng, radiusM) =>
     discoverNurseries(lat, lng, GOOGLE_KEY!, { radiusM, richFields: true }),
   search: (website, query, host) => searcher.fetchSearchMarkdown(website, query, host),
-  extract: (o) => extractAndVerifyPlants({ ...o, openaiKey: OPENAI_KEY }),
+  extract: async (o) => {
+    const r = await extractAndVerifyPlants({ ...o, openaiKey: OPENAI_KEY });
+    funnels.set(`${currentPlant}|${o.site}`, {
+      prices: r.funnel.prices,
+      mdChars: r.funnel.mdChars,
+      excerptChars: r.funnel.excerptChars,
+    });
+    return r;
+  },
   plan: (plantName) => planQuery(plantName, OPENAI_KEY!),
   checkPrices: (query, candidates) => sanityCheckPrices(query, candidates, OPENAI_KEY!),
   scrapeHome: async (origin) =>
@@ -270,6 +286,27 @@ function report(): void {
     for (const h of broken) {
       const stages = h.obs.map((o) => `${o.plant.split(' ')[0]}=${o.stage}`).join(' ');
       console.log(`${pad(h.host, 30)} ${pad(`${h.unreadable}/${h.obs.length}`, 8)} ${stages}`);
+    }
+  }
+
+  /*
+   * The evidence behind every "not stocked" the user will be shown. A no_match
+   * under PRICED_CATALOGUE_MIN is a page that priced nothing, which cannot
+   * support the claim - printing it is how the threshold stays honest.
+   */
+  const claims = observations
+    .filter((o) => o.stage === 'no_match' || o.stage === 'rejected')
+    .map((o) => ({ ...o, f: funnels.get(`${o.plant}|${o.host}`) }));
+  if (claims.length) {
+    console.log('');
+    console.log('"NOT STOCKED" CLAIMS - prices found on the page we read');
+    console.log('-'.repeat(72));
+    console.log(`${pad('host', 30)} ${pad('plant', 12)} ${pad('stage', 10)} ${pad('prices', 7)} md`);
+    for (const c of claims.sort((a, b) => (a.f?.prices ?? 0) - (b.f?.prices ?? 0))) {
+      console.log(
+        `${pad(c.host, 30)} ${pad(c.plant.split(' ')[0], 12)} ${pad(c.stage, 10)} ` +
+          `${pad(String(c.f?.prices ?? '-'), 7)} ${c.f?.mdChars ?? '-'}`
+      );
     }
   }
 

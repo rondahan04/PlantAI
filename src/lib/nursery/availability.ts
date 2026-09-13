@@ -101,6 +101,39 @@ export function isWorthShowing(n: Pick<Nursery, 'outcome'>): boolean {
   return n.outcome !== 'not_sold';
 }
 
+/*
+ * Will this card actually show a price?
+ *
+ * Deliberately not `hasPlant`. A `priceSuspect` listing is one the final
+ * cross-nursery check refused to believe, so the card renders "See price"
+ * instead of the number - while `hasPlant` stays true. Ordering by `hasPlant`
+ * therefore floated a shop with no visible price up among the priced ones.
+ * The user is scanning for numbers; sort by the thing they can see.
+ */
+export function showsPrice(
+  n: Pick<Nursery, 'hasPlant' | 'plantPrice' | 'priceSuspect'>
+): boolean {
+  return Boolean(n.hasPlant && !n.priceSuspect && n.plantPrice && n.plantPrice !== '-');
+}
+
+/*
+ * Pick Up order: the shops that answered the question, nearest first, then
+ * everything else nearest first.
+ *
+ * Distance stays the tie-break rather than price. This is the tab for driving
+ * somewhere, and the cheapest shop across town is not the better result - the
+ * Deliver tab is where price is the whole comparison.
+ */
+export function byPickupOrder(
+  a: Pick<Nursery, 'hasPlant' | 'plantPrice' | 'priceSuspect' | 'distanceKm'>,
+  b: Pick<Nursery, 'hasPlant' | 'plantPrice' | 'priceSuspect' | 'distanceKm'>
+): number {
+  const pa = showsPrice(a);
+  const pb = showsPrice(b);
+  if (pa !== pb) return pa ? -1 : 1;
+  return a.distanceKm - b.distanceKm;
+}
+
 export function availabilityBadge(
   n: AvailabilityInput,
   words: AvailabilityCopy = EN_AVAILABILITY_COPY

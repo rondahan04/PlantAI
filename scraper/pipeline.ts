@@ -119,6 +119,16 @@ export interface SearchInput {
  */
 const SITE_BUDGET_MS = Number(env('NURSERY_SITE_BUDGET_MS')) || 45_000;
 
+/*
+ * How many prices a page must state before we will call it a catalogue.
+ *
+ * Not 1. Nearly every Israeli shop carries a free-delivery threshold in its
+ * header ("משלוחים חינם בקנייה מעל 350 ₪"), so one price is what a page with no
+ * catalogue on it looks like - that single banner is the entire price count on
+ * mashtela-urbanit's search results. A real grid prices every card it shows.
+ */
+const PRICED_CATALOGUE_MIN = 3;
+
 export interface PipelineDeps {
   /* Override the per-site ceiling; tests set it small. */
   siteBudgetMs?: number;
@@ -459,8 +469,26 @@ async function scrapeOne(
      * confident wrong answer about a shop that may well have the plant on the
      * shelf, and it is what mashtela-urbanit and yifrach were getting.
      */
+    /*
+     * And the page has to have PRICED something.
+     *
+     * A results page listing product names with no prices cannot support "not
+     * stocked": the extractor drops every row for want of a price, so the
+     * funnel closes at `no_match` whether or not the plant is on the shelf.
+     * mashtela-urbanit.co.il answers its search correctly and prices nothing on
+     * that page, and was hidden from the user (see isWorthShowing) under the
+     * assertion that it had been searched and did not list monstera. It sells
+     * monstera.
+     *
+     * `catalogueRead` is the priced evidence on the structured path, where
+     * there is no page to count: those rows come from the shop's own JSON and
+     * carry prices by definition.
+     */
+    const pricedCatalogue = catalogueRead === true || (funnel?.prices ?? 0) >= PRICED_CATALOGUE_MIN;
     const readCatalogue =
-      (funnel?.stage === 'no_match' || funnel?.stage === 'rejected') && answered !== false;
+      (funnel?.stage === 'no_match' || funnel?.stage === 'rejected') &&
+      answered !== false &&
+      pricedCatalogue;
     /*
      * A nursery with no shop on its website. Not a failure to read - we read it
      * fine, and it sells nothing online. "We could not check" invites the user
@@ -479,6 +507,19 @@ async function scrapeOne(
       };
     }
 
+    /*
+     * We reached this shop's search and it answered - we simply could not read
+     * a price on what came back. Saying "we could not read this shop" would be
+     * the wrong sentence for a user standing 1.4km away: the shop is fine, the
+     * listing is real, and the number is the only thing missing. Same `kind`,
+     * so the badge and every client that switches on it are unchanged; only the
+     * detail behind the tap gets the truer sentence.
+     */
+    const searchedButUnpriced =
+      (funnel?.stage === 'no_match' || funnel?.stage === 'rejected') &&
+      answered !== false &&
+      !pricedCatalogue;
+
     return {
       ...base,
       outcome: readCatalogue ? 'not_sold' : 'not_found',
@@ -486,7 +527,9 @@ async function scrapeOne(
         kind: readCatalogue ? 'estimate' : 'unreadable',
         detail: readCatalogue
           ? 'The shop was searched and this plant was not listed.'
-          : 'We could not read this shop, so we do not know what it stocks.',
+          : searchedButUnpriced
+            ? 'We searched this shop but could not read its prices, so we do not know what it stocks.'
+            : 'We could not read this shop, so we do not know what it stocks.',
       },
     };
   } catch (err: any) {

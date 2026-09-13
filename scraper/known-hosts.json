@@ -87,6 +87,7 @@
   },
   "mashtela-urbanit.co.il": {
     "platform": "virtuemart",
-    "at": 1789290934861
+    "at": 1789293099086,
+    "template": "{origin}/component/search/?searchword={query}"
   }
 }

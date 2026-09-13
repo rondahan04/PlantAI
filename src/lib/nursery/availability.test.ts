@@ -4,6 +4,8 @@ import {
   availabilityBadge,
   EN_AVAILABILITY_COPY,
   isWorthShowing,
+  showsPrice,
+  byPickupOrder,
   LIKELY_AT_OR_ABOVE,
   MAYBE_AT_OR_ABOVE,
 } from './availability.ts';
@@ -143,6 +145,41 @@ test('a shop that was read and does not stock the plant is not shown at all', ()
   assert.equal(isWorthShowing(base()), true, 'an older payload with no outcome still shows');
 });
 
+
+/*
+ * Pick Up leads with the shops that can actually answer the question.
+ *
+ * The list was already ordered by `hasPlant`, which is ALMOST this - and comes
+ * apart on exactly one row. A `priceSuspect` listing is one the final
+ * cross-nursery price check refused to believe, so the card replaces the number
+ * with "See price"; `hasPlant` is still true, so that shop sorted up among the
+ * priced ones while showing no price. Sorting by what the card will actually
+ * display closes that gap.
+ */
+test('showsPrice is about what the card displays, not what we scraped', () => {
+  assert.equal(showsPrice(base({ hasPlant: true, plantPrice: '₪60' })), true);
+  assert.equal(
+    showsPrice(base({ hasPlant: true, plantPrice: '₪60', priceSuspect: true })),
+    false,
+    'the card shows "See price" here, so it must not sort as a priced row'
+  );
+  assert.equal(showsPrice(base({ hasPlant: false, plantPrice: '-' })), false);
+  assert.equal(showsPrice(base({ hasPlant: true, plantPrice: '-' })), false);
+});
+
+test('byPickupOrder puts priced shops first, then the nearest', () => {
+  const rows = [
+    base({ id: 'far-unpriced', distanceKm: 9 }),
+    base({ id: 'near-unpriced', distanceKm: 1 }),
+    base({ id: 'far-priced', distanceKm: 8, hasPlant: true, plantPrice: '₪80' }),
+    base({ id: 'suspect', distanceKm: 2, hasPlant: true, plantPrice: '₪80', priceSuspect: true }),
+    base({ id: 'near-priced', distanceKm: 5, hasPlant: true, plantPrice: '₪60' }),
+  ];
+  assert.deepEqual(
+    [...rows].sort(byPickupOrder).map((n) => n.id),
+    ['near-priced', 'far-priced', 'near-unpriced', 'suspect', 'far-unpriced']
+  );
+});
 
 test('a legacy note from an older server still renders', () => {
   /*

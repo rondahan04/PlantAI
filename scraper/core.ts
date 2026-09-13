@@ -1357,6 +1357,21 @@ export interface ExtractFunnel {
   excerptChars: number; // what survived priceFocusedExcerpt
   extracted: number; // rows the extraction pass proposed
   kept: number; // rows that survived the audit
+  /*
+   * How many prices the page we read actually states.
+   *
+   * Retained because "this shop does not stock the plant" is a CLAIM, and a
+   * page that prices nothing cannot support it: every row the extractor
+   * proposes is dropped for want of a price, so the funnel closes at `no_match`
+   * whether or not the plant is on the shelf. mashtela-urbanit.co.il is the
+   * case - its Joomla search answers correctly with product names and no
+   * prices, and the shop was being hidden from the user under the assertion
+   * that it had been searched and did not list monstera. It sells monstera.
+   *
+   * Zero on the structured path, where there is no page to count - see
+   * `catalogueRead`, which is the priced evidence there.
+   */
+  prices: number;
 }
 
 export interface PipelineResult {
@@ -1706,6 +1721,7 @@ export async function extractAndVerifyPlants(
       excerptChars: excerpt.length,
       extracted: 0,
       kept: 0,
+      prices: countPrices(excerpt || markdown),
     },
   });
 
@@ -1761,6 +1777,7 @@ export async function extractAndVerifyPlants(
           excerptChars: excerpt.length,
           extracted: structured.length,
           kept: decided.length,
+          prices: countPrices(excerpt || markdown),
         },
       };
     }
@@ -1797,6 +1814,7 @@ export async function extractAndVerifyPlants(
           excerptChars: excerpt.length,
           extracted: structured.length,
           kept: relevant.length,
+          prices: countPrices(excerpt || markdown),
         },
       };
     }
@@ -1834,6 +1852,7 @@ export async function extractAndVerifyPlants(
         excerptChars: excerpt.length,
         extracted: 0,
         kept: 0,
+        prices: countPrices(excerpt || markdown),
       },
     };
   }
@@ -1905,6 +1924,7 @@ export async function extractAndVerifyPlants(
       excerptChars: excerpt.length,
       extracted: extracted.length,
       kept: relevant.length,
+      prices: countPrices(excerpt || markdown),
     },
   };
 }
