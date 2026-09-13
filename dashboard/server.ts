@@ -8,7 +8,7 @@
  * Enter a query -> for each nursery URL in ../data/nurseries-fallback.txt,
  * detect the store platform, hit its product-search, extract matching items +
  * prices (ILS) via OpenAI, and render them in a table. All scraping logic
- * lives in ../scraper/core.ts (shared with scripts/scrape-nurseries.ts).
+ * lives in ../scraper/core.ts (shared with the server and the scripts).
  */
 
 import * as fs from 'fs';
