@@ -1,5 +1,6 @@
 import { Nursery } from '../types';
 import { apiFetch, apiHeaders, readApiError } from '../lib/api';
+import { hasInlineResults } from '../lib/nursery/jobResponse';
 
 /*
  * Live nursery lookup (TODOS E12).
@@ -175,10 +176,23 @@ async function startJob(
   }
 
   const body = await res.json().catch(() => null);
-  if ((body as any)?.state === 'done') return { search: toSearch(body) };
+  /*
+   * The results array has to be THERE, not merely promised by `state: 'done'`.
+   * The server dedupes an identical finished search onto its existing job and
+   * answers `{ jobId, state: 'done' }` - done, with the results still on the
+   * job. Reading that as inline results is what rendered "No nurseries found
+   * nearby" over a search that had just found 23. See hasInlineResults.
+   */
+  if (hasInlineResults(body)) return { search: toSearch(body) };
 
   const jobId = (body as any)?.jobId;
   if (typeof jobId !== 'string' || !jobId) {
+    /* A `done` with neither results nor a job to collect them from is the one
+     * answer we must not turn into an empty list: we would be telling the user
+     * their area has no nurseries on the strength of a malformed response. */
+    if ((body as any)?.state === 'done') {
+      throw new NurseryServiceError('server reported the search finished but sent no results');
+    }
     throw new NurseryServiceError('start returned no jobId');
   }
   return { jobId };

@@ -14,7 +14,7 @@ import { fetchNearbyNurseries } from '../services/nurseryService';
 import { stockAgeLabel } from '../lib/care/freshness';
 import { waMeLink } from '../lib/nursery/whatsapp';
 import StatusView from '../components/StatusView';
-import { availabilityBadge, isWorthShowing } from '../lib/nursery/availability';
+import { availabilityBadge, byPickupOrder, isWorthShowing } from '../lib/nursery/availability';
 import { nurseryLogo } from '../lib/nursery/nurseryLogos';
 
 type Styles = ReturnType<typeof makeStyles>;
@@ -333,7 +333,16 @@ export default function NurseriesScreen({ navigation, route }: Props) {
    * nurseries; Pick Up is the ones with a real location you can drive to.
    */
   const deliveryList = useMemo(() => worthShowing.filter(isDeliverable), [worthShowing]);
-  const pickupList = useMemo(() => worthShowing.filter(isPickupable), [worthShowing]);
+  /*
+   * Pick Up leads with the shops that show a price. The server already sorts
+   * in-stock first, but by `hasPlant` - which stays true for a `priceSuspect`
+   * row whose card renders "See price", floating a shop with no visible number
+   * up among the priced ones. See byPickupOrder.
+   */
+  const pickupList = useMemo(
+    () => worthShowing.filter(isPickupable).sort(byPickupOrder),
+    [worthShowing]
+  );
   const visible = mode === 'delivery' ? deliveryList : pickupList;
 
   const deliveryCount = deliveryList.length;

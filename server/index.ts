@@ -756,6 +756,26 @@ const server = http.createServer(async (req, res) => {
       return results;
     });
 
+    /*
+     * A deduped job that has ALREADY finished answers with its results, not
+     * with a bare `state: 'done'`.
+     *
+     * jobs.start joins an identical search that is running or recently
+     * finished, so a repeat within the retention window came back as
+     * `{ jobId, state: 'done' }` - truthful and useless: done, with the results
+     * still on the job. The client read that as "results are inline", found
+     * none, and told the user there were no nurseries nearby.
+     *
+     * The client no longer trusts `state` alone (see hasInlineResults), so this
+     * is belt and braces - but it is also simply the right answer, and it saves
+     * the poll round trip the client would otherwise make for a result already
+     * in hand.
+     */
+    if (job.state === 'done' && job.result) {
+      json(res, 200, { state: 'done', results: job.result, scrapedAt: job.finishedAt });
+      return;
+    }
+
     json(res, 202, { jobId: job.id, state: job.state });
     return;
   }

@@ -9,7 +9,7 @@ import { type DiscoveredNursery } from './places.ts';
 import type { StructuredProduct } from './structuredPrice.ts';
 import type { QueryPlan } from './queryPlan.ts';
 
-import { readable, type SiteStage } from '../server/scrapeHealth.ts';
+import { type SiteStage } from '../server/scrapeHealth.ts';
 
 export interface NurseryResult {
   id: string;
@@ -118,6 +118,16 @@ export interface SearchInput {
  * deadlines fire - but it no longer holds up the result the user is waiting on.
  */
 const SITE_BUDGET_MS = Number(env('NURSERY_SITE_BUDGET_MS')) || 45_000;
+
+/*
+ * How many prices a page must state before we will call it a catalogue.
+ *
+ * Not 1. Nearly every Israeli shop carries a free-delivery threshold in its
+ * header ("משלוחים חינם בקנייה מעל 350 ₪"), so one price is what a page with no
+ * catalogue on it looks like - that single banner is the entire price count on
+ * mashtela-urbanit's search results. A real grid prices every card it shows.
+ */
+const PRICED_CATALOGUE_MIN = 3;
 
 export interface PipelineDeps {
   /* Override the per-site ceiling; tests set it small. */
@@ -376,8 +386,35 @@ async function scrapeOne(
      * second is the one that stays broken until someone notices.
      */
     const stage = funnel?.stage ?? 'no_markdown';
-    const refusedSearch = searchStatus === 404 || searchStatus === 410;
-    noteSite(host, refusedSearch && !readable(stage) ? 'no_search' : stage);
+    /*
+     * Two ways to learn the shop never answered our question, and the second
+     * one is the only one most shops give us.
+     *
+     * `searchStatus` comes from the DIRECT read, which many shops refuse - and
+     * a shop that refuses us is exactly the kind whose search URL we had to
+     * guess. yahalomr.co.il is the case: platform unknown, so the URL is a
+     * guess, /search?q= is an IIS 404, and the direct read returns nothing, so
+     * the status test alone can never fire on it. The provider still hands back
+     * the 404 page, which parses like any other page and lands as `no_match` or
+     * `no_excerpt` depending on whether that particular 404 has headings.
+     *
+     * `answered === false` is the signal that survives all of it, and the
+     * outcome path below already trusts it for exactly this (see readCatalogue).
+     * Health has to trust it too, or the two disagree about whether we read a
+     * shop - and it is health that has to be right, because `no_match` counts
+     * as a SUCCESSFUL read and a shop stuck on 404 would report as one.
+     */
+    const refusedSearch = searchStatus === 404 || searchStatus === 410 || answered === false;
+    /*
+     * No `!readable(stage)` guard. That guard is what hid this: a 404 page is
+     * still a page, so it parses into `no_match` (or `rejected`) about as often
+     * as into nothing - and those two stages are precisely the ones readable()
+     * counts as a successful read. The guard therefore let through exactly the
+     * cases it most needed to catch, and only renamed the ones already counted
+     * as failures. If the shop did not answer the query, we did not read its
+     * catalogue, whatever the page we got back happened to parse into.
+     */
+    noteSite(host, refusedSearch ? 'no_search' : stage);
     if (plants.length > 0) {
       const best = cheapestMatch(plants);
       /*
@@ -432,8 +469,26 @@ async function scrapeOne(
      * confident wrong answer about a shop that may well have the plant on the
      * shelf, and it is what mashtela-urbanit and yifrach were getting.
      */
+    /*
+     * And the page has to have PRICED something.
+     *
+     * A results page listing product names with no prices cannot support "not
+     * stocked": the extractor drops every row for want of a price, so the
+     * funnel closes at `no_match` whether or not the plant is on the shelf.
+     * mashtela-urbanit.co.il answers its search correctly and prices nothing on
+     * that page, and was hidden from the user (see isWorthShowing) under the
+     * assertion that it had been searched and did not list monstera. It sells
+     * monstera.
+     *
+     * `catalogueRead` is the priced evidence on the structured path, where
+     * there is no page to count: those rows come from the shop's own JSON and
+     * carry prices by definition.
+     */
+    const pricedCatalogue = catalogueRead === true || (funnel?.prices ?? 0) >= PRICED_CATALOGUE_MIN;
     const readCatalogue =
-      (funnel?.stage === 'no_match' || funnel?.stage === 'rejected') && answered !== false;
+      (funnel?.stage === 'no_match' || funnel?.stage === 'rejected') &&
+      answered !== false &&
+      pricedCatalogue;
     /*
      * A nursery with no shop on its website. Not a failure to read - we read it
      * fine, and it sells nothing online. "We could not check" invites the user
@@ -452,6 +507,19 @@ async function scrapeOne(
       };
     }
 
+    /*
+     * We reached this shop's search and it answered - we simply could not read
+     * a price on what came back. Saying "we could not read this shop" would be
+     * the wrong sentence for a user standing 1.4km away: the shop is fine, the
+     * listing is real, and the number is the only thing missing. Same `kind`,
+     * so the badge and every client that switches on it are unchanged; only the
+     * detail behind the tap gets the truer sentence.
+     */
+    const searchedButUnpriced =
+      (funnel?.stage === 'no_match' || funnel?.stage === 'rejected') &&
+      answered !== false &&
+      !pricedCatalogue;
+
     return {
       ...base,
       outcome: readCatalogue ? 'not_sold' : 'not_found',
@@ -459,7 +527,9 @@ async function scrapeOne(
         kind: readCatalogue ? 'estimate' : 'unreadable',
         detail: readCatalogue
           ? 'The shop was searched and this plant was not listed.'
-          : 'We could not read this shop, so we do not know what it stocks.',
+          : searchedButUnpriced
+            ? 'We searched this shop but could not read its prices, so we do not know what it stocks.'
+            : 'We could not read this shop, so we do not know what it stocks.',
       },
     };
   } catch (err: any) {

@@ -15,6 +15,7 @@ const funnel = (over: Partial<ExtractFunnel> = {}): ExtractFunnel => ({
   excerptChars: 0,
   extracted: 0,
   kept: 0,
+  prices: 0,
   ...over,
 });
 
@@ -72,6 +73,10 @@ test('a shop we read that does not list the plant is classified not_sold', async
    * The user does not want to see these at all - a nursery that demonstrably
    * does not stock the plant is not a result. The client hides them; the
    * pipeline's job is to say so unambiguously.
+   *
+   * `prices` is part of "demonstrably": a page that prices nothing drops every
+   * row for want of a price and closes at no_match regardless of what the shop
+   * stocks, so it cannot carry this claim. A real grid prices its cards.
    */
   let inferCalls = 0;
   const out = await runNurserySearch(
@@ -81,7 +86,7 @@ test('a shop we read that does not list the plant is classified not_sold', async
         plants: [],
         report: { is_valid: false, confidence_score: 0, feedback: '', corrected_output: [] },
         engines: { extractor: 'none', verifier: 'none' },
-        funnel: funnel({ stage: 'no_match' }),
+        funnel: funnel({ stage: 'no_match', prices: 14 }),
       }),
       infer: async () => {
         inferCalls += 1;
@@ -540,6 +545,144 @@ test('onSiteRead reports the stage the site actually reached', async () => {
     })
   );
   assert.deepEqual(seen, [['gh.example', 'no_excerpt']]);
+});
+
+/*
+ * The health signal and the user-facing outcome must agree about whether we
+ * read a shop, and they did not.
+ *
+ * `answered === false` means the shop handed back a page that ignores the
+ * query - a 404, or its own homepage served to every term. The outcome path
+ * already refuses to call that "we read the catalogue" (see readCatalogue), but
+ * noteSite recorded the raw stage, and a 404 page that happens to parse into
+ * zero rows arrives as `no_match` - which readable() counts as a SUCCESSFUL
+ * read. So a shop that has been answering nothing for a month reports as a shop
+ * that simply does not stock the plant, which is the exact blindness `no_search`
+ * was added to end.
+ *
+ * Measured on yahalomr.co.il 2026-09-13: platform unknown, so the search URL is
+ * a guess, and https://yahalomr.co.il/search?q=... is an IIS 404. The direct
+ * HTML read returns nothing (the shop refuses it), so `searchStatus` is
+ * undefined and the status test alone can never fire.
+ */
+/*
+ * "Not stocked" is a claim, and it needs a priced catalogue behind it.
+ *
+ * mashtela-urbanit.co.il is the case. Its search DOES answer - Joomla core
+ * search filters properly - but it returns product names and links with no
+ * prices on the page. Every row the extractor proposes is then dropped for
+ * want of a price, the funnel closes at no_match, and the shop was reported as
+ * `not_sold`: hidden from the user (see isWorthShowing) under the assertion
+ * "The shop was searched and this plant was not listed." They sell monstera.
+ *
+ * Reading a page that cannot state a price is not reading a catalogue.
+ */
+test('a searched shop whose page carries no prices is not called not_sold', async () => {
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      search: async () => ({
+        md: '## Search results\n[Monstera Monkey](https://gh.example/p/1)',
+        platform: 'virtuemart',
+        picked: 'u',
+        answered: true, // the shop really did search
+      }),
+      extract: async () => ({
+        plants: [],
+        report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
+        engines: { extractor: 'gpt-5.6-luna' as const, verifier: 'gpt-5.6-luna' as const },
+        /* Names on the page, but nothing priced. */
+        funnel: funnel({ stage: 'no_match', prices: 0 }),
+      }),
+    })
+  );
+  assert.equal(out[0].outcome, 'not_found', 'we cannot claim a plant is absent from an unpriced page');
+  assert.equal(out[0].availability?.kind, 'unreadable');
+  /* "We could not read this shop" is the wrong sentence here - we read it fine,
+   * the price is the only thing missing, and the user may be standing nearby. */
+  assert.match(out[0].availability!.detail, /could not read its prices/);
+});
+
+/* The converse, so the fix cannot quietly delete not_sold: a page that prices
+ * its products and does not list this plant is a real "not stocked". */
+test('a searched shop whose page prices its products still reports not_sold', async () => {
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      search: async () => ({ md: 'a priced grid', platform: 'woo', picked: 'u', answered: true }),
+      extract: async () => ({
+        plants: [],
+        report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
+        engines: { extractor: 'gpt-5.6-luna' as const, verifier: 'gpt-5.6-luna' as const },
+        funnel: funnel({ stage: 'no_match', prices: 12 }),
+      }),
+    })
+  );
+  assert.equal(out[0].outcome, 'not_sold');
+});
+
+/* The shop's own JSON is priced by definition, and the HTML page is empty on
+ * that path - so a structured catalogue read must not be judged by page prices. */
+test('a structured catalogue read is priced evidence even with no page markdown', async () => {
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      search: async () => ({
+        md: '',
+        platform: 'woo',
+        picked: 'u',
+        answered: true,
+        catalogueRead: true,
+      }),
+      extract: async () => ({
+        plants: [],
+        report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
+        engines: { extractor: 'gpt-5.6-luna' as const, verifier: 'gpt-5.6-luna' as const },
+        funnel: funnel({ stage: 'no_match', prices: 0 }),
+      }),
+    })
+  );
+  assert.equal(out[0].outcome, 'not_sold', 'the Store API answered; its rows carry prices');
+});
+
+test('a shop that answered nothing is no_search, even when the stage looks readable', async () => {
+  const seen: Array<[string, string]> = [];
+  await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      /* No searchStatus: the shop refused our direct GET, so the 404 is only
+       * visible as the provider's copy of the page. */
+      search: async () => ({ md: '## 404 - File or directory not found.', platform: 'unknown', picked: 'u', answered: false }),
+      extract: async () => ({
+        plants: [],
+        report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
+        engines: { extractor: 'gpt-5.6-luna' as const, verifier: 'gpt-5.6-luna' as const },
+        funnel: funnel({ stage: 'no_match' }),
+      }),
+      onSiteRead: (host, stage) => seen.push([host, stage]),
+    })
+  );
+  assert.deepEqual(seen, [['gh.example', 'no_search']]);
+});
+
+/* The converse, so the fix cannot be "call everything no_search": a shop that
+ * genuinely answered and genuinely lacks the plant is still a successful read. */
+test('a shop that answered and lacks the plant stays no_match', async () => {
+  const seen: Array<[string, string]> = [];
+  await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      search: async () => ({ md: 'a real results page', platform: 'woo', picked: 'u', answered: true }),
+      extract: async () => ({
+        plants: [],
+        report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
+        engines: { extractor: 'gpt-5.6-luna' as const, verifier: 'gpt-5.6-luna' as const },
+        funnel: funnel({ stage: 'no_match' }),
+      }),
+      onSiteRead: (host, stage) => seen.push([host, stage]),
+    })
+  );
+  assert.deepEqual(seen, [['gh.example', 'no_match']]);
 });
 
 test('a site that throws is reported as unreadable, not as a plant that is absent', async () => {

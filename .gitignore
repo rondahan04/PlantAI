@@ -82,3 +82,6 @@ graphify-out/
 
 # local test photos - inputs for manual diagnosis runs, not source
 photos_for_testing/
+
+# Run artifact from scripts/funnel-tally.ts - a measurement, not source.
+scraper/funnel-tally.json
