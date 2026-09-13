@@ -15,6 +15,7 @@ import { stockAgeLabel } from '../lib/care/freshness';
 import { waMeLink } from '../lib/nursery/whatsapp';
 import StatusView from '../components/StatusView';
 import { availabilityBadge, byPickupOrder, isWorthShowing } from '../lib/nursery/availability';
+import { DEFAULT_RADIUS_M, nextRadius, radiusKm } from '../lib/nursery/radius';
 import { nurseryLogo } from '../lib/nursery/nurseryLogos';
 
 type Styles = ReturnType<typeof makeStyles>;
@@ -286,14 +287,23 @@ export default function NurseriesScreen({ navigation, route }: Props) {
    */
   const [scrapedAt, setScrapedAt] = useState<number | null>(null);
   const [failure, setFailure] = useState<NurseryFailure>(GENERIC_FAILURE);
+  /*
+   * How far the CURRENT result looked. Held in state because it is the thing
+   * the empty state offers to change, and because every sentence quoting a
+   * distance is derived from it - the copy used to say "10km" as a literal,
+   * which meant the number on screen could not be wrong and could not be right
+   * either, it just sat there.
+   */
+  const [radiusM, setRadiusM] = useState(DEFAULT_RADIUS_M);
   const headerFade = useRef(new Animated.Value(0)).current;
 
   // Initial load reuses the promise prefetched on the diagnosis screen (force=false
   // → cache hit → minimal wait). Retry forces a fresh scrape past the cache.
-  const load = useCallback(async (force = false) => {
+  const load = useCallback(async (force = false, searchRadiusM = DEFAULT_RADIUS_M) => {
     setStatus('loading');
+    setRadiusM(searchRadiusM);
     try {
-      const data = await fetchNearbyNurseries(plantName, lat, lng, { force });
+      const data = await fetchNearbyNurseries(plantName, lat, lng, { force, radiusM: searchRadiusM });
       setNurseries(data.nurseries);
       setScrapedAt(data.scrapedAt);
       setStatus('ready');
@@ -348,6 +358,8 @@ export default function NurseriesScreen({ navigation, route }: Props) {
   const deliveryCount = deliveryList.length;
   const pickupCount = pickupList.length;
   const mapNurseries = visible.filter(hasCoords);
+  /* The next radius worth offering, or null at the widest - see nextRadius. */
+  const wider = nextRadius(radiusM);
 
   const handleOrder = (nursery: Nursery) => {
     /*
@@ -417,7 +429,7 @@ export default function NurseriesScreen({ navigation, route }: Props) {
           <Text style={s.freshText}>{ageLabel}</Text>
           <Pressable
             style={({ pressed }) => [s.freshBtn, pressed && { opacity: 0.6 }]}
-            onPress={() => load(true)}
+            onPress={() => load(true, radiusM)}
             accessibilityRole="button"
             accessibilityLabel={copy.nurseries.refreshA11y}
             hitSlop={8}
@@ -463,7 +475,7 @@ export default function NurseriesScreen({ navigation, route }: Props) {
         <View style={s.centerFill}>
           <ActivityIndicator size="large" color={t.color.primary} />
           <Text style={s.stateTitle}>{copy.nurseries.searchingTitle}</Text>
-          <Text style={s.stateText}>{copy.nurseries.searchingBody(plantName)}</Text>
+          <Text style={s.stateText}>{copy.nurseries.searchingBody(plantName, radiusKm(radiusM))}</Text>
         </View>
       )}
 
@@ -474,18 +486,33 @@ export default function NurseriesScreen({ navigation, route }: Props) {
           title={failure.title}
           body={failure.body}
           tone="error"
-          primaryAction={{ label: copy.nurseries.tryAgain, icon: 'refresh-outline', onPress: () => load(true) }}
+          primaryAction={{ label: copy.nurseries.tryAgain, icon: 'refresh-outline', onPress: () => load(true, radiusM) }}
           secondaryAction={{ label: copy.nurseries.backToHome, onPress: () => navigation.navigate('Home') }}
         />
       )}
 
       {/* Empty */}
+      {/*
+        Empty. The primary action WIDENS when there is somewhere wider to look:
+        offering "Search again" on a search that found nothing re-runs the
+        identical query and can only fail identically, which is a dead end
+        wearing a retry's clothes. At the widest radius there is genuinely
+        nothing further to try, so the honest offer is the plain retry.
+      */}
       {status === 'ready' && nurseries.length === 0 && (
         <StatusView
           icon="leaf-outline"
           title={copy.nurseries.emptyTitle}
-          body={copy.nurseries.emptyBody(plantName)}
-          primaryAction={{ label: copy.nurseries.searchAgain, icon: 'refresh-outline', onPress: () => load(true) }}
+          body={copy.nurseries.emptyBody(plantName, radiusKm(radiusM))}
+          primaryAction={
+            wider
+              ? {
+                  label: copy.nurseries.searchWider(radiusKm(wider)),
+                  icon: 'resize-outline',
+                  onPress: () => load(true, wider),
+                }
+              : { label: copy.nurseries.searchAgain, icon: 'refresh-outline', onPress: () => load(true, radiusM) }
+          }
           secondaryAction={{ label: copy.nurseries.diagnoseAnother, onPress: () => navigation.navigate('Home') }}
         />
       )}

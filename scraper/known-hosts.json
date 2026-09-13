@@ -93,5 +93,11 @@
   "allenby-flowers.co.il": {
     "platform": "woo",
     "at": 1789302166795
+  },
+  "karkash.com": {
+    "platform": "unknown",
+    "at": 1789303832609,
+    "api": "none",
+    "apiAt": 1789303832609
   }
 }
