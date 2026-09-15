@@ -561,11 +561,67 @@ function dedupe(products: StructuredProduct[]): StructuredProduct[] {
 }
 
 /*
+ * A page that IS one product, priced in its own markup and nowhere else.
+ *
+ * The card reader cannot see these, and the reason is structural rather than a
+ * gap: it pairs a price with a titled LINK, because on a grid that link is what
+ * says which product the price belongs to. A product page does not link to
+ * itself. It has an `h1` instead, and the price sits beside it.
+ *
+ * This matters more than it sounds, because a product page is where BOTH
+ * rescues end up - the follow from a catalogue that lists products without
+ * prices, and the sitemap route into a shop whose search does not work. A shop
+ * whose product pages carry no JSON-LD, no microdata and no og:price would
+ * silently rescue nothing at all.
+ *
+ * Deliberately the LAST reader and deliberately narrow. `h1 + a price` is true
+ * of a great many pages that are not products, so it is only ever consulted
+ * when every structured reader above it found nothing, and only when the page
+ * looks like one product: one h1, and no more prices than a product page states
+ * about itself (the price, a sale original, a tax or instalment line).
+ */
+const MAX_PRODUCT_PAGE_PRICES = 4;
+
+export function parseProductPage(html: string, baseUrl = ''): StructuredProduct | null {
+  const doc = parse(html);
+
+  const headings: Node[] = [];
+  walk(doc, (n) => {
+    if (isElement(n) && tagOf(n) === 'h1') headings.push(n);
+  });
+  if (headings.length !== 1) return null;
+  const name = textOf(headings[0]).trim();
+  if (!name) return null;
+
+  const prices = priceNodes(doc).filter((n) => !isChrome(n));
+  if (prices.length === 0 || prices.length > MAX_PRODUCT_PAGE_PRICES) return null;
+
+  /*
+   * The LOWEST price stated. A product page states one price and sometimes its
+   * variants; the cheapest is the number the rest of the pipeline quotes
+   * (cheapestMatch, the Woo price_range minimum, the cheapest Shopify variant),
+   * so this agrees with them rather than inventing a fourth rule.
+   */
+  const values = prices.map(priceOf).filter((v): v is number => v !== null && v > 0);
+  if (values.length === 0) return null;
+
+  return {
+    name,
+    price: Math.min(...values),
+    currency: 'ILS',
+    availability: availabilityFromText(textOf(doc)),
+    url: baseUrl || undefined,
+    source: 'card',
+  };
+}
+
+/*
  * Every product the page states in machine-readable form, best source first.
  *
- * `meta` is included only when nothing richer was found: it describes a single
- * product page, and on a search page those tags describe the shop, so promoting
- * it above a real catalogue would replace many right answers with one wrong one.
+ * `meta` and the product-page reader are consulted only when nothing richer was
+ * found: both describe a SINGLE product page, and on a search page those tags
+ * describe the shop, so promoting either above a real catalogue would replace
+ * many right answers with one wrong one.
  */
 export function extractStructuredProducts(html: string, baseUrl = ''): StructuredProduct[] {
   if (!html) return [];
@@ -575,7 +631,9 @@ export function extractStructuredProducts(html: string, baseUrl = ''): Structure
   const found = dedupe([...ld, ...micro, ...cards]);
   if (found.length > 0) return found;
   const meta = parseMetaProduct(html, baseUrl);
-  return meta ? [meta] : [];
+  if (meta) return [meta];
+  const page = parseProductPage(html, baseUrl);
+  return page ? [page] : [];
 }
 
 /* Render a structured price the way the rest of the pipeline writes prices. */

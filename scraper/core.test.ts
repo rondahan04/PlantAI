@@ -45,7 +45,10 @@ import {
   fetchRawHtml,
   structuredCatalog,
   snapPricesToStructured,
+  planQuery,
+  clearPlanCache,
 } from './core.ts';
+import { clearSitemapCache } from './sitemapCatalogue.ts';
 import type { ScrapeFn, ClassifyFn, Plant, VerificationReport } from './core.ts';
 import { extractStructuredProducts, type StructuredProduct } from './structuredPrice.ts';
 import { buildQueryPlan } from './queryPlan.ts';
@@ -1844,4 +1847,647 @@ test('isTimeout: our own deadline is told apart from an ordinary network failure
   assert.equal(isTimeout(new TypeError('fetch failed')), false);
   assert.equal(isTimeout(null), false);
   assert.equal(isTimeout('TimeoutError'), false); // a string is not an error
+});
+
+// --- planQuery: the ladder's input, and the one call nothing can overlap -----
+
+/*
+ * A Hebrew query used to skip planning entirely, on the grounds that there was
+ * nothing to translate. Translating was never the valuable half: the alternates
+ * are. A shop that files Sansevieria as "לשון החמות" answers nothing to
+ * "סנסוויריה" however it is spelled, and a Hebrew-typed search was getting a
+ * one-rung ladder with no alternates and no Latin rung at all.
+ */
+test('a Hebrew query is planned too, and keeps the spelling the user typed', async () => {
+  clearPlanCache();
+  const classify: ClassifyFn = async () => ({
+    hebrew: 'סנסיווריה',
+    latin: 'Sansevieria trifasciata',
+    alt: ['לשון החמות'],
+  });
+  const plan = await planQuery('סנסוויריה', 'k', classify);
+  /* The model's own spelling is NOT taken: the user saw theirs on a label. */
+  assert.equal(plan.hebrew, 'סנסוויריה');
+  assert.equal(plan.latin, 'Sansevieria trifasciata');
+  assert.deepEqual(plan.altNames, ['לשון החמות']);
+});
+
+test('a planned Hebrew query reaches the shop that files the plant under its common name', async () => {
+  clearPlanCache();
+  const classify: ClassifyFn = async () => ({
+    hebrew: 'סנסוויריה',
+    latin: 'Sansevieria',
+    alt: ['לשון החמות'],
+  });
+  const plan = await planQuery('סנסוויריה', 'k', classify);
+  /* Rung two is a different WORD, not a respelling - the whole point. */
+  assert.ok(plan.terms.includes('לשון החמות'));
+});
+
+test('a plan is made once per plant, not once per search', async () => {
+  clearPlanCache();
+  let calls = 0;
+  const classify: ClassifyFn = async () => {
+    calls += 1;
+    return { hebrew: 'מונסטרה דליסיוסה', latin: 'Monstera deliciosa', alt: [] };
+  };
+  await planQuery('Monstera deliciosa', 'k', classify);
+  await planQuery('monstera deliciosa', 'k', classify);
+  assert.equal(calls, 1, 'the second search reads the first search\'s plan');
+});
+
+test('two searches starting at once pay for one planning call between them', async () => {
+  clearPlanCache();
+  let calls = 0;
+  const classify: ClassifyFn = async () => {
+    calls += 1;
+    await new Promise((r) => setTimeout(r, 5));
+    return { hebrew: 'אלוקסיה ריגל שילד', latin: 'Alocasia Regal Shield', alt: [] };
+  };
+  const [a, b] = await Promise.all([
+    planQuery('Alocasia Regal Shield', 'k', classify),
+    planQuery('Alocasia Regal Shield', 'k', classify),
+  ]);
+  assert.equal(calls, 1);
+  assert.equal(a.hebrew, b.hebrew);
+});
+
+/*
+ * The failure that must never be cached. A degraded plan searches Hebrew
+ * catalogues in English, which matches nothing and reads as empty shelves -
+ * remembering one would freeze a transient outage into every later search.
+ */
+test('a failed plan is not remembered', async () => {
+  clearPlanCache();
+  let calls = 0;
+  const classify: ClassifyFn = async () => {
+    calls += 1;
+    if (calls === 1) throw new Error('OpenAI 500');
+    return { hebrew: 'פיקוס ליראטה', latin: 'Ficus lyrata', alt: ['פיקוס כינורי'] };
+  };
+  const first = await planQuery('Ficus lyrata', 'k', classify);
+  assert.equal(first.hebrew, 'Ficus lyrata', 'degrades to the plain input');
+  const second = await planQuery('Ficus lyrata', 'k', classify);
+  assert.equal(second.hebrew, 'פיקוס ליראטה', 'and asks again rather than serving the failure');
+  assert.equal(calls, 2);
+});
+
+test('a plan older than its day is asked for again', async () => {
+  clearPlanCache();
+  let calls = 0;
+  const classify: ClassifyFn = async () => {
+    calls += 1;
+    return { hebrew: 'מונסטרה', latin: 'Monstera', alt: [] };
+  };
+  let clock = 1_000_000;
+  await planQuery('Monstera', 'k', classify, () => clock);
+  clock += 25 * 60 * 60 * 1000;
+  await planQuery('Monstera', 'k', classify, () => clock);
+  assert.equal(calls, 2);
+});
+
+// --- the storefront JSON is asked BEFORE identification is paid for ---------
+
+/* A Store API that answers with an array. Everything else 404s. */
+function wooApiFetch(rows: unknown[]): any {
+  return async (url: string) => {
+    if (url.includes('/wp-json/wc/store/v1/products')) {
+      return { ok: true, status: 200, text: async () => JSON.stringify(rows) };
+    }
+    return { ok: false, status: 404, text: async () => 'not found' };
+  };
+}
+
+const wooApiRow = (name: string, price = '4990') => ({
+  name,
+  permalink: `https://shop.co.il/product/${encodeURIComponent(name)}/`,
+  is_in_stock: true,
+  prices: { price, currency_code: 'ILS', currency_minor_unit: 2 },
+});
+
+/*
+ * The cascade this skips is not small: a homepage read, then a RENDERED
+ * Firecrawl homepage at a 4s wait plus two endpoint reads, then an LLM call -
+ * all of it to produce the word "woo", which two free GETs establish. Every
+ * nursery Places finds for a new user is a host in exactly this state.
+ */
+test('a host we have never met is asked for its JSON before it is identified', async () => {
+  const scrapes: string[] = [];
+  const searcher = createSearcher('fc-key', {
+    apiEnabled: true,
+    fetchApi: wooApiFetch([wooApiRow('מונסטרה דליסיוסה')]),
+    fetchHtml: async () => '',
+    scrape: async (url: string) => {
+      scrapes.push(url);
+      return '';
+    },
+  });
+  const plan = buildQueryPlan({ original: 'Monstera deliciosa', hebrew: 'מונסטרה דליסיוסה' });
+  const res = await searcher.fetchSearchMarkdown('https://shop.co.il/', plan, 'shop.co.il');
+
+  assert.equal(scrapes.length, 0, 'nothing was scraped to learn what this shop is');
+  assert.equal(res.retrieval, 'api');
+  assert.equal(res.products?.length, 1);
+  /* The probe did not merely defer identification, it answered it. */
+  assert.equal(res.platform, 'woo');
+});
+
+test('the platform a probe established is not re-learned on the next search', async () => {
+  let probes = 0;
+  const searcher = createSearcher('fc-key', {
+    apiEnabled: true,
+    fetchApi: (async (url: string) => {
+      if (url.includes('/wp-json/wc/store/v1/products')) {
+        if (/per_page=1$/.test(url)) probes += 1; // the probe asks for one row
+        return { ok: true, status: 200, text: async () => JSON.stringify([wooApiRow('מונסטרה')]) };
+      }
+      return { ok: false, status: 404, text: async () => 'no' };
+    }) as any,
+    fetchHtml: async () => '',
+    scrape: async () => '',
+  });
+  const plan = buildQueryPlan({ original: 'Monstera', hebrew: 'מונסטרה' });
+  await searcher.fetchSearchMarkdown('https://shop.co.il/', plan, 'shop.co.il');
+  await searcher.fetchSearchMarkdown('https://shop.co.il/', plan, 'shop.co.il');
+  assert.equal(probes, 1, 'the route is remembered, so only the first search probes');
+});
+
+/* A shop with no JSON route must still be identified and read as a page - the
+ * inversion may not cost the HTML path anything it had before. */
+test('a shop with no JSON route falls through to identification and the page', async () => {
+  const scrapes: string[] = [];
+  const searcher = createSearcher('fc-key', {
+    apiEnabled: true,
+    fetchApi: (async () => ({ ok: false, status: 404, text: async () => 'no' })) as any,
+    fetchHtml: async () => '',
+    scrape: async (url: string) => {
+      scrapes.push(url);
+      /* Names the platform on the first (homepage) read, so identification
+       * settles at L1 exactly as it did before. */
+      return url.endsWith('/') || !url.includes('?')
+        ? '[shop](https://shop.co.il/cdn/shop/files/a.png)'
+        : '# מונסטרה\n₪49';
+    },
+  });
+  const plan = buildQueryPlan({ original: 'Monstera', hebrew: 'מונסטרה' });
+  const res = await searcher.fetchSearchMarkdown('https://shop.co.il/', plan, 'shop.co.il');
+  assert.equal(res.retrieval, 'html');
+  assert.ok(scrapes.length > 0, 'the page path still reads the shop');
+});
+
+// --- the "did this shop search at all" judgement, and what it costs ---------
+
+/*
+ * A real WooCommerce results page, plus a homepage that is nothing like it, so
+ * `answeredQuery` has enough distinct lines on both sides to judge.
+ */
+function bigPage(marker: string): string {
+  const rows = Array.from(
+    { length: 40 },
+    (_, i) => `<a href="/product/${marker}-${i}/">${marker} ${i}</a> <span class="price">₪${40 + i}</span>`
+  ).join('\n');
+  return `<html><body>\n${rows}\n</body></html>`;
+}
+
+function htmlSearcher(over: Record<string, unknown> = {}) {
+  const compareCalls: string[] = [];
+  const searcher = createSearcher('fc-key', {
+    apiEnabled: false,
+    fetchHtml: async () => bigPage('monstera'),
+    fetchCompare: (async (url: string) => {
+      compareCalls.push(url);
+      return {
+        ok: true,
+        status: 200,
+        text: async () => bigPage(url.includes('zzqxwv') ? 'nothing-found' : 'monstera'),
+      };
+    }) as any,
+    scrape: async () => '# מונסטרה\n[m](https://shop.co.il/product/m/) ₪49',
+    ...over,
+  });
+  return { searcher, compareCalls };
+}
+
+/*
+ * The refetch this removes was a full round trip against someone else's server,
+ * per HTML-route shop, per search, to learn a status code the caller was
+ * already holding.
+ */
+test('the search page is not fetched twice to judge whether the shop searched', async () => {
+  const { searcher, compareCalls } = htmlSearcher();
+  await searcher.fetchSearchMarkdown('https://shop.co.il/', 'מונסטרה', 'shop.co.il');
+  const refetched = compareCalls.filter((u) => !u.includes('zzqxwv'));
+  assert.deepEqual(refetched, [], 'only the control page is read for the comparison');
+});
+
+/*
+ * The control page is a fact about the SHOP, not about the plant: it is the
+ * same page whatever we fail to find on it. A fan-out for two plants across a
+ * dozen shops was fetching each shop's copy of it twice over.
+ */
+test('the control page is read once per shop, not once per search', async () => {
+  const { searcher, compareCalls } = htmlSearcher();
+  await searcher.fetchSearchMarkdown('https://shop.co.il/', 'מונסטרה', 'shop.co.il');
+  await searcher.fetchSearchMarkdown('https://shop.co.il/', 'פיקוס', 'shop.co.il');
+  const controls = compareCalls.filter((u) => u.includes('zzqxwv'));
+  assert.equal(controls.length, 1);
+});
+
+test('two searches racing into one cold shop share a single control read', async () => {
+  let controls = 0;
+  const { searcher } = htmlSearcher({
+    fetchCompare: (async (url: string) => {
+      if (url.includes('zzqxwv')) controls += 1;
+      await new Promise((r) => setTimeout(r, 5));
+      return {
+        ok: true,
+        status: 200,
+        text: async () => bigPage(url.includes('zzqxwv') ? 'nothing-found' : 'monstera'),
+      };
+    }) as any,
+  });
+  await Promise.all([
+    searcher.fetchSearchMarkdown('https://shop.co.il/', 'מונסטרה', 'shop.co.il'),
+    searcher.fetchSearchMarkdown('https://shop.co.il/', 'פיקוס', 'shop.co.il'),
+  ]);
+  assert.equal(controls, 1);
+});
+
+/* The judgement itself must survive the plumbing change: a shop that hands back
+ * the SAME full page for a real plant and for a plant nobody stocks never
+ * searched, and its silence is not evidence of absence. */
+test('a shop that serves one page to every query is still caught', async () => {
+  const { searcher } = htmlSearcher({
+    /* No markdown, so the judgement rests on the raw pages - which is the case
+     * the control read exists for. */
+    scrape: async () => '',
+    fetchHtml: async () => bigPage('always-the-same'),
+    fetchCompare: (async () => ({
+      ok: true,
+      status: 200,
+      text: async () => bigPage('always-the-same'),
+    })) as any,
+  });
+  const res = await searcher.fetchSearchMarkdown('https://shop.co.il/', 'מונסטרה', 'shop.co.il');
+  assert.equal(res.answered, false);
+});
+
+// --- the page route answers from the page's own markup ----------------------
+
+/*
+ * A WooCommerce results grid as served: the name, the price and the product
+ * link are paired by the shop's own markup. The card reader is the thing that
+ * carries the structured path (SCRAPE-ACCURACY-PLAN phase 1), so these rows are
+ * the same quality of evidence the Store API hands back.
+ */
+function gridHtml(rows: { name: string; price: number }[]): string {
+  const cards = rows
+    .map(
+      (r) => `
+      <li class="product">
+        <a class="woocommerce-LoopProduct-link" href="https://shop.co.il/product/${encodeURIComponent(r.name)}/">
+          <h2 class="woocommerce-loop-product__title">${r.name}</h2>
+          <span class="price"><bdi>${r.price}&nbsp;<span>₪</span></bdi></span>
+        </a>
+      </li>`
+    )
+    .join('\n');
+  return `<html><body><ul class="products">${cards}</ul></body></html>`;
+}
+
+const REGAL_PLAN = buildQueryPlan({
+  original: 'Alocasia Regal Shield',
+  hebrew: 'אלוקסיה ריגל שילד',
+  latin: 'Alocasia Regal Shield',
+});
+
+test('a page whose grid names the plant costs no model call at all', async () => {
+  const html = gridHtml([
+    { name: 'אלוקסיה ריגל שילד 10 ליטר', price: 149 },
+    { name: 'אלוקסיה ריגל שילד', price: 189 },
+  ]);
+  const out = await extractAndVerifyPlants(
+    { markdown: '', html, url: 'https://shop.co.il/?s=x', query: 'Alocasia Regal Shield', site: 'shop.co.il', openaiKey: 'k', plan: REGAL_PLAN },
+    {
+      extract: async () => {
+        throw new Error('the page already stated these rows');
+      },
+      verify: async () => {
+        throw new Error('there is nothing to audit that the page did not say');
+      },
+      judge: async () => {
+        throw new Error('an exact match must never cost a model call');
+      },
+    }
+  );
+  assert.equal(out.funnel.stage, 'ok');
+  assert.equal(out.plants.length, 2);
+  assert.equal(out.engines.extractor, 'none');
+  assert.equal(out.engines.verifier, 'none');
+  /* The price is the page's own, to the agora, never a transcription of it. */
+  assert.ok(out.plants.some((p) => p.price === '₪149'));
+  assert.ok(out.plants.every((p) => p.url?.startsWith('https://shop.co.il/product/')));
+});
+
+/*
+ * The shelf around the plant must not travel with it: `cheapestMatch` takes the
+ * lowest price in whatever list comes back, so one weak row is enough to swap
+ * the answer for a cheaper different plant.
+ */
+test('a decisive page answer carries the plant, not the shelf it sat on', async () => {
+  const html = gridHtml([
+    { name: 'אלוקסיה ריגל שילד', price: 189 },
+    { name: 'אלוקסיה זברינה', price: 35 },
+  ]);
+  const out = await extractAndVerifyPlants(
+    { markdown: '', html, url: 'https://shop.co.il/?s=x', query: 'Alocasia Regal Shield', site: 'shop.co.il', openaiKey: 'k', plan: REGAL_PLAN },
+    { extract: async () => [], verify: async () => verdict(), judge: async () => [] }
+  );
+  assert.deepEqual(out.plants.map((p) => p.price), ['₪189']);
+});
+
+test('an uncertain page row is put to the adjudicator once, not to three passes', async () => {
+  const html = gridHtml([{ name: 'אלוקסיה ריגל', price: 120 }]);
+  let judged = 0;
+  const out = await extractAndVerifyPlants(
+    { markdown: '', html, url: 'https://shop.co.il/?s=x', query: 'Alocasia Regal Shield', site: 'shop.co.il', openaiKey: 'k', plan: REGAL_PLAN },
+    {
+      extract: async () => {
+        throw new Error('extraction is what this replaces');
+      },
+      verify: async () => {
+        throw new Error('verification is what this replaces');
+      },
+      judge: async (_q, names) => {
+        judged += 1;
+        return names.map((name) => ({ name, matches: true, reason: 'same plant, shorter title' }));
+      },
+    }
+  );
+  assert.equal(judged, 1);
+  assert.equal(out.plants.length, 1);
+  assert.equal(out.funnel.stage, 'ok');
+});
+
+test('a page row the adjudicator rejects is not offered to the user', async () => {
+  const html = gridHtml([{ name: 'אלוקסיה זברינה', price: 60 }]);
+  const out = await extractAndVerifyPlants(
+    { markdown: '', html, url: 'https://shop.co.il/?s=x', query: 'Alocasia Regal Shield', site: 'shop.co.il', openaiKey: 'k', plan: REGAL_PLAN },
+    {
+      extract: async () => [],
+      verify: async () => verdict(),
+      judge: async (_q, names) => names.map((name) => ({ name, matches: false, reason: 'a Zebrina is not a Regal Shield' })),
+    }
+  );
+  assert.deepEqual(out.plants, []);
+  assert.equal(out.funnel.stage, 'rejected');
+});
+
+/*
+ * The shortcut may only ever ADD answers. A grid whose cards do not name the
+ * plant at all falls through to the extraction pass exactly as before, because
+ * a card reader that missed something is not evidence the shop missed it.
+ */
+test('a grid of the wrong genus still falls through to the old extraction path', async () => {
+  const html = gridHtml([{ name: 'קומפוסט אורגני', price: 25 }]);
+  let extracted = 0;
+  const out = await extractAndVerifyPlants(
+    { markdown: '', html, url: 'https://shop.co.il/?s=x', query: 'Alocasia Regal Shield', site: 'shop.co.il', openaiKey: 'k', plan: REGAL_PLAN },
+    {
+      extract: async () => {
+        extracted += 1;
+        return [];
+      },
+      verify: async () => verdict(),
+      judge: async () => [],
+    }
+  );
+  assert.equal(extracted, 1, 'the model still gets its turn');
+  assert.equal(out.funnel.stage, 'no_match');
+});
+
+/* A caller that planned nothing has no tokens to rank with, so it keeps the
+ * behaviour it had - dashboard/server.ts passes a bare string. */
+test('without a plan the page route is unchanged', async () => {
+  const html = gridHtml([{ name: 'אלוקסיה ריגל שילד', price: 189 }]);
+  let extracted = 0;
+  await extractAndVerifyPlants(
+    { markdown: '', html, url: 'https://shop.co.il/?s=x', query: 'Alocasia Regal Shield', site: 'shop.co.il', openaiKey: 'k' },
+    {
+      extract: async () => {
+        extracted += 1;
+        return [];
+      },
+      verify: async () => verdict(),
+    }
+  );
+  assert.equal(extracted, 1);
+});
+
+// --- the excerpt: what the model sees when there is no structured data ------
+
+/*
+ * Markdown puts the currency symbol and the number on separate lines whenever
+ * the shop renders them from two spans. A lone ₪ has no adjacent digit and a
+ * lone 49.90 has no currency token, so the old filter rejected BOTH and the
+ * price was deleted before the model ever saw it.
+ */
+test('priceFocusedExcerpt: a price split across two lines survives', () => {
+  const md = ['##### [נענע](https://x.co.il/product/mint/)', '₪', '14.90'].join('\n');
+  const out = priceFocusedExcerpt(md);
+  assert.match(out, /₪14\.90/);
+});
+
+test('priceFocusedExcerpt: a number followed by its currency survives too', () => {
+  const md = ['##### [מרווה](https://x.co.il/product/sage/)', '49.90', 'ש"ח'].join('\n');
+  assert.match(priceFocusedExcerpt(md), /49\.90 ש"ח/);
+});
+
+/* al-haderech links its products at /items/{slug}, so its whole grid read as
+ * zero products - the one shape the permalink list still missed. */
+test('priceFocusedExcerpt: keeps al-haderech /items/ listings', () => {
+  const md = '[אלוקסיה ריגל שילד](https://al-haderech.co.il/items/alocasia-regal/)\n₪149';
+  assert.match(priceFocusedExcerpt(md), /items/);
+  assert.ok(scoreMarkdown(md, 'אלוקסיה') > 0);
+});
+
+/*
+ * A grid that writes the product name as plain text loses the name and keeps
+ * the number, leaving the model a column of prices to pair by guessing.
+ */
+test('priceFocusedExcerpt: a bare price keeps the name on the line above it', () => {
+  const md = ['מונסטרה דליסיוסה', '₪149', 'פיקוס כינורי', '₪118'].join('\n');
+  const out = priceFocusedExcerpt(md);
+  assert.match(out, /מונסטרה דליסיוסה\n₪149/);
+  assert.match(out, /פיקוס כינורי\n₪118/);
+});
+
+test('priceFocusedExcerpt: a price that already names its product pulls nothing in', () => {
+  const md = ['random footer line', '##### [נענע](https://x.co.il/product/mint/) ₪14'].join('\n');
+  assert.ok(!priceFocusedExcerpt(md).includes('footer line'));
+});
+
+test('priceFocusedExcerpt: only one line back, so the footer stays out', () => {
+  const md = ['cookie banner text', 'some other noise', '₪14.00'].join('\n');
+  const out = priceFocusedExcerpt(md);
+  assert.ok(!out.includes('cookie banner'));
+});
+
+test('priceFocusedExcerpt: a labelled price with the currency elsewhere is kept', () => {
+  assert.equal(priceFocusedExcerpt('מחיר: 49.90'), 'מחיר: 49.90');
+  /* And the rule that admits it must not admit opening hours. */
+  assert.equal(priceFocusedExcerpt('שעות פתיחה 9 עד 17'), '');
+});
+
+// --- the sitemap rescue: a shop whose own search does not work --------------
+
+/*
+ * yahalomr.co.il is the case. IIS, platform unknown, `/search?q=` is a 404, and
+ * it refuses our direct GET - so there is no page to read and the shop is
+ * reported as unreadable on every search. It still publishes a complete list of
+ * what it sells.
+ */
+const MONSTERA_PLAN = buildQueryPlan({
+  original: 'Monstera deliciosa',
+  hebrew: 'מונסטרה דליסיוסה',
+  latin: 'Monstera deliciosa',
+});
+
+function sitemapShop(productPaths: string[]): any {
+  const origin = 'https://yahalomr.co.il';
+  return async (url: string) => {
+    const path = new URL(url).pathname;
+    if (path === '/robots.txt') {
+      return { ok: true, status: 200, headers: new Headers(), text: async () => `Sitemap: ${origin}/sitemap.xml` };
+    }
+    if (path === '/sitemap.xml') {
+      const body = `<urlset>${productPaths
+        .map((p) => `<url><loc>${origin}${p}</loc></url>`)
+        .join('')}</urlset>`;
+      return { ok: true, status: 200, headers: new Headers(), text: async () => body };
+    }
+    return { ok: false, status: 404, headers: new Headers(), text: async () => '' };
+  };
+}
+
+/* A product page, server-rendered, with its price in its own markup. */
+const productPage = (name: string, price: number) => `
+  <html><body>
+    <h1 class="product_title">${name}</h1>
+    <p class="price"><bdi>${price}&nbsp;<span>₪</span></bdi></p>
+  </body></html>`;
+
+test('a shop whose search 404s is read from its sitemap instead', async () => {
+  clearSitemapCache();
+  const out = await extractAndVerifyPlants(
+    {
+      markdown: '',
+      html: '',
+      url: 'https://yahalomr.co.il/search?q=x',
+      query: 'Monstera deliciosa',
+      site: 'yahalomr.co.il',
+      openaiKey: 'k',
+      plan: MONSTERA_PLAN,
+      searchStatus: 404,
+    },
+    {
+      fetchSitemap: sitemapShop(['/product/monstera-deliciosa/', '/product/compost/']),
+      fetchProductHtml: async (u) =>
+        u.includes('monstera') ? productPage('מונסטרה דליסיוסה', 149) : '',
+      extract: async () => [],
+      verify: async () => verdict(),
+      judge: async (_q, names) => names.map((name) => ({ name, matches: true, reason: 'same plant' })),
+    }
+  );
+  assert.equal(out.funnel.stage, 'ok');
+  assert.equal(out.plants.length, 1);
+  assert.equal(out.plants[0].price, '₪149');
+  assert.equal(out.plants[0].url, 'https://yahalomr.co.il/product/monstera-deliciosa/');
+});
+
+test('a shop that serves its front page to every query is read from its sitemap', async () => {
+  clearSitemapCache();
+  const out = await extractAndVerifyPlants(
+    {
+      markdown: '# some shop\nwelcome',
+      html: '<html><body>welcome</body></html>',
+      url: 'https://yahalomr.co.il/?s=x',
+      query: 'Monstera deliciosa',
+      site: 'yahalomr.co.il',
+      openaiKey: 'k',
+      plan: MONSTERA_PLAN,
+      answered: false,
+    },
+    {
+      fetchSitemap: sitemapShop(['/product/monstera-deliciosa/']),
+      fetchProductHtml: async () => productPage('מונסטרה דליסיוסה', 149),
+      extract: async () => [],
+      verify: async () => verdict(),
+      judge: async (_q, names) => names.map((name) => ({ name, matches: true, reason: 'same plant' })),
+    }
+  );
+  assert.equal(out.plants.length, 1);
+});
+
+/*
+ * The gate. A shop that ANSWERED and did not list the plant has told us
+ * something; reading its whole sitemap to disagree would cost every shop in a
+ * fan-out a multi-megabyte fetch to confirm what it just said.
+ */
+test('a shop that answered and listed nothing is not made to read out its sitemap', async () => {
+  clearSitemapCache();
+  let sitemapReads = 0;
+  const out = await extractAndVerifyPlants(
+    {
+      markdown: '##### [פיקוס](https://yahalomr.co.il/product/ficus/)\n₪49',
+      html: '',
+      url: 'https://yahalomr.co.il/?s=x',
+      query: 'Monstera deliciosa',
+      site: 'yahalomr.co.il',
+      openaiKey: 'k',
+      plan: MONSTERA_PLAN,
+      answered: true,
+      searchStatus: 200,
+    },
+    {
+      fetchSitemap: (async (...args: any[]) => {
+        sitemapReads += 1;
+        return (sitemapShop([]) as any)(...args);
+      }) as any,
+      extract: async () => [],
+      verify: async () => verdict(),
+    }
+  );
+  assert.equal(sitemapReads, 0);
+  assert.equal(out.funnel.stage, 'no_match');
+});
+
+/*
+ * A slug is a shop's idea of a URL, not a product title, so a sitemap naming no
+ * candidate proves nothing. The shop must come back reported exactly as it was.
+ */
+test('a sitemap that names no candidate leaves the shop reported as unread', async () => {
+  clearSitemapCache();
+  const out = await extractAndVerifyPlants(
+    {
+      markdown: '',
+      html: '',
+      url: 'https://yahalomr.co.il/search?q=x',
+      query: 'Monstera deliciosa',
+      site: 'yahalomr.co.il',
+      openaiKey: 'k',
+      plan: MONSTERA_PLAN,
+      searchStatus: 404,
+    },
+    {
+      fetchSitemap: sitemapShop(['/product/12345/', '/product/ficus-lyrata/']),
+      fetchProductHtml: async () => {
+        throw new Error('nothing here names the plant, so nothing should be opened');
+      },
+      extract: async () => [],
+      verify: async () => verdict(),
+    }
+  );
+  assert.equal(out.funnel.stage, 'no_markdown', 'still "we could not read this shop"');
+  assert.deepEqual(out.plants, []);
 });

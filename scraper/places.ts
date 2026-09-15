@@ -79,8 +79,28 @@ export interface DiscoveredNursery {
 
 export interface DiscoverOpts {
   textQuery?: string; // search term; default Hebrew 'משתלה' (nursery)
+  /*
+   * The search terms to ask Places for, each one its own request, merged and
+   * deduped. Overrides `textQuery` when given.
+   *
+   * One term was leaving shops on the table for no reason but vocabulary: a
+   * business that files itself as a "חנות צמחים" is not a "משתלה" as far as
+   * Text Search is concerned, and it sells the same plants. Since the whole
+   * point of a search is whether ANY nearby shop has the plant, the set of
+   * shops we ask is the ceiling on every number downstream.
+   *
+   * Each term is a billed Places request, so this is deliberately short.
+   */
+  textQueries?: string[];
+  /*
+   * How many pages of each term to take. Places returns 20 per page and a
+   * `nextPageToken` for more. Default 1: a second page is another billed
+   * request, and at a 10km radius the first page is rarely full of shops that
+   * are actually inside it.
+   */
+  pages?: number;
   radiusM?: number; // circle radius in meters (Places allows 0–50000); default 5000
-  maxResults?: number; // cap how many sites we scrape downstream; default 10
+  maxResults?: number; // cap how many sites we scrape downstream; default 15
   /* Cap on contact-only places (no scrapable site) returned alongside them.
    * They cost nothing downstream - no scrape, no LLM call - so this is a
    * screen-space limit, not a budget one. 0 restores the old behaviour of
@@ -94,6 +114,30 @@ export interface DiscoverOpts {
 /* The most Places returns for one Text Search request. Filtering happens after
  * the response, so asking for fewer only throws away candidates unseen. */
 export const PLACES_PAGE_SIZE = 20;
+
+/*
+ * The vocabulary Israeli plant shops file themselves under.
+ *
+ * "משתלה" is what a nursery calls itself and stays first, because the primary
+ * term's results lead the merged list. "חנות צמחים" is the same business filed
+ * differently, and Text Search treats the two as unrelated strings - so a shop
+ * that chose the other words was simply never asked, whatever it had on the
+ * shelf. Two terms, because each one is a billed request.
+ */
+export const DEFAULT_TEXT_QUERIES = ['משתלה', 'חנות צמחים'];
+
+/*
+ * How many scrapable shops one search will read.
+ *
+ * Was 10, out of a 20-result page, and that cap was priced for a pipeline where
+ * every shop cost platform identification plus a rendered scrape plus two model
+ * calls. Most shops now answer from their own storefront JSON for one free
+ * request, and they are all read in parallel, so the cap was throwing away
+ * candidates that would have cost almost nothing to ask - and the set of shops
+ * asked is the ceiling on every number downstream. The per-site deadline and
+ * the fan-out's tail grace (see scraper/pipeline.ts) are what bound the time.
+ */
+export const DEFAULT_MAX_RESULTS = 15;
 
 const PLACES_SEARCH_URL = 'https://places.googleapis.com/v1/places:searchText';
 const PLACES_PHOTO_BASE = 'https://places.googleapis.com/v1/';
@@ -170,12 +214,18 @@ export async function discoverNurseries(
   const {
     textQuery = 'משתלה',
     radiusM = 5000,
-    maxResults = 10,
+    maxResults = DEFAULT_MAX_RESULTS,
     contactOnlyMax = 10,
     languageCode = 'he',
     regionCode = 'IL',
     richFields = false,
+    pages = 1,
   } = opts;
+  const terms = opts.textQueries?.length
+    ? opts.textQueries
+    : opts.textQuery
+      ? [textQuery]
+      : DEFAULT_TEXT_QUERIES;
 
   const baseMask =
     'places.displayName,places.location,places.websiteUri,places.formattedAddress';
@@ -183,17 +233,19 @@ export async function discoverNurseries(
     ',places.rating,places.userRatingCount,places.regularOpeningHours,places.nationalPhoneNumber,places.photos';
   const fieldMask = richFields ? baseMask + richMask : baseMask;
 
-  const res = await fetchImpl(PLACES_SEARCH_URL, {
+  const askFor = async (term: string, pageToken?: string) =>
+    fetchImpl(PLACES_SEARCH_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-Goog-Api-Key': apiKey,
-      'X-Goog-FieldMask': fieldMask,
+      'X-Goog-FieldMask': `${fieldMask},nextPageToken`,
     },
     body: JSON.stringify({
-      textQuery,
+      textQuery: term,
       languageCode,
       regionCode,
+      ...(pageToken ? { pageToken } : {}),
       /*
        * Ask for the page Places will give us, not for the number we intend to
        * keep. `maxResults` is a cap on shops to SCRAPE, and it was being applied
@@ -223,13 +275,45 @@ export async function discoverNurseries(
     }),
   });
 
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Places ${res.status} ${body.slice(0, 200)}`);
+  /*
+   * Every term, asked in parallel, merged in the order the terms were given.
+   *
+   * Order matters because `maxResults` is applied AFTER filtering: the primary
+   * term is what a nursery calls itself, so its results lead and the alternate
+   * vocabulary fills whatever room is left.
+   *
+   * A term that FAILS does not fail the search: one request 500ing is not a
+   * reason to tell a user there are no nurseries near them when another term
+   * just listed nine. Every term failing IS an error, and is thrown - an empty
+   * answer would send the pipeline to its fallback URL list as though Places
+   * had simply found nothing here.
+   */
+  const settled = await Promise.allSettled(
+    terms.map(async (term) => {
+      const found: any[] = [];
+      let token: string | undefined;
+      for (let page = 0; page < Math.max(1, pages); page++) {
+        const res = await askFor(term, token);
+        if (!res.ok) {
+          const body = await res.text().catch(() => '');
+          throw new Error(`Places ${res.status} ${body.slice(0, 200)}`);
+        }
+        const data: any = await res.json();
+        if (Array.isArray(data.places)) found.push(...data.places);
+        token = typeof data.nextPageToken === 'string' ? data.nextPageToken : undefined;
+        if (!token) break;
+      }
+      return found;
+    })
+  );
+  const answered = settled.filter(
+    (r): r is PromiseFulfilledResult<any[]> => r.status === 'fulfilled'
+  );
+  if (answered.length === 0) {
+    const first = settled[0];
+    throw first && first.status === 'rejected' ? first.reason : new Error('Places: no response');
   }
-
-  const data: any = await res.json();
-  const places = Array.isArray(data.places) ? data.places : [];
+  const places = answered.flatMap((r) => r.value);
 
   // Dedup by website host: chains return one place per branch (same site),
   // and scraping the same site N times is wasted Firecrawl/OpenAI cost.
