@@ -42,6 +42,7 @@ import {
   WEAK_MATCH,
   type QueryPlan,
 } from './queryPlan.ts';
+import { followProductPages, productLinks } from './productFollow.ts';
 
 export type Platform = 'shopify' | 'woo' | 'wix' | 'virtuemart' | 'unknown';
 
@@ -1552,6 +1553,13 @@ export interface ExtractDeps {
   /* The adjudicator. Injected so tests can settle the middle band without a
    * network call, the same way extraction and verification are. */
   judge?: typeof judgeMatches;
+  /*
+   * One plain GET, for the product-page follow. Injected like the three passes
+   * above so the follow is testable without a network, and defaulted to the
+   * same raw reader platform detection already uses - every product page this
+   * rescues is server-rendered, so nothing here needs a renderer.
+   */
+  fetchProductHtml?: (url: string) => Promise<string>;
 }
 
 /*
@@ -1696,11 +1704,22 @@ export async function extractAndVerifyPlants(
      * genus. Absent means no guard, which is the old behaviour.
      */
     plan?: QueryPlan;
+    /*
+     * Set on the recursive call the product-page follow makes, so a product
+     * page that itself prices nothing cannot start a second follow off its own
+     * "related products" links - which is how a two-page rescue becomes a crawl.
+     */
+    noFollow?: boolean;
   },
   deps: ExtractDeps = {}
 ): Promise<PipelineResult> {
   const { markdown, query, site, openaiKey, html = '', url = '', plan } = opts;
-  const { extract = extractPlants, verify = verifyPlantsWithGPT, judge = judgeMatches } = deps;
+  const {
+    extract = extractPlants,
+    verify = verifyPlantsWithGPT,
+    judge = judgeMatches,
+    fetchProductHtml = async (u: string) => (await fetchRawHtmlWithSchemeFallback(u)).html,
+  } = deps;
 
   /*
    * Structured data first (SCRAPE-ACCURACY-PLAN Phase 1). Measured on the 28
@@ -1727,6 +1746,93 @@ export async function extractAndVerifyPlants(
   });
 
   /*
+   * Last chance for a shop whose catalogue page names products and prices none.
+   *
+   * Every path that would report `no_match` comes through here first, because
+   * `no_match` is a CLAIM - "we read this shop's catalogue and the plant was
+   * not in it" - and a page that states no price cannot support it: the rows
+   * the extractor proposes are all dropped for want of a price, so the funnel
+   * closes identically whether or not the plant is on the shelf. mashtela's
+   * Joomla search is the case; its prices live one plain GET away on the
+   * product page.
+   *
+   * What gates it is the LINK TEXT, not a price count.
+   *
+   * Gating on "this page states no prices" was the obvious rule and it is
+   * wrong: measured live, mashtela's search page carries exactly one ₪ - the
+   * free-shipping banner - so the rescue never fired on the page it was written
+   * for. Banners, cart totals and phone numbers all read as prices, and no
+   * count separates a priced catalogue from a priceless one.
+   *
+   * Relevance does separate them, and costs nothing when it says no. Reaching
+   * here already means the extractor came back with zero priced rows; if the
+   * page ALSO links nothing whose text names the plant, there is nothing to
+   * follow and `productLinks` returns an empty list before any fetch. A shop
+   * that really does not stock the plant pays one HTML parse.
+   *
+   * The remaining guards keep a rescue from becoming a crawl: at most
+   * PRODUCT_FOLLOW_MAX pages, and never from inside a follow (`noFollow`).
+   *
+   * Returns null when there is nothing to rescue, and the caller reports what
+   * it was going to report anyway.
+   */
+  const followForPrices = async (): Promise<PipelineResult | null> => {
+    if (opts.noFollow || !openaiKey) return null;
+    if (!plan || !html.trim()) return null;
+
+    const links = productLinks(html, url, plan);
+    if (links.length === 0) return null;
+
+    const { plants, followed, priced, timedOut } = await followProductPages({
+      links,
+      query,
+      site,
+      openaiKey,
+      plan,
+      fetchProductHtml,
+      extract: (o) => extractAndVerifyPlants({ ...o, noFollow: true }, deps),
+    });
+    console.log(
+      `   [${site}] 🔗 followed ${followed} product page(s), priced ${priced}` +
+        (timedOut ? ' (abandoned on its own budget)' : '')
+    );
+    /*
+     * No adjudication pass here, deliberately. The link floor admits anything
+     * carrying the genus, so "מונסטרה מאנקי" IS fetched on a deliciosa search -
+     * correctly, it is a candidate - and the relevance question does have to be
+     * asked of the priced row. It already was: the recursive call above carries
+     * the same plan, so each product page adjudicates its own rows before
+     * returning them, and live that is what dropped the מאנקי
+     * ("Monstera adansonii, לא Monstera deliciosa"). Judging is per row against
+     * the same plan and query, so a second pass over the merged list could only
+     * re-ask a settled question at the price of another model call per shop.
+     */
+    if (plants.length === 0) return null;
+
+    return {
+      plants,
+      report: {
+        is_valid: true,
+        confidence_score: 85,
+        feedback: `priced from ${priced} of ${followed} product page(s) - the catalogue page listed them without prices`,
+        corrected_output: [],
+      },
+      engines: { extractor: OPENAI_MODEL, verifier: OPENAI_MODEL },
+      funnel: {
+        stage: 'ok',
+        mdChars: markdown.length,
+        excerptChars: excerpt.length,
+        extracted: plants.length,
+        kept: plants.length,
+        /* The prices we ended up with, not the banner the catalogue page showed.
+         * The funnel's `prices` is the evidence behind a "not stocked" claim,
+         * and after a successful follow that evidence exists. */
+        prices: plants.length,
+      },
+    };
+  };
+
+  /*
    * The shop answered in its own words, and ranking already read them.
    *
    * Two outcomes are settled before any model is involved:
@@ -1743,7 +1849,10 @@ export async function extractAndVerifyPlants(
    */
   if (opts.catalogueRead) {
     if (structured.length === 0) {
-      return empty('no_match', 'the shop catalogue was read and this plant was not in it');
+      return (
+        (await followForPrices()) ??
+        empty('no_match', 'the shop catalogue was read and this plant was not in it')
+      );
     }
     if (opts.decisive) {
       /*
@@ -1838,6 +1947,14 @@ export async function extractAndVerifyPlants(
   // so the call was a guaranteed no-op that still cost a full LLM round trip.
   // Most sites in a fan-out return zero matches, so this is the common path.
   if (extracted.length === 0) {
+    /*
+     * Zero extracted rows on a page that prices nothing is the mashtela shape:
+     * coercePlants requires a price, so the products the model DID read are
+     * dropped before they are counted, and this branch cannot tell that apart
+     * from a shop that genuinely lists none.
+     */
+    const rescued = await followForPrices();
+    if (rescued) return rescued;
     return {
       plants: [],
       report: {
