@@ -12,6 +12,7 @@ import {
   rememberProse,
   resolveForLanguage,
   needsCallFor,
+  staleIdsFor,
 } from './diagnosisProse.ts';
 
 const EN: any = {
@@ -124,7 +125,16 @@ test('an old record with no lang tag is read by its script', () => {
     languageOf({ ...EN, description: 'כלורוזה על Monstera deliciosa.', issues: [], treatments: [] } as any),
     'he'
   );
-  assert.equal(languageOf({ ...EN, lang: 'he' }), 'he', 'the tag wins when present');
+  /* An honest tag is the answer, and saves re-running the script test. */
+  assert.equal(languageOf({ ...EN, lang: 'en' }), 'en', 'the tag wins when the prose agrees');
+
+  /*
+   * The mirror of the poisoned record below: English prose wrongly tagged
+   * Hebrew. It used to be believed, which meant a Hebrew reader was shown
+   * English forever and the record was never queued to be fixed. The prose is
+   * the evidence; the tag is only a note about it.
+   */
+  assert.equal(languageOf({ ...EN, lang: 'he' }), 'en', 'a tag the prose contradicts is not believed');
 });
 
 test('resolving to the language it is already in stamps the tag and spends nothing', () => {
@@ -166,4 +176,90 @@ test('proseOf leaves names and numbers behind', () => {
   assert.equal(p.carePlan.waterEveryDays, undefined);
   assert.equal(p.treatments[0].product, undefined);
   assert.equal(p.treatments[0].productLabel, 'Balanced aroid fertilizer', 'falls back to the term');
+});
+
+/*
+ * The Portfolio screen re-reads its library every time a translation lands, so
+ * the plant array gets a NEW IDENTITY several times a second during a run.
+ * An effect keyed on that identity re-fired, started another pass, emitted,
+ * and re-fired itself - "Maximum update depth exceeded". Keying on WHICH
+ * plants are stale instead makes the answer stable across those reloads, so
+ * the effect fires only when the work genuinely changes.
+ */
+test('the stale set is the ids only, so it is stable across library reloads', () => {
+  const plants = [
+    { id: 'a', diagnosis: EN },
+    { id: 'b', diagnosis: undefined },
+    { id: 'c', diagnosis: EN },
+  ];
+  assert.deepEqual(staleIdsFor(plants, 'he'), ['a', 'c']);
+  assert.deepEqual(staleIdsFor(plants, 'en'), [], 'already in this language');
+
+  /* A fresh array of fresh objects holding the same records answers the same,
+   * which is the whole property the effect depends on. */
+  const reloaded = plants.map((p) => ({ ...p, diagnosis: p.diagnosis && { ...p.diagnosis } }));
+  assert.deepEqual(staleIdsFor(reloaded, 'he').join(','), staleIdsFor(plants, 'he').join(','));
+});
+
+test('a plant translated mid-run drops out of the stale set', () => {
+  const plants = [
+    { id: 'a', diagnosis: rememberProse(EN, 'he', HE_PROSE) },
+    { id: 'b', diagnosis: EN },
+  ];
+  assert.deepEqual(staleIdsFor(plants, 'he'), ['b'], 'only the one still owing a call');
+});
+
+/*
+ * THE POISONED RECORD.
+ *
+ * Both ends of the translate call fall back to the ORIGINAL text for any field
+ * the model did not return cleanly, and neither used to check that anything
+ * had changed. So one flaky answer produced a 200 carrying untouched Hebrew,
+ * which was filed as the English copy and stamped `lang: 'en'`.
+ *
+ * After that the record answered "already English" to every reader, was never
+ * queued again, and sat in Hebrew under English headings forever - no network
+ * involved, which is why it survived every fix to the transport.
+ *
+ * The prose is the evidence; the tag is only a note about it. When they
+ * plainly contradict each other, believe the prose.
+ */
+/* A record whose prose really is Hebrew, built the way a translated one is. */
+const HE: any = withProse(EN, HE_PROSE);
+
+const POISONED: any = {
+  ...HE,
+  lang: 'en',
+  translations: { en: proseOf(HE) },
+};
+
+test('a lang tag the prose plainly contradicts is not believed', () => {
+  assert.equal(languageOf(POISONED), 'he', 'the words are Hebrew, whatever the tag says');
+});
+
+test('a poisoned record is picked up for translation again', () => {
+  assert.ok(needsCallFor(POISONED, 'en'), 'it owes a call it was wrongly credited with');
+  assert.deepEqual(staleIdsFor([{ id: 'a', diagnosis: POISONED }], 'en'), ['a']);
+});
+
+test('the bogus cached copy is not handed back as a hit', () => {
+  const out = resolveForLanguage(POISONED, 'en');
+  assert.equal(out.hit, false, 'a cached copy in the wrong language is not a hit');
+});
+
+/*
+ * The distrust is deliberately narrow, matching `needsTranslation`: a record
+ * whose prose carries ANY Latin is left alone. A false positive costs a billed
+ * call and rewrites a record that was fine; a false negative just leaves the
+ * user reading what they are reading today.
+ */
+test('an honest tag is still authoritative', () => {
+  assert.equal(languageOf({ ...EN, lang: 'en' }), 'en');
+  assert.equal(languageOf({ ...HE, lang: 'he' }), 'he');
+  assert.ok(!needsCallFor({ ...EN, lang: 'en' }, 'en'));
+});
+
+test('a mixed-script record keeps its tag - the test stays conservative', () => {
+  const mixed: any = { ...HE, lang: 'en', description: `${HE.description} pH 6.5 Anthurium` };
+  assert.equal(languageOf(mixed), 'en', 'Latin present, so the tag is not overruled');
 });

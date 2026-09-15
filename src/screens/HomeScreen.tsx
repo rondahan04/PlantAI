@@ -1,7 +1,14 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Image } from 'react-native';
-import { Image as ExpoImage } from 'expo-image';
-import { photoCacheKey } from '../lib/media/photoCacheKey';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  Image,
+  AccessibilityInfo,
+} from 'react-native';
+import FramedPhoto from '../components/FramedPhoto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -12,6 +19,7 @@ import { plantRepo } from '../services/plants/plantRepoInstance';
 import { genusCarePlans } from '../services/plants/genusCarePlans';
 import { dueSoon, plantDisplayName } from '../lib/portfolio';
 import {
+  gardenState,
   greetingFor,
   needsCareCount,
   pickHeroPhoto,
@@ -43,6 +51,14 @@ type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Home'>;
 };
 
+/*
+ * The two "See all" links are 14pt text on a 20pt line box. 8pt of slop left
+ * them at 36pt of tappable height - under the 44pt floor, and on the screen a
+ * user taps first. The bell next to them is a 44x44 circle and always met it;
+ * these are text, so the target has to be bought with slop instead.
+ */
+const SEE_ALL_HIT_SLOP = { top: 12, bottom: 12, left: 12, right: 12 };
+
 /* Same glyph and tint per care kind as ScheduleCard and Portfolio, so a kind
  * is the same colour wherever the user meets it. */
 const KIND_ICON: Record<CareKind, { icon: keyof typeof Ionicons.glyphMap; tint: keyof Theme['color'] }> = {
@@ -63,6 +79,14 @@ export default function HomeScreen({ navigation }: Props) {
   const session = useSession();
   const [library, setLibrary] = useState(() => plantRepo.loadLocal());
   const plants = library.plants;
+  /*
+   * Whether the garden is readable at all, asked BEFORE anything is said about
+   * how many plants are in it. Every failure path in plantStore returns
+   * `plants: []`, so `plants.length === 0` cannot tell a corrupt library from a
+   * new user - and Home's empty state is written for the new user. See
+   * gardenState.
+   */
+  const garden = gardenState(library);
   const [profileName] = useState(() => onboarding.load()?.name);
 
   /* Coming back from the camera or a plant detail must not leave a stale count
@@ -76,6 +100,48 @@ export default function HomeScreen({ navigation }: Props) {
    * swap the photo mid-scroll.
    */
   const [heroRoll, setHeroRoll] = useState(() => Math.random());
+
+  /*
+   * Photos the strip has watched fail to load. Only the renderer can know this
+   * - a dead URI is a truthy string until something tries to fetch it - so
+   * onError feeds it back to stripFaces, which then treats it exactly like a
+   * plant with no photo at all. Without this the strip drew the grey box its
+   * own has-a-photo filter was written to prevent.
+   */
+  const [failedPhotos, setFailedPhotos] = useState<ReadonlySet<string>>(() => new Set());
+
+  /*
+   * Reduce Motion, read once. The hero re-rolls on EVERY focus, so its crossfade
+   * is not a one-off entrance animation - it fires each time the user opens the
+   * app or comes back to the tab, on the first screen they see. PortfolioScreen
+   * already reads this setting for its CTA pulse; Home animating regardless left
+   * two screens in one app disagreeing about whether the preference applies.
+   *
+   * Defaults to false so the animation is the fallback if the query fails: a
+   * missing fade is a smaller wrong than a screen that silently stops animating
+   * for everyone.
+   */
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((reduced) => {
+        if (alive) setReduceMotion(reduced);
+      })
+      .catch(() => {
+        /* a preference we could not read is not a reason to fail the screen */
+      });
+    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', (reduced) =>
+      setReduceMotion(reduced)
+    );
+    return () => {
+      alive = false;
+      sub.remove();
+    };
+  }, []);
+  const notePhotoFailed = useCallback((uri: string) => {
+    setFailedPhotos((prev) => (prev.has(uri) ? prev : new Set(prev).add(uri)));
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -107,7 +173,10 @@ export default function HomeScreen({ navigation }: Props) {
   );
   const groups = useMemo(() => taskGroups(due), [due]);
   const behind = needsCareCount(due);
-  const { shown, overflow } = useMemo(() => stripFaces(plants), [plants]);
+  const { shown, overflow } = useMemo(
+    () => stripFaces(plants, undefined, failedPhotos),
+    [plants, failedPhotos]
+  );
 
   const greeting = copy.home.greeting[greetingFor(new Date(now).getHours())];
   const title = profileName ? copy.home.greetingWithName(greeting, profileName) : greeting;
@@ -133,6 +202,14 @@ export default function HomeScreen({ navigation }: Props) {
     [plants, heroRoll]
   );
   heroPrevious.current = heroPhoto;
+
+  /* The hero is picked as a URI, so the plant behind it has to be found again
+   * to honour its framing. Cheap - the library is a dozen rows - and keeps
+   * `pickHeroPhoto` a pure choice between photos. */
+  const heroPlant = useMemo(
+    () => plants.find((p) => p.photoUri === heroPhoto),
+    [plants, heroPhoto]
+  );
 
   /* The same compact vocabulary the plant cards print, so "Today" on a card and
    * "Today" on a task tile are one string rather than two that can drift. */
@@ -169,17 +246,50 @@ export default function HomeScreen({ navigation }: Props) {
           </Pressable>
         </View>
 
+        {/*
+          The library could not be read, so say that before saying anything
+          else. Same copy as Portfolio's warning, deliberately: this is one
+          fact about one library, and two wordings for it would drift.
+        */}
+        {garden.kind === 'unreadable' && (
+          <View style={s.warnCard}>
+            <Ionicons name="alert-circle" size={20} color={t.color.warning} />
+            <View style={s.warnBody}>
+              <Text style={s.warnTitle}>
+                {garden.reason === 'future_version'
+                  ? copy.portfolio.warnFutureTitle
+                  : copy.portfolio.warnUnreadableTitle}
+              </Text>
+              <Text style={s.warnText}>
+                {garden.reason === 'future_version'
+                  ? copy.portfolio.warnFutureText
+                  : copy.portfolio.warnUnreadableText}
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* --- hero ------------------------------------------------------- */}
         <View style={s.hero}>
           <View style={s.heroTop}>
             <View style={s.heroHeadRow}>
               <Text style={s.heroEyebrow}>{copy.home.heroEyebrow}</Text>
-              <View style={s.heroCountPill}>
-                <Text style={s.heroCountText}>{copy.home.plantCount(plants.length)}</Text>
-              </View>
+              {/* A count is a claim about the library. Suppressed when the
+                  library did not load, because "0 plants" there is false. */}
+              {garden.kind !== 'unreadable' && (
+                <View style={s.heroCountPill}>
+                  <Text style={s.heroCountText}>{copy.home.plantCount(plants.length)}</Text>
+                </View>
+              )}
             </View>
             <Text style={s.heroTitle}>
-              {plants.length === 0 ? copy.home.heroEmptyTitle : copy.home.heroTitle}
+              {/*
+                The new-user invitation ("Start your garden with one photo.")
+                only fits a user who HAS no garden. An unreadable library keeps
+                the neutral headline: the camera still works, and that is the
+                one thing still true.
+              */}
+              {garden.kind === 'empty' ? copy.home.heroEmptyTitle : copy.home.heroTitle}
             </Text>
             <Pressable
               style={({ pressed }) => [s.heroCta, pressed && s.heroCtaPressed]}
@@ -198,13 +308,13 @@ export default function HomeScreen({ navigation }: Props) {
             </Pressable>
           </View>
           {heroPhoto !== undefined && (
-            <ExpoImage
-              source={{ uri: heroPhoto, cacheKey: photoCacheKey(heroPhoto) }}
+            <FramedPhoto
+              uri={heroPhoto}
+              focusY={heroPlant?.photoFocusY}
+              zoom={heroPlant?.photoZoom}
               style={s.heroPhoto}
-              contentFit="cover"
-              cachePolicy="memory-disk"
               recyclingKey={heroPhoto}
-              transition={160}
+              transition={reduceMotion ? 0 : 160}
             />
           )}
         </View>
@@ -216,7 +326,7 @@ export default function HomeScreen({ navigation }: Props) {
             <Pressable
               onPress={() => navigation.navigate('Home', { screen: 'Portfolio' })}
               accessibilityRole="button"
-              hitSlop={8}
+              hitSlop={SEE_ALL_HIT_SLOP}
             >
               <Text style={s.sectionLink}>{copy.home.tasksSeeAll}</Text>
             </Pressable>
@@ -224,10 +334,24 @@ export default function HomeScreen({ navigation }: Props) {
         </View>
 
         {groups.length === 0 ? (
-          <View style={s.emptyCard}>
-            <Ionicons name="checkmark-circle-outline" size={18} color={t.color.success} />
-            <Text style={s.emptyText}>{copy.home.tasksEmpty}</Text>
-          </View>
+          /*
+            "Nothing due this week. Your plants are set." is a green tick and an
+            all-clear. On a library we could not read it is the most damaging of
+            the three lines, because it does not merely mislead - it actively
+            reassures. No tasks were derived because no plants were, so the
+            honest answer is that we do not know.
+          */
+          garden.kind === 'unreadable' ? (
+            <View style={s.emptyCard}>
+              <Ionicons name="help-circle-outline" size={18} color={t.color.textMuted} />
+              <Text style={s.emptyText}>{copy.home.tasksUnknown}</Text>
+            </View>
+          ) : (
+            <View style={s.emptyCard}>
+              <Ionicons name="checkmark-circle-outline" size={18} color={t.color.success} />
+              <Text style={s.emptyText}>{copy.home.tasksEmpty}</Text>
+            </View>
+          )
         ) : (
           <View style={s.taskRow}>
             {groups.map((group) => (
@@ -246,7 +370,7 @@ export default function HomeScreen({ navigation }: Props) {
           <Pressable
             onPress={() => navigation.navigate('Home', { screen: 'Portfolio' })}
             accessibilityRole="button"
-            hitSlop={8}
+            hitSlop={SEE_ALL_HIT_SLOP}
           >
             <Text style={s.sectionLink}>{copy.home.plantsSeeAll}</Text>
           </Pressable>
@@ -257,17 +381,25 @@ export default function HomeScreen({ navigation }: Props) {
           onPress={() => navigation.navigate('Home', { screen: 'Portfolio' })}
           accessibilityRole="button"
           accessibilityLabel={
-            plants.length === 0
-              ? copy.home.emptyStrip
-              : `${copy.home.plantCount(plants.length)}, ${
-                  behind > 0 ? `${behind} ${copy.home.needsCare(behind)}` : copy.home.allHealthy
-                }`
+            garden.kind === 'unreadable'
+              ? copy.home.unreadableStrip
+              : garden.kind === 'empty'
+                ? copy.home.emptyStrip
+                : `${copy.home.plantCount(plants.length)}, ${
+                    behind > 0 ? `${behind} ${copy.home.needsCare(behind)}` : copy.home.allHealthy
+                  }`
           }
         >
-          {plants.length === 0 ? (
+          {garden.kind !== 'ready' ? (
             <>
               <Image source={LOGO_GLYPH} style={[s.stripGlyph, { tintColor: t.color.textMuted }]} />
-              <Text style={s.stripEmpty}>{copy.home.emptyStrip}</Text>
+              {/* "No plants yet. Diagnose one to get started." reads as a fresh
+                  install. On an unreadable library it reads as a deletion the
+                  user never performed - the precise sentence Portfolio exists
+                  to avoid. */}
+              <Text style={s.stripEmpty}>
+                {garden.kind === 'unreadable' ? copy.home.unreadableStrip : copy.home.emptyStrip}
+              </Text>
             </>
           ) : (
             <>
@@ -277,14 +409,15 @@ export default function HomeScreen({ navigation }: Props) {
                     of its own, so these faces were re-fetched from the network
                     on every launch even after the rest of the app stopped. */}
                 {shown.map((p, i) => (
-                  <ExpoImage
+                  <FramedPhoto
                     key={p.id}
-                    source={{ uri: p.photoUri, cacheKey: photoCacheKey(p.photoUri) }}
+                    uri={p.photoUri}
+                    focusY={p.photoFocusY}
+                    zoom={p.photoZoom}
                     style={[s.face, i > 0 && s.faceOverlap]}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
                     recyclingKey={p.id}
                     accessibilityLabel={plantDisplayName(p)}
+                    onError={() => notePhotoFailed(p.photoUri)}
                   />
                 ))}
                 {overflow > 0 && (
@@ -361,6 +494,18 @@ const makeStyles = (t: Theme) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: t.color.background },
     scroll: { padding: t.space.lg, paddingBottom: t.space.lg + TAB_BAR_CLEARANCE },
+
+    /* Same shape as Portfolio's warning card - one library, one look. */
+    warnCard: {
+      flexDirection: 'row',
+      backgroundColor: t.color.warningWash,
+      borderRadius: t.radius.lg,
+      padding: t.space.md,
+      marginTop: t.space.md,
+    },
+    warnBody: { flex: 1, marginStart: t.space.sm },
+    warnTitle: { ...t.type.bodyStrong, color: t.color.foreground },
+    warnText: { ...t.type.caption, color: t.color.textSecondary, marginTop: 2 },
 
     headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: t.space.md },
     headerText: { flex: 1 },

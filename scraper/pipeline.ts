@@ -766,6 +766,30 @@ async function scrapeOne(
 /* Sentinel for the per-site deadline; a unique object cannot collide with a result. */
 const BUDGET_EXPIRED = Symbol('site-budget-expired');
 
+/*
+ * One line per shop, per search: what it decided and how long it took to
+ * decide it. `scrapeOne` has a dozen return points (cache hit, contact-only,
+ * budget timeout, no_website, not_sold, found...) and duplicating a log call
+ * at each one would drift the moment a new branch was added. Wrapping the
+ * call instead means every path - including ones added later - is covered by
+ * construction. Always on: this is what answered "why didn't shop X show up"
+ * for a real search, and there is no Render dashboard access from here to
+ * pull it after the fact otherwise.
+ */
+function logShopOutcome(
+  host: string,
+  shipsToHome: boolean,
+  startedAt: number,
+  result: NurseryResult
+): NurseryResult {
+  const ms = Date.now() - startedAt;
+  console.log(
+    `[nursery-search] ${host} shipsToHome=${shipsToHome} outcome=${result.outcome ?? 'unknown'} ` +
+      `hasPlant=${result.hasPlant} price=${result.plantPrice} cached=${result.fromCache === true} in ${ms}ms`
+  );
+  return result;
+}
+
 export async function runNurserySearch(
   input: SearchInput,
   deps: PipelineDeps
@@ -827,18 +851,28 @@ export async function runNurserySearch(
   let national: NurseryResult[];
   try {
     [local, national] = await Promise.all([
-      Promise.all(discovered.map((n) => scrapeOne(n, input, deps, false, searchTerm, pacer))),
       Promise.all(
-        natUrls.map((url) =>
-          scrapeOne(
-            { name: hostOf(url), website: url, lat: 0, lng: 0, address: '' },
+        discovered.map((n) => {
+          const startedAt = Date.now();
+          const host = n.website ? hostOf(n.website) : n.name;
+          return scrapeOne(n, input, deps, false, searchTerm, pacer).then((r) =>
+            logShopOutcome(host, false, startedAt, r)
+          );
+        })
+      ),
+      Promise.all(
+        natUrls.map((url) => {
+          const startedAt = Date.now();
+          const host = hostOf(url);
+          return scrapeOne(
+            { name: host, website: url, lat: 0, lng: 0, address: '' },
             input,
             deps,
             true,
             searchTerm,
             pacer
-          )
-        )
+          ).then((r) => logShopOutcome(host, true, startedAt, r));
+        })
       ),
     ]);
   } finally {

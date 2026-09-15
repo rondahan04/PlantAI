@@ -121,6 +121,24 @@ export interface StoredPlant {
    */
   nickname?: string;
   /*
+   * Where the photo's crop should centre, as a fraction of the image HEIGHT -
+   * 0 the top edge, 1 the bottom. Absent means nobody has reframed it and the
+   * centre crop stands, which is exactly what `cover` did before this existed.
+   *
+   * Stored rather than derived because it is a judgement about the photograph
+   * that only the person who took it can make: a hand holding a leaf is the
+   * subject in one picture and an obstruction in the next, and no amount of
+   * looking at pixels tells them apart. See lib/media/photoFocus.ts.
+   */
+  photoFocusY?: number;
+  /*
+   * How close in, as a multiplier on the fit that exactly covers the frame.
+   * Absent means 1 - fills the frame, which is what every surface did before
+   * this existed. Below 1 shrinks the picture until all of it is visible.
+   * See lib/media/photoFocus.ts.
+   */
+  photoZoom?: number;
+  /*
    * ISO-8601, set when the user logs a watering. Absent means the schedule has
    * not been started - deliberately NOT defaulted to `savedAt`, because "you
    * watered this plant the day you photographed it" is a fact the app would be
@@ -649,6 +667,8 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
         | 'photoUri'
         | 'soilMedium'
         | 'nickname'
+        | 'photoFocusY'
+        | 'photoZoom'
         | 'catalogId'
         | 'species'
         /* Set long after the plant was saved: a hand-added plant has no

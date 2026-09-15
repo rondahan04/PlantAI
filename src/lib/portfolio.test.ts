@@ -72,6 +72,25 @@ test('a manual plant that was later scanned counts as diagnosed', () => {
   assert.deepEqual(filterPortfolio([both], 'diagnosed').map((p) => p.id), ['m1']);
 });
 
+test('the Watching filter keeps only mild or moderate diagnoses, not healthy or critical', () => {
+  const healthy = scanned('healthy', 1);
+  const mild = { ...scanned('mild', 1), diagnosis: { ...scanned('mild', 1).diagnosis!, condition: 'mild' as const } };
+  const moderate = {
+    ...scanned('moderate', 1),
+    diagnosis: { ...scanned('moderate', 1).diagnosis!, condition: 'moderate' as const },
+  };
+  const critical = {
+    ...scanned('critical', 1),
+    diagnosis: { ...scanned('critical', 1).diagnosis!, condition: 'critical' as const },
+  };
+  const undiagnosed = manual('m1');
+
+  assert.deepEqual(
+    filterPortfolio([healthy, mild, moderate, critical, undiagnosed], 'watching').map((p) => p.id),
+    ['mild', 'moderate']
+  );
+});
+
 test('dueSoon lists plants due or overdue within the window', () => {
   const plants = [
     scanned('overdue', 20, 7),

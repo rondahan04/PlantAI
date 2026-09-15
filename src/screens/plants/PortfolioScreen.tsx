@@ -47,8 +47,8 @@ import { diagnoseTargets, waterTargets } from '../../lib/care/bulkCare';
 import { bulkDiagnose } from '../../services/bulk/bulkDiagnoseInstance';
 import type { BulkProgress } from '../../services/bulk/bulkDiagnose';
 import { bulkTranslate } from '../../services/bulk/bulkTranslateInstance';
-import type { TranslateProgress } from '../../services/bulk/bulkTranslate';
-import { needsCallFor } from '../../lib/diagnosis/diagnosisProse';
+import { handledOf, type TranslateProgress } from '../../services/bulk/bulkTranslate';
+import { staleIdsFor } from '../../lib/diagnosis/diagnosisProse';
 import { getLanguage } from '../../services/language';
 import PlantCard from '../../components/PlantCard';
 import ImportBanner from '../../components/ImportBanner';
@@ -158,17 +158,53 @@ export default function PortfolioScreen({ navigation }: Props) {
    * plant is stale at once. Doing them lazily would put a fifteen-second wait
    * behind every tap; doing them here puts it behind the scroll instead.
    *
-   * Nearly always selects nothing: `needsCallFor` answers from the cache, so a
+   * Nearly always selects nothing: `staleIdsFor` answers from the cache, so a
    * library already in this language - or one translated on an earlier switch
    * and switched back - costs no call and shows no progress row. Guarded on
    * the plant list rather than run once on mount so a library that arrives
    * from the cloud after first paint is still covered.
+   *
+   * KEYED ON THE IDS, NOT THE ARRAY. The effect below re-reads the library
+   * every time a translation lands, so `library.plants` is a new array several
+   * times a second while a run is going. Depending on that identity made this
+   * effect re-fire, start another pass, emit, and re-fire itself - React gave
+   * up with "Maximum update depth exceeded". The id list only changes when the
+   * work genuinely does, which is the correct trigger: a plant finishing drops
+   * out of it, a plant arriving from the cloud joins it, and a pass that left
+   * everything exactly as stale as it found it does not run again.
+   */
+  const staleForTranslation = useMemo(
+    () => {
+      const lang = getLanguage();
+      const ids = new Set(staleIdsFor(library.plants, lang));
+      return library.plants.filter((p) => ids.has(p.id));
+    },
+    [library.plants]
+  );
+  const staleKey = staleForTranslation.map((p) => p.id).join(',');
+
+  useEffect(() => {
+    if (staleForTranslation.length > 0) void bulkTranslate.run(staleForTranslation);
+    /* `staleForTranslation` is deliberately not a dependency - it is a fresh
+     * array on every library reload, which is exactly the identity this effect
+     * must not react to. `staleKey` is the same information, stable. */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staleKey]);
+
+  /*
+   * Clear the finished row on its own.
+   *
+   * It is a receipt, not a decision: the user has nothing to do about it, and
+   * a green tick that sits there until tapped is indistinguishable from one
+   * that never went away - which is exactly how it read, reappearing on every
+   * launch and looking stuck. Long enough to be read, short enough not to be
+   * furniture. Cancel still needs a tap; only the done state expires.
    */
   useEffect(() => {
-    const lang = getLanguage();
-    const stale = library.plants.filter((p) => needsCallFor(p.diagnosis, lang));
-    if (stale.length > 0) void bulkTranslate.run(stale);
-  }, [library.plants]);
+    if (translating.state !== 'done') return;
+    const timer = setTimeout(() => bulkTranslate.dismiss(), 4000);
+    return () => clearTimeout(timer);
+  }, [translating.state]);
 
   /* Same as the diagnose job below: refresh the cards as translations land, so
    * a finished plant stops showing the old language while the rest run. */
@@ -298,6 +334,9 @@ export default function PortfolioScreen({ navigation }: Props) {
     () => ({
       all: library.plants.length,
       needsCare: library.plants.filter(behind).length,
+      watching: library.plants.filter(
+        (p) => p.diagnosis?.condition === 'mild' || p.diagnosis?.condition === 'moderate'
+      ).length,
       diagnosed: library.plants.filter((p) => p.diagnosis !== undefined).length,
     }),
     [library, behind]
@@ -471,6 +510,7 @@ export default function PortfolioScreen({ navigation }: Props) {
   const CHIP_A11Y: Record<PortfolioFilter, string> = {
     all: copy.portfolio.filterAllA11y,
     needsCare: copy.portfolio.filterNeedsCareA11y,
+    watching: copy.portfolio.filterWatchingA11y,
     diagnosed: copy.portfolio.filterDiagnosedA11y,
   };
 
@@ -742,37 +782,69 @@ export default function PortfolioScreen({ navigation }: Props) {
                 collapsing them into one row would have to pick a winner.
               */}
               {translating.state !== 'idle' && (
-                <View style={s.bulkProgress}>
-                  {translating.state === 'running' ? (
-                    <ActivityIndicator size="small" color={t.color.primary} />
-                  ) : (
-                    <Ionicons name="checkmark-circle" size={18} color={t.color.primary} />
-                  )}
-                  <View style={s.bulkProgressText}>
-                    <Text style={s.bulkProgressTitle} numberOfLines={1}>
-                      {translating.state === 'running'
-                        ? copy.bulkCare.translateRunning(translating.done, translating.total)
-                        : translating.failed > 0
-                          ? copy.bulkCare.translateDoneWithFailures(translating.done, translating.failed)
-                          : copy.bulkCare.translateDone(translating.done)}
-                    </Text>
-                    {translating.state === 'running' && translating.currentName !== undefined && (
-                      <Text style={s.bulkProgressSub} numberOfLines={1}>
-                        {translating.currentName}
-                      </Text>
+                <View style={[s.bulkProgress, s.bulkProgressStack]}>
+                  <View style={s.bulkProgressRow}>
+                    {translating.state === 'running' ? (
+                      <ActivityIndicator size="small" color={t.color.primary} />
+                    ) : (
+                      <Ionicons name="checkmark-circle" size={18} color={t.color.primary} />
                     )}
+                    <View style={s.bulkProgressText}>
+                      <Text style={s.bulkProgressTitle} numberOfLines={1}>
+                        {translating.state === 'running'
+                          ? /* Everything settled, not just what was paid for: a run
+                             * stuck on "1 of 11" while it walks a cached library is
+                             * the bar lying in the other direction. */
+                            copy.bulkCare.translateRunning(handledOf(translating), translating.total)
+                          : translating.failed > 0
+                            ? copy.bulkCare.translateDoneWithFailures(translating.done, translating.failed)
+                            : copy.bulkCare.translateDone(translating.done)}
+                      </Text>
+                      {translating.state === 'running' && translating.currentName !== undefined && (
+                        <Text style={s.bulkProgressSub} numberOfLines={1}>
+                          {translating.currentName}
+                        </Text>
+                      )}
+                    </View>
+                    <Pressable
+                      onPress={() =>
+                        translating.state === 'running' ? bulkTranslate.cancel() : bulkTranslate.dismiss()
+                      }
+                      hitSlop={10}
+                      accessibilityRole="button"
+                    >
+                      <Text style={s.bulkProgressAction}>
+                        {translating.state === 'running' ? copy.bulkCare.cancel : copy.bulkCare.dismiss}
+                      </Text>
+                    </Pressable>
                   </View>
-                  <Pressable
-                    onPress={() =>
-                      translating.state === 'running' ? bulkTranslate.cancel() : bulkTranslate.dismiss()
-                    }
-                    hitSlop={10}
-                    accessibilityRole="button"
-                  >
-                    <Text style={s.bulkProgressAction}>
-                      {translating.state === 'running' ? copy.bulkCare.cancel : copy.bulkCare.dismiss}
-                    </Text>
-                  </Pressable>
+
+                  {/*
+                    The bar. A count alone reads as a status line; a library of
+                    eleven at twelve seconds apart is over two minutes, and over
+                    two minutes the user wants to see the thing move.
+
+                    No absolute positioning - the fill is a plain child, so it
+                    grows from the right under RTL without a second rule.
+                  */}
+                  {translating.state === 'running' && translating.total > 0 && (
+                    <View
+                      style={s.bulkProgressTrack}
+                      accessibilityRole="progressbar"
+                      accessibilityValue={{
+                        min: 0,
+                        max: translating.total,
+                        now: handledOf(translating),
+                      }}
+                    >
+                      <View
+                        style={[
+                          s.bulkProgressFill,
+                          { width: `${Math.round((handledOf(translating) / translating.total) * 100)}%` },
+                        ]}
+                      />
+                    </View>
+                  )}
                 </View>
               )}
 
@@ -826,6 +898,7 @@ export default function PortfolioScreen({ navigation }: Props) {
               >
                 {renderChip('all', copy.portfolio.filterAll)}
                 {renderChip('needsCare', copy.portfolio.filterNeedsCare)}
+                {renderChip('watching', copy.portfolio.filterWatching)}
                 {renderChip('diagnosed', copy.portfolio.filterDiagnosed)}
               </ScrollView>
 
@@ -836,7 +909,11 @@ export default function PortfolioScreen({ navigation }: Props) {
               */}
               {visible.length === 0 && filter !== 'all' && (
                 <Text style={s.emptyFilter}>
-                  {filter === 'needsCare' ? copy.portfolio.noneNeedCare : copy.portfolio.noneDiagnosed}
+                  {filter === 'needsCare'
+                    ? copy.portfolio.noneNeedCare
+                    : filter === 'watching'
+                      ? copy.portfolio.noneWatching
+                      : copy.portfolio.noneDiagnosed}
                 </Text>
               )}
             </>
@@ -1042,6 +1119,19 @@ function makeStyles(t: Theme) {
       borderRadius: t.radius.lg,
       backgroundColor: t.color.surfaceMuted,
     },
+    /* The translate row is two stacked pieces (the line, then the bar), so it
+     * overrides the shared row direction rather than forking the whole style -
+     * the padding, radius and surface must stay identical to the diagnose row
+     * sitting directly beneath it. */
+    bulkProgressStack: { flexDirection: 'column', alignItems: 'stretch', gap: t.space.sm },
+    bulkProgressRow: { flexDirection: 'row', alignItems: 'center', gap: t.space.md },
+    bulkProgressTrack: {
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: t.color.border,
+      overflow: 'hidden',
+    },
+    bulkProgressFill: { height: '100%', borderRadius: 2, backgroundColor: t.color.primary },
     bulkProgressText: { flex: 1, gap: 2 },
     bulkProgressTitle: { ...t.type.bodyStrong, color: t.color.foreground, writingDirection: 'auto' },
     bulkProgressSub: { ...t.type.caption, color: t.color.textSecondary, writingDirection: 'auto' },

@@ -30,7 +30,7 @@ import { EN_WATERING_COPY, type WateringCopy, type WateringState } from './care/
  * renderer over this file, which is what keeps it a renderer.
  */
 
-export type PortfolioFilter = 'all' | 'needsCare' | 'diagnosed';
+export type PortfolioFilter = 'all' | 'needsCare' | 'watching' | 'diagnosed';
 
 /*
  * 'diagnosed' means HAS A DIAGNOSIS, not "arrived through the camera".
@@ -40,6 +40,12 @@ export type PortfolioFilter = 'all' | 'needsCare' | 'diagnosed';
  * photographed: that plant is still `addedVia: 'manual'` and now carries a real
  * finding. The filter is answering "which of my plants have I actually had
  * checked", which is a question about the diagnosis, so it reads the diagnosis.
+ *
+ * 'watching' means MILD OR MODERATE - past the point of nothing wrong, short of
+ * the point that reads as an emergency. 'severe'/'critical' plants already earn
+ * urgency from their card colour and from Needs care once they miss a watering;
+ * "watching" is for the ones a user should keep an eye on precisely because
+ * nothing else in the list is flagging them yet.
  *
  * Order is preserved rather than re-sorted. The list arrives newest first from
  * the store, and a filter that also reordered would make toggling the chip look
@@ -62,6 +68,11 @@ export function filterPortfolio(
 ): StoredPlant[] {
   if (filter === 'all') return plants;
   if (filter === 'needsCare') return isBehind ? plants.filter(isBehind) : plants;
+  if (filter === 'watching') {
+    return plants.filter(
+      (p) => p.diagnosis?.condition === 'mild' || p.diagnosis?.condition === 'moderate'
+    );
+  }
   return plants.filter((p) => p.diagnosis !== undefined);
 }
 

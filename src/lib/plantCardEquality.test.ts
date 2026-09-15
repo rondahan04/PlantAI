@@ -125,3 +125,15 @@ test('slot order matters - the row draws them in order', () => {
   const b = [slot({ kind: 'fertilizer' }), slot({ kind: 'water' })];
   assert.equal(sameSlots(a, b), false);
 });
+
+/*
+ * Repositioning a photo leaves its URI untouched, so a comparison that only
+ * watches the file would keep painting the old crop.
+ */
+test('a card repaints when only the photo framing changed', () => {
+  const before = plant();
+  const after = plant({ photoFocusY: 0.2 });
+  assert.equal(before.photoUri, after.photoUri, 'the file is identical - only the crop moved');
+  assert.ok(!samePlantCard({ plant: before }, { plant: after }));
+  assert.ok(samePlantCard({ plant: after }, { plant: plant({ photoFocusY: 0.2 }) }));
+});

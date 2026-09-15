@@ -7,7 +7,45 @@
  * eyeballed on a device at 6pm. The screen is a renderer over this file.
  */
 import { plantDisplayName, type DueItem } from './portfolio.ts';
-import type { CareKind, StoredPlant } from '../services/plants/plantStore';
+import type { CareKind, LoadFailure, LoadResult, StoredPlant } from '../services/plants/plantStore';
+
+/*
+ * What Home may honestly say about the garden, before it says anything about
+ * individual plants.
+ *
+ * WHY THIS IS A FUNCTION AND NOT `plants.length === 0`.
+ *
+ * `plantRepo.loadLocal()` returns `{ ok, plants }`, and every failure path in
+ * plantStore returns `plants: []`. So at the `.plants` level a corrupt blob and
+ * a brand-new user are byte-identical, and only `ok` separates them. Home read
+ * `.plants` alone and therefore answered a damaged library with its new-user
+ * script - in three places at once: "Start your garden with one photo.", "No
+ * plants yet. Diagnose one to get started.", and "Nothing due this week. Your
+ * plants are set."
+ *
+ * That is the exact conflation PortfolioScreen already refuses to make:
+ *
+ *     "A damaged library must never be reported as an empty one - 'you have no
+ *      plants' is indistinguishable from a deletion the user never performed."
+ *
+ * Portfolio is a tab the user chooses. Home is the first thing the app shows
+ * and the screen this file's own header calls the one "most likely to be looked
+ * at and not scrolled", so it is the worse place of the two to say it.
+ *
+ * `unreadable` outranks `empty` deliberately, and outranks `ready` too: the
+ * failure branch carries a `plants` array, and while every path returns [] now,
+ * the type permits a partial read. Half a garden presented as the whole one is
+ * the same lie in a quieter voice.
+ */
+export type GardenState =
+  | { kind: 'unreadable'; reason: LoadFailure }
+  | { kind: 'empty' }
+  | { kind: 'ready' };
+
+export function gardenState(library: LoadResult): GardenState {
+  if (!library.ok) return { kind: 'unreadable', reason: library.reason };
+  return library.plants.length === 0 ? { kind: 'empty' } : { kind: 'ready' };
+}
 
 export type Greeting = 'morning' | 'afternoon' | 'evening';
 
@@ -107,10 +145,23 @@ const STRIP_FACES = 3;
 
 export function stripFaces(
   plants: StoredPlant[],
-  faces: number = STRIP_FACES
+  faces: number = STRIP_FACES,
+  /*
+   * URIs the renderer has already watched fail. A photoUri is a string, so a
+   * dead one - an expired signed URL, a file deleted under the app - is truthy
+   * and walked straight past the has-a-photo filter below, drawing exactly the
+   * grey box that filter exists to prevent. Only the renderer learns a URL is
+   * dead (onError), so it is passed back in rather than guessed at here.
+   */
+  failed: ReadonlySet<string> = new Set()
 ): { shown: StoredPlant[]; overflow: number } {
-  const withPhoto = plants.filter((p) => p.photoUri !== undefined && p.photoUri !== '');
+  const withPhoto = plants.filter(
+    (p) => p.photoUri !== undefined && p.photoUri !== '' && !failed.has(p.photoUri)
+  );
   const ordered = [...withPhoto].sort((a, b) => Date.parse(b.savedAt) - Date.parse(a.savedAt));
+  /* Overflow counts the LIBRARY, not the drawable part of it: "+2" answers how
+   * many plants the user has, and a photo that failed to load must not quietly
+   * shrink it. */
   return { shown: ordered.slice(0, faces), overflow: Math.max(0, plants.length - faces) };
 }
 
