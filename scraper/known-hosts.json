@@ -50,11 +50,6 @@
     "at": 1788596941475,
     "template": "{origin}/?s={query}&post_type=product"
   },
-  "yifrach.co.il": {
-    "platform": "unknown",
-    "at": 1788597078470,
-    "template": "{origin}/?s={query}"
-  },
   "peer-nursery.co.il": {
     "platform": "woo",
     "at": 1788809769457
@@ -77,7 +72,7 @@
   },
   "balconi.co.il": {
     "platform": "woo",
-    "at": 1789289547466
+    "at": 1789462806023
   },
   "yahalomr.co.il": {
     "platform": "unknown",
@@ -99,5 +94,19 @@
     "at": 1789303832609,
     "api": "none",
     "apiAt": 1789303832609
+  },
+  "orchids-israel.co.il": {
+    "platform": "woo",
+    "at": 1789462772438
+  },
+  "green-village-nursery.com": {
+    "platform": "unknown",
+    "at": 1789462773080,
+    "api": "none",
+    "apiAt": 1789462773080
+  },
+  "plants4u.co.il": {
+    "platform": "woo",
+    "at": 1789462776101
   }
 }
