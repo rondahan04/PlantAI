@@ -28,7 +28,7 @@ import type { Language } from '../i18n/language';
 import type { PlantDiagnosis } from '../../types/index';
 /* Explicit `.ts` is required, not stylistic: without it `node --test`
  * cannot resolve a runtime import. Same as copy/index.ts. */
-import { scriptOf } from './diagnosisLanguage.ts';
+import { needsTranslation, scriptOf } from './diagnosisLanguage.ts';
 
 export interface DiagnosisProse {
   description: string;
@@ -91,13 +91,37 @@ export function withProse(d: PlantDiagnosis, prose: DiagnosisProse): PlantDiagno
 /*
  * Which language the top-level prose is in.
  *
- * `lang` is authoritative when present. It is absent on every record written
- * before this field existed - which is exactly the population that needs
- * sorting out - so those fall back to reading the script, the same test
- * `needsTranslation` has always used.
+ * `lang` is the answer when present AND the prose does not plainly contradict
+ * it. It is absent on every record written before this field existed - which
+ * is exactly the population that needs sorting out - so those fall back to
+ * reading the script.
+ *
+ * WHY THE TAG IS NOT SIMPLY BELIEVED. It used to be, on the assumption that
+ * only a real translation writes it. That assumption was wrong. Both ends of
+ * the translate call fall back to the ORIGINAL text for any field the model
+ * did not return cleanly, and neither checked that anything had changed - so
+ * one flaky answer came back as a 200 carrying untouched Hebrew, which was
+ * filed as the English copy and stamped `lang: 'en'`. From that moment the
+ * record answered "already English" to every reader, was never queued again,
+ * and sat in Hebrew under English headings permanently. No network was
+ * involved in keeping it that way, which is why it survived every fix aimed
+ * at the transport.
+ *
+ * `run` in services/bulk/diagnosisTranslation.ts now refuses to file a
+ * translation that changed nothing, so no NEW record can be poisoned. This is
+ * the other half: the records already written that way heal themselves on the
+ * next read, with no migration and no special case for the cloud copies.
+ *
+ * The disagreement has to be flagrant. `needsTranslation` is the existing
+ * conservative test - for English it demands Hebrew characters and no Latin
+ * letters anywhere - so a record quoting a binomial or a pH keeps its tag. A
+ * false positive costs a billed call and rewrites a record that was fine; a
+ * false negative only leaves the user reading what they are reading today.
  */
 export function languageOf(d: PlantDiagnosis): Language {
-  if (d.lang === 'he' || d.lang === 'en') return d.lang;
+  if (d.lang === 'he' || d.lang === 'en') {
+    return needsTranslation(d, d.lang) ? scriptOf(d) : d.lang;
+  }
   return scriptOf(d);
 }
 
@@ -144,8 +168,17 @@ export function resolveForLanguage(
     return { diagnosis: d.lang === lang ? d : { ...d, lang }, hit: true };
   }
 
+  /*
+   * A cached copy is only a hit if it is actually in the language it is filed
+   * under. The same bad answer that poisoned the tag also filed the original
+   * prose as the translation, and handing that back was the second way a
+   * record stayed stuck - the tag could be repaired above and this would put
+   * it straight back.
+   */
   const cached = d.translations?.[lang];
-  if (cached) return { diagnosis: rememberProse(d, lang, cached), hit: true };
+  if (cached && !needsTranslation(cached, lang)) {
+    return { diagnosis: rememberProse(d, lang, cached), hit: true };
+  }
 
   return { diagnosis: d, hit: false };
 }
@@ -157,4 +190,25 @@ export function needsCallFor(d: PlantDiagnosis | undefined, lang: Language): boo
   /* Nothing written down is nothing to translate - an empty diagnosis would
    * bill for turning nothing into nothing. */
   return proseOf(d).description.trim() !== '' || proseOf(d).issues.length > 0;
+}
+
+/*
+ * The ids of the plants a "translate everything" pass has to pay for.
+ *
+ * Exists so a caller can key on WHICH plants are stale rather than on the
+ * array holding them. The Portfolio screen re-reads its library every time a
+ * translation lands, handing an effect a brand-new array several times a
+ * second during a run; an effect keyed on that identity re-fired, started
+ * another pass, emitted, and re-fired itself until React gave up with
+ * "Maximum update depth exceeded". This answer is stable across those
+ * reloads and only changes when the work genuinely does.
+ *
+ * Takes the id and the diagnosis rather than a StoredPlant, so this module
+ * stays free of the store and `node --test` keeps covering it.
+ */
+export function staleIdsFor(
+  plants: readonly { id: string; diagnosis?: PlantDiagnosis }[],
+  lang: Language
+): string[] {
+  return plants.filter((p) => needsCallFor(p.diagnosis, lang)).map((p) => p.id);
 }

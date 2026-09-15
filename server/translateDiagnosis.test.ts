@@ -132,3 +132,43 @@ test('an oversized request is rejected before it reaches the model', () => {
     /text is too long/
   );
 });
+
+/*
+ * A 200 carrying the text we sent is not a translation.
+ *
+ * `applyTranslation` falls back to the ORIGINAL for every field the model did
+ * not return cleanly - deliberately, so a bad answer cannot put a hole in a
+ * record. But when EVERY field falls back there is nothing left to hand over,
+ * and answering 200 with the input is how the client came to file untouched
+ * Hebrew as the English copy and stamp the record as translated. That record
+ * then claimed to be English forever and was never queued again.
+ *
+ * So: nothing changed is a failure, and says so.
+ */
+test('a model answer that changes nothing is a failure, not a 200', async () => {
+  const fields = {
+    description: 'הצמח חי אך יש כלורוזה נרחבת.',
+    issues: ['הצהבה נרחבת.'],
+    treatments: [{ title: 'לספק תזונה מאוזנת', description: 'דשנו קלות.', productLabel: 'דשן מאוזן' }],
+  };
+  await assert.rejects(
+    () => translateDiagnosis(fields, { askModel: async () => '{}' }, 'en'),
+    (err: any) => err.name === 'TranslateError' && /nothing/i.test(err.detail),
+    'an empty answer falls back to every original, which is no translation at all'
+  );
+});
+
+test('a partial answer still counts - one real line is a translation', async () => {
+  const fields = {
+    description: 'הצמח חי אך יש כלורוזה נרחבת.',
+    issues: ['הצהבה נרחבת.'],
+    treatments: [],
+  };
+  const out = await translateDiagnosis(
+    fields,
+    { askModel: async () => JSON.stringify({ description: 'The plant is alive.' }) },
+    'en'
+  );
+  assert.equal(out.description, 'The plant is alive.');
+  assert.equal(out.issues[0], fields.issues[0], 'the line it skipped keeps its own words');
+});

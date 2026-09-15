@@ -132,6 +132,14 @@ export const he: Copy = {
     urgent: 'דחוף',
     findProduct: (product: string) => `למצוא ${product} בסביבה`,
     findProductA11y: (product: string) => `למצוא ${product} במשתלות בסביבתכם`,
+    /* ראו lib/diagnosis/treatmentShop.ts - מוצרים עם ספק ידוע נפתחים בחנות
+     * ולא בסריקת משתלות. לפי ספק, כי כל חנות מוכרת דבר אחר. */
+    buyShop: {
+      nutrient: 'קנה דישון לארואידים עכשיו!',
+      neem: 'קנו שמן נים עכשיו!',
+      fungicide: 'קנו קוטל פטריות עכשיו!',
+    },
+    buyShopA11y: 'פתחו את החנות בדפדפן',
     replaceOr: 'או להחליף בצמח בריא',
     replaceTitle: 'למצוא תחליף בריא',
     replaceDesc: (name: string) =>
@@ -269,6 +277,10 @@ export const he: Copy = {
     subtitle: (name: string) => `עריכת ${name}`,
     photo: 'תמונה',
     photoHint: 'אפשר להחליף את התמונה או להשאיר אותה כמו שהיא.',
+    /* מוצג רק כשהתמונה גבוהה מהמסגרת - אין מה לגרור כשהכול כבר נכנס. */
+    reframeHint: 'גררו למיקום, צבטו לזום.',
+    resetFraming: 'איפוס',
+    reframeA11y: 'מיקום התמונה. החליקו למעלה או למטה כדי לשנות איזה חלק מוצג.',
     camera: 'מצלמה',
     library: 'גלריה',
     takePhoto: 'צילום תמונה חדשה',
@@ -495,6 +507,14 @@ export const he: Copy = {
     urgent: 'דחוף',
     findProduct: (product: string) => `למצוא ${product} בסביבה`,
     findProductA11y: (product: string) => `למצוא ${product} במשתלות בסביבתכם`,
+    /* ראו lib/diagnosis/treatmentShop.ts - מוצרים עם ספק ידוע נפתחים בחנות
+     * ולא בסריקת משתלות. לפי ספק, כי כל חנות מוכרת דבר אחר. */
+    buyShop: {
+      nutrient: 'קנה דישון לארואידים עכשיו!',
+      neem: 'קנו שמן נים עכשיו!',
+      fungicide: 'קנו קוטל פטריות עכשיו!',
+    },
+    buyShopA11y: 'פתחו את החנות בדפדפן',
     careSchedule: 'לוח טיפול',
     findAtNursery: 'חפש לי את הצמח הזה במשתלה קרובה',
     findingNurseries: 'מחפשים משתלות...',
@@ -633,6 +653,7 @@ export const he: Copy = {
     tasksTitle: 'משימות קרובות',
     tasksSeeAll: 'הצגת הכול',
     tasksEmpty: 'אין משימות השבוע. הצמחים שלך מסודרים.',
+    tasksUnknown: 'אי אפשר לבדוק טיפול עד שהצמחים ייטענו.',
     taskOthers: (n: number) => (n === 1 ? 'ועוד אחד' : `ועוד ${n}`),
     taskKind: {
       water: 'השקיית צמחים',
@@ -644,6 +665,7 @@ export const he: Copy = {
     needsCare: (n: number) => (n === 1 ? 'זקוק לטיפול קטן' : 'זקוקים לטיפול קטן'),
     allHealthy: 'הכול במצב טוב',
     emptyStrip: 'עוד אין צמחים. אבחנו אחד כדי להתחיל.',
+    unreadableStrip: 'לא הצלחנו לטעון את הצמחים שלך. הם לא נמחקו.',
     a11yHero: 'אבחון צמח באמצעות המצלמה',
     a11yTask: (kind: string, plants: string, when: string) => `${kind}, ${plants}, ${when}`,
   },

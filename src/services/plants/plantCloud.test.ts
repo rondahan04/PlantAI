@@ -40,6 +40,10 @@ function row(over: Partial<CloudRow> & Pick<CloudRow, 'id' | 'user_id' | 'saved_
     species: null,
     soil_medium: null,
     nickname: null,
+    /* Null, not 0.5: this is also the shape a client sees when it runs against
+     * a database that has not taken the photo_focus_y migration. */
+    photo_focus_y: null,
+    photo_zoom: null,
     last_watered_at: null,
     watering_log: [],
     leaf_log: [],
@@ -372,4 +376,26 @@ test('replacePhoto: a failed upload never patches the row', async () => {
   const result = await cloud.replacePhoto('u1', 'p1', 'second.png');
   assert.equal(result.ok, false);
   assert.equal(rows.get('p1')?.photo_path, before);
+});
+
+/*
+ * The framing has to survive the round trip like any other field. It is one
+ * number, which is exactly the kind of thing that gets added to `toRow` and
+ * forgotten in `toStoredPlant` - and the symptom would be a crop that resets
+ * itself the next time the library loads from the cloud.
+ */
+test('photo framing survives the cloud round trip', async () => {
+  const { deps } = fakeDeps({
+    rows: [row({ id: 'p1', user_id: 'u1', saved_at: '2026-08-01T00:00:00.000Z', photo_focus_y: 0.2 })],
+  });
+  const plants = await createCloudPlantLibrary(deps).fetchAll();
+  assert.equal(plants[0].photoFocusY, 0.2);
+});
+
+test('a row from a database without the column reads as absent, not as a crop', async () => {
+  const { deps } = fakeDeps({
+    rows: [row({ id: 'p1', user_id: 'u1', saved_at: '2026-08-01T00:00:00.000Z' })],
+  });
+  const plants = await createCloudPlantLibrary(deps).fetchAll();
+  assert.equal(plants[0].photoFocusY, undefined, 'so every reader falls back to the centre');
 });

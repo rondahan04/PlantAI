@@ -61,6 +61,11 @@ export function samePlantCard(a: PlantCardShape, b: PlantCardShape): boolean {
   return (
     p.id === q.id &&
     p.photoUri === q.photoUri &&
+    /* The framing, not just the file. Reposition a photo and the URI is
+     * unchanged, so without this the card keeps the old crop until something
+     * unrelated invalidates the row. */
+    p.photoFocusY === q.photoFocusY &&
+    p.photoZoom === q.photoZoom &&
     p.savedAt === q.savedAt &&
     p.addedVia === q.addedVia &&
     p.diagnosis?.condition === q.diagnosis?.condition &&

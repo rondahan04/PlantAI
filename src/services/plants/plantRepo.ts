@@ -1,3 +1,6 @@
+/* Explicit `.ts`: a runtime import that `node --test` has to resolve.
+ * Same rule as diagnosisProse.ts and copy/index.ts. */
+import { readFocusY, readZoom } from '../../lib/media/photoFocus.ts';
 import type { PlantDiagnosis } from '../../types/index';
 import type { CareKind, PlantStore, StoredPlant, LoadResult } from './plantStore';
 import type { CloudPlantLibrary, ImportBatchResult, ManualInput } from './plantCloud';
@@ -410,7 +413,7 @@ export function createPlantRepo(deps: RepoDeps) {
 
   async function update(
     id: string,
-    patch: Partial<Pick<StoredPlant, 'reminderId' | 'soilMedium' | 'nickname'>>
+    patch: Partial<Pick<StoredPlant, 'reminderId' | 'soilMedium' | 'nickname' | 'photoFocusY' | 'photoZoom'>>
   ): Promise<RepoResult<{ plant: StoredPlant }>> {
     if (!isLoggedIn()) {
       const result = guest.update(id, patch);
@@ -424,13 +427,18 @@ export function createPlantRepo(deps: RepoDeps) {
     if ('reminderId' in patch) cloudPatch.reminderId = patch.reminderId ?? null;
     if ('soilMedium' in patch) cloudPatch.soilMedium = patch.soilMedium ?? null;
     if ('nickname' in patch) cloudPatch.nickname = patch.nickname ?? null;
+    /* No `?? null`: the column is NOT NULL, and "unset the framing" means the
+     * centre, not an absent value. `readFocusY` in plantCloud turns undefined
+     * back into 0.5. */
+    if ('photoFocusY' in patch) cloudPatch.photoFocusY = readFocusY(patch.photoFocusY);
+    if ('photoZoom' in patch) cloudPatch.photoZoom = readZoom(patch.photoZoom);
     const cloudResult = await cloud.updatePlant(id, cloudPatch);
     if (!cloudResult.ok) return { ok: false, reason: cloudResult.reason };
 
     const fresh = mirror.load().plants;
     const latest = fresh.find((p) => p.id === id) ?? current;
     const updated: StoredPlant = { ...latest, ...patch };
-    for (const key of ['reminderId', 'soilMedium', 'nickname'] as const) {
+    for (const key of ['reminderId', 'soilMedium', 'nickname', 'photoFocusY', 'photoZoom'] as const) {
       if (key in patch && patch[key] === undefined) delete updated[key];
     }
     mirror.replace(fresh.map((p) => (p.id === id ? updated : p)));

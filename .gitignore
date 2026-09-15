@@ -85,3 +85,6 @@ photos_for_testing/
 
 # Run artifact from scripts/funnel-tally.ts - a measurement, not source.
 scraper/funnel-tally.json
+
+# gstack skill runtime state - local only, not source
+.gstack/

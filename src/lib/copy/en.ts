@@ -171,6 +171,17 @@ export const en = {
     urgent: 'URGENT',
     findProduct: (product: string) => `Find ${product} nearby`,
     findProductA11y: (product: string) => `Find ${product} at nurseries near you`,
+    /* Products with a known supplier skip the nursery scrape - see
+     * lib/diagnosis/treatmentShop.ts. Keyed by supplier rather than built from
+     * the product name: each shop sells one thing, and the words should say
+     * which. Getting this wrong is worse than a broken link, because
+     * "Get Aroid Fertilizer now!" on a neem oil card looks perfectly fine. */
+    buyShop: {
+      nutrient: 'Get Aroid Fertilizer now!',
+      neem: 'Get Neem Oil now!',
+      fungicide: 'Get Fungicide now!',
+    },
+    buyShopA11y: 'Open the shop in your browser',
     replaceOr: 'Or replace with a healthy one',
     replaceTitle: 'Find a healthy replacement',
     replaceDesc: (name: string) =>
@@ -313,6 +324,11 @@ export const en = {
     subtitle: (name: string) => `Editing ${name}`,
     photo: 'Photo',
     photoHint: 'Replace the picture, or leave it as it is.',
+    /* Shown only when the photo is actually taller than its frame - there is
+     * nothing to drag when the whole picture already fits. */
+    reframeHint: 'Drag to reposition, pinch to zoom.',
+    resetFraming: 'Reset',
+    reframeA11y: 'Reposition the photo. Swipe up or down to change which part is shown.',
     camera: 'Camera',
     library: 'Library',
     takePhoto: 'Take a new photo',
@@ -592,6 +608,17 @@ export const en = {
     urgent: 'URGENT',
     findProduct: (product: string) => `Find ${product} nearby`,
     findProductA11y: (product: string) => `Find ${product} at nurseries near you`,
+    /* Products with a known supplier skip the nursery scrape - see
+     * lib/diagnosis/treatmentShop.ts. Keyed by supplier rather than built from
+     * the product name: each shop sells one thing, and the words should say
+     * which. Getting this wrong is worse than a broken link, because
+     * "Get Aroid Fertilizer now!" on a neem oil card looks perfectly fine. */
+    buyShop: {
+      nutrient: 'Get Aroid Fertilizer now!',
+      neem: 'Get Neem Oil now!',
+      fungicide: 'Get Fungicide now!',
+    },
+    buyShopA11y: 'Open the shop in your browser',
     careSchedule: 'Care schedule',
     findAtNursery: 'Find this plant at a nursery',
     findingNurseries: 'Finding nurseries...',
@@ -766,6 +793,12 @@ export const en = {
     tasksTitle: 'Upcoming tasks',
     tasksSeeAll: 'See all',
     tasksEmpty: 'Nothing due this week. Your plants are set.',
+    /*
+     * Shown instead of tasksEmpty when the library could not be read. No tasks
+     * were derived because no plants were, so an all-clear would be a claim we
+     * have no basis for - and a reassuring one, which is worse than a blank.
+     */
+    tasksUnknown: "Care can't be checked until your plants load.",
     taskOthers: (n: number): string => (n === 1 ? '+ 1 other' : `+ ${n} others`),
     taskKind: {
       water: 'Water plants',
@@ -777,6 +810,12 @@ export const en = {
     needsCare: (n: number): string => (n === 1 ? 'needs a little care' : 'need a little care'),
     allHealthy: 'all doing well',
     emptyStrip: 'No plants yet. Diagnose one to get started.',
+    /*
+     * The same slot as emptyStrip, for a library that failed to load rather
+     * than one that is genuinely empty. "No plants yet" would read to a user
+     * with a full garden as a deletion they never performed.
+     */
+    unreadableStrip: 'Your plants could not be loaded. They have not been deleted.',
     a11yHero: 'Diagnose a plant with the camera',
     a11yTask: (kind: string, plants: string, when: string) => `${kind}, ${plants}, ${when}`,
   },

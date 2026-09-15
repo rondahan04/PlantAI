@@ -199,7 +199,43 @@ export async function translateDiagnosis(
     throw new TranslateError(`not JSON: ${answer.slice(0, 300)}`);
   }
 
-  return applyTranslation(fields, parsed);
+  const translated = applyTranslation(fields, parsed);
+
+  /*
+   * Every field fell back to the original, so nothing was translated.
+   *
+   * Reported as a failure rather than returned as a 200. The fallbacks above
+   * exist so a bad answer cannot put a HOLE in a record - but when all of them
+   * fire there is no translation to hand over, and answering 200 with the
+   * caller's own text is worse than saying so: the client files it as the
+   * translated copy, stamps the record with the target language, and from then
+   * on the record claims to be in a language it is not, is never queued again,
+   * and shows the wrong language permanently.
+   *
+   * A PARTIAL answer is still a translation and is returned as normal. The
+   * line the model skipped keeps its own words, which is the documented
+   * behaviour and visibly imperfect rather than silently wrong.
+   */
+  if (sameProse(translated, fields)) {
+    throw new TranslateError('the model returned nothing that differed from the input');
+  }
+
+  return translated;
+}
+
+/* Field by field, did anything actually move? */
+function sameProse(a: TranslatableFields, b: TranslatableFields): boolean {
+  const flat = (f: TranslatableFields): string[] => [
+    f.description,
+    ...f.issues,
+    ...f.treatments.flatMap((t) => [t.title, t.description, t.productLabel]),
+    ...(f.carePlan
+      ? [f.carePlan.light, f.carePlan.water, f.carePlan.humidity, f.carePlan.soil, ...f.carePlan.warnings]
+      : []),
+  ];
+  const x = flat(a);
+  const y = flat(b);
+  return x.length === y.length && x.every((line, i) => line === y[i]);
 }
 
 /*
