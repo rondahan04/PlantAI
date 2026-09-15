@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Image, Alert, Linking } from 'react-native';
 import FramedPhoto from '../../components/FramedPhoto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RouteProp } from '@react-navigation/native';
+import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../../types/index';
 import { Theme, useTheme } from '../../theme/index';
 import { directionalIconStyle, iconRow } from '../../lib/i18n/rtl';
@@ -114,6 +114,20 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
 
   const [plant, setPlant] = useState(() =>
     plantRepo.loadLocal().plants.find((p) => p.id === plantId) ?? null
+  );
+
+  /*
+   * EditPlantScreen writes through the repo (mirror + cloud) and just calls
+   * `navigation.goBack()` - it never hands its result back here. Without this,
+   * `plant` stayed the pre-edit snapshot from mount: the framing/photo/nickname
+   * edit had genuinely saved, but this screen kept showing the old one, which
+   * reads as "the edit didn't save". Home and Portfolio already reload on
+   * focus for the same reason; this screen was the one place that didn't.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      setPlant(plantRepo.loadLocal().plants.find((p) => p.id === plantId) ?? null);
+    }, [plantId])
   );
   const [watering, setWatering] = useState(false);
   /* New growth writes through the same repo as everything else, which is a
