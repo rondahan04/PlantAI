@@ -712,12 +712,14 @@ export const en = {
     title: 'Portfolio',
     filterAll: 'All',
     filterNeedsCare: 'Needs care',
+    filterWatching: 'Watching',
     filterDiagnosed: 'Diagnosed',
     /* The count rides inside the chip - "All (12)" - so a user can see the size
      * of each slice before spending a tap finding out. */
     filterCount: (label: string, n: number): string => `${label} (${n})`,
     filterAllA11y: 'Show all plants',
     filterNeedsCareA11y: 'Show only plants that are due or overdue for care',
+    filterWatchingA11y: 'Show only plants with a mild or moderate diagnosis to keep an eye on',
     filterDiagnosedA11y: 'Show only plants you have diagnosed',
     dueThisWeek: 'Due this week',
     dueMore: (n: number) => `+${n} more - tap to show all`,
@@ -730,6 +732,7 @@ export const en = {
      * data loss.
      */
     noneNeedCare: 'Nothing is due right now. Every plant is on schedule.',
+    noneWatching: 'Nothing to watch right now. No plant has a mild or moderate diagnosis.',
     noneDiagnosed: 'None of your plants have been diagnosed yet. Scan one to see what it needs.',
     /*
      * A damaged library must never be reported as an empty one: "you have no

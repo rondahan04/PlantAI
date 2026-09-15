@@ -334,6 +334,9 @@ export default function PortfolioScreen({ navigation }: Props) {
     () => ({
       all: library.plants.length,
       needsCare: library.plants.filter(behind).length,
+      watching: library.plants.filter(
+        (p) => p.diagnosis?.condition === 'mild' || p.diagnosis?.condition === 'moderate'
+      ).length,
       diagnosed: library.plants.filter((p) => p.diagnosis !== undefined).length,
     }),
     [library, behind]
@@ -507,6 +510,7 @@ export default function PortfolioScreen({ navigation }: Props) {
   const CHIP_A11Y: Record<PortfolioFilter, string> = {
     all: copy.portfolio.filterAllA11y,
     needsCare: copy.portfolio.filterNeedsCareA11y,
+    watching: copy.portfolio.filterWatchingA11y,
     diagnosed: copy.portfolio.filterDiagnosedA11y,
   };
 
@@ -894,6 +898,7 @@ export default function PortfolioScreen({ navigation }: Props) {
               >
                 {renderChip('all', copy.portfolio.filterAll)}
                 {renderChip('needsCare', copy.portfolio.filterNeedsCare)}
+                {renderChip('watching', copy.portfolio.filterWatching)}
                 {renderChip('diagnosed', copy.portfolio.filterDiagnosed)}
               </ScrollView>
 
@@ -904,7 +909,11 @@ export default function PortfolioScreen({ navigation }: Props) {
               */}
               {visible.length === 0 && filter !== 'all' && (
                 <Text style={s.emptyFilter}>
-                  {filter === 'needsCare' ? copy.portfolio.noneNeedCare : copy.portfolio.noneDiagnosed}
+                  {filter === 'needsCare'
+                    ? copy.portfolio.noneNeedCare
+                    : filter === 'watching'
+                      ? copy.portfolio.noneWatching
+                      : copy.portfolio.noneDiagnosed}
                 </Text>
               )}
             </>
