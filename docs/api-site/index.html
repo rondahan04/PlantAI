@@ -254,7 +254,7 @@ code{font:0.86em/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
         <p class="lede">Five endpoints plus the job poll. Only the nursery search is asynchronous.</p>
         <div class="cards">
           <div class="card"><b><code>POST /api/diagnose</code></b><span>Photo &rarr; species + health. Calls PlantNet, then OpenAI.</span></div>
-          <div class="card"><b><code>POST /api/nurseries</code></b><span>Returns a job id immediately. Reading a dozen shops is far longer than a request should be held open.</span></div>
+          <div class="card"><b><code>POST /api/nurseries</code></b><span>Takes <code>plant</code>, <code>lat</code>, <code>lng</code>, and an optional <code>radius</code> in metres - 10km by default, clamped to 1-50km. Returns a job id immediately, because reading a dozen shops is far longer than a request should be held open. A search that already finished answers <code>state</code> and <code>results</code> inline instead, so there is nothing to poll.</span></div>
           <div class="card"><b><code>GET /api/nurseries/job/:id</code></b><span>Polled until the scrape finishes.</span></div>
           <div class="card"><b><code>POST /api/care-plan</code></b><span>Genus &rarr; watering, feeding, repotting for every growing medium at once.</span></div>
           <div class="card"><b><code>POST /api/translate-diagnosis</code></b><span>Diagnosis text into Hebrew.</span></div>
@@ -278,8 +278,8 @@ code{font:0.86em/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
         <h2>Nursery search</h2>
         <p class="lede">The expensive flow, and the only asynchronous one.</p>
         <ol class="steps">
-          <li><b>POST <code>/api/nurseries</code></b> <span>- location plus plant name. A job id comes back at once.</span></li>
-          <li><b>Google Places</b> <span>&rarr; nearby nurseries that have websites.</span></li>
+          <li><b>POST <code>/api/nurseries</code></b> <span>- plant name, location, and how far to look. A job id comes back at once - or the finished <code>results</code> inline, when the identical search has just run.</span></li>
+          <li><b>Google Places</b> <span>&rarr; nurseries with websites inside the radius, restricted to a box around the user and then cut back to the true circle.</span></li>
           <li><b>Read each shop</b> <span>- Tavily when the page is usable as served, Firecrawl when it has to be rendered.</span></li>
           <li><b>OpenAI</b> <span>&rarr; product and price pulled out of the page text.</span></li>
           <li><b>Poll <code>/api/nurseries/job/:id</code></b> <span>- results land on a map.</span></li>
@@ -294,6 +294,7 @@ code{font:0.86em/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
         <p class="asof">Measured 2026-09-13, Tel Aviv 10km, monstera and alocasia regal shield.</p>
         <p class="note"><b>Cached across users.</b> Everything from step 2 on is skipped when Supabase already holds a recent scrape for that plant and place, so the second person looking for a monstera this week pays nothing and waits seconds.</p>
         <p class="note"><b>Listed, stock not stated.</b> A page with the plant and a price but no stock line is shown that way rather than dropped. Dropping it would hide a shop that does sell the plant on the grounds the page did not prove it.</p>
+        <p class="note"><b>The radius is a promise, not a hint.</b> Places only weights a location bias, so a 10km search run from Mitzpe Ramon came back full of Tel Aviv. The request now restricts to the bounding box of the circle, and anything past the radius is dropped by distance afterwards - the box has corners the circle does not.</p>
       </section>
 
       <section class="panel" id="p-care" hidden>

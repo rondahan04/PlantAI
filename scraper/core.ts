@@ -1,8 +1,9 @@
 /**
  * Shared nursery-scraping core. Single source of truth for the Firecrawl +
  * OpenAI pipeline and the platform-aware product search. Consumed by:
- *   - dashboard/server.ts        (interactive query dashboard)
- *   - scripts/scrape-nurseries.ts (offline nurseries.json builder)
+ *   - server/index.ts      (the live nursery search)
+ *   - dashboard/server.ts  (interactive query dashboard)
+ *   - scripts/*.ts         (fixture capture, funnel and price harnesses)
  *
  * Node-only (uses fs + global fetch). Not bundled into the RN app - see the
  * tsconfig `exclude` list. Pure functions (detectPlatform / searchUrlsFor /
@@ -90,9 +91,9 @@ export function loadEnv(envPath: string): void {
  * A key's plain name (`TAVILY_API_KEY`) wins in production hosts, which never
  * set the `EXPO_PUBLIC_` build-time prefix; the prefixed name is the fallback
  * for local dev, where `.env` is shared with the Expo app. `server/index.ts`
- * had this logic; `dashboard/server.ts` and `scripts/scrape-nurseries.ts` each
- * redeclared a narrower, prefix-only version that could not see a plain-name
- * production var (TODOS H1) - one copy here, three callers.
+ * had this logic; `dashboard/server.ts` and the scripts each redeclared a
+ * narrower, prefix-only version that could not see a plain-name production
+ * var (TODOS H1) - one copy here, every caller.
  */
 export function env(key: string): string | undefined {
   return process.env[key] || process.env[`EXPO_PUBLIC_${key}`];

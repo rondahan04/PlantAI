@@ -8,7 +8,7 @@
  *
  *   discoverNurseries(lat, lng, apiKey, opts)
  *     └─ POST places:searchText
- *          body  { textQuery, locationBias.circle{center,radius} }
+ *          body  { textQuery, locationRestriction.rectangle{bounding box} }
  *          mask  places.displayName, .location, .websiteUri, .formattedAddress
  *     └─ scrapable sites (real storefront host), capped at maxResults
  *     └─ PLUS contact-only places - no website, or a social page for one - up
