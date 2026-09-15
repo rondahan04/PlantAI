@@ -319,3 +319,117 @@ test('isNonStoreHost: real nursery sites pass through', () => {
     assert.equal(isNonStoreHost(u), false, `should NOT be filtered: ${u}`);
   }
 });
+
+// --- the set of shops we ask is the ceiling on everything downstream --------
+
+/*
+ * Text Search treats "משתלה" and "חנות צמחים" as unrelated strings, so a shop
+ * that filed itself under the other words was never asked, whatever it had on
+ * the shelf.
+ */
+test('discoverNurseries: asks for every term, and merges what they answer', async () => {
+  const asked: string[] = [];
+  const byTerm: Record<string, unknown[]> = {
+    משתלה: [place()],
+    'חנות צמחים': [
+      place({ displayName: { text: 'צמחייה' }, websiteUri: 'https://tsimhiya.co.il' }),
+    ],
+  };
+  const fetchImpl = (async (_url: string, init: any) => {
+    const term = JSON.parse(init.body).textQuery;
+    asked.push(term);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ places: byTerm[term] ?? [] }),
+      text: async () => '',
+    };
+  }) as unknown as typeof fetch;
+
+  const out = await discoverNurseries(32.08, 34.78, 'KEY', {}, fetchImpl);
+  assert.deepEqual(asked.sort(), ['חנות צמחים', 'משתלה']);
+  assert.deepEqual(
+    out.map((n) => n.website).sort(),
+    ['https://tsimhiya.co.il', 'https://vered.co.il']
+  );
+});
+
+test('discoverNurseries: the same shop found by two terms is one shop', async () => {
+  const out = await discoverNurseries(
+    32.08,
+    34.78,
+    'KEY',
+    {},
+    fakeFetch(200, { places: [place()] })
+  );
+  assert.equal(out.length, 1);
+});
+
+test('discoverNurseries: an explicit term is still the only term asked', async () => {
+  const asked: string[] = [];
+  await discoverNurseries(
+    32.08,
+    34.78,
+    'KEY',
+    { textQuery: 'משתלה' },
+    fakeFetch(200, { places: [place()] }, (_u, init) => asked.push(JSON.parse(init.body).textQuery))
+  );
+  assert.deepEqual(asked, ['משתלה']);
+});
+
+/* One term failing is not a reason to tell a user there are no nurseries near
+ * them when another term just listed one. */
+test('discoverNurseries: one failed term does not empty the answer', async () => {
+  const fetchImpl = (async (_url: string, init: any) => {
+    const term = JSON.parse(init.body).textQuery;
+    if (term === 'משתלה') return { ok: false, status: 500, text: async () => 'boom' };
+    return { ok: true, status: 200, json: async () => ({ places: [place()] }), text: async () => '' };
+  }) as unknown as typeof fetch;
+  const out = await discoverNurseries(32.08, 34.78, 'KEY', {}, fetchImpl);
+  assert.equal(out.length, 1);
+});
+
+/* Every term failing IS an error: an empty answer would send the pipeline to
+ * its fallback URL list as though Places had found nothing here. */
+test('discoverNurseries: every term failing still throws', async () => {
+  await assert.rejects(
+    () => discoverNurseries(32.08, 34.78, 'KEY', {}, fakeFetch(500, { error: 'nope' })),
+    /Places 500/
+  );
+});
+
+test('discoverNurseries: a second page is only asked for when requested', async () => {
+  let calls = 0;
+  const fetchImpl = (async () => {
+    calls += 1;
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ places: [place({ websiteUri: `https://s${calls}.co.il` })], nextPageToken: 'more' }),
+      text: async () => '',
+    };
+  }) as unknown as typeof fetch;
+
+  await discoverNurseries(32.08, 34.78, 'KEY', { textQuery: 'משתלה' }, fetchImpl);
+  assert.equal(calls, 1, 'one page by default, even when Places offers another');
+
+  calls = 0;
+  await discoverNurseries(32.08, 34.78, 'KEY', { textQuery: 'משתלה', pages: 2 }, fetchImpl);
+  assert.equal(calls, 2);
+});
+
+/* The cap was priced for a pipeline where every shop cost identification, a
+ * rendered scrape and two model calls. Most now cost one free request. */
+test('discoverNurseries: keeps more shops than the old cap of ten', async () => {
+  const many = Array.from({ length: 20 }, (_, i) =>
+    place({ displayName: { text: `shop ${i}` }, websiteUri: `https://s${i}.co.il` })
+  );
+  const out = await discoverNurseries(
+    32.08,
+    34.78,
+    'KEY',
+    { textQuery: 'משתלה' },
+    fakeFetch(200, { places: many })
+  );
+  assert.equal(out.filter((n) => n.website).length, 15);
+});

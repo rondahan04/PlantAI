@@ -43,6 +43,7 @@ import {
   type QueryPlan,
 } from './queryPlan.ts';
 import { followProductPages, productLinks } from './productFollow.ts';
+import { rankSitemapLinks, sitemapProductUrls } from './sitemapCatalogue.ts';
 
 export type Platform = 'shopify' | 'woo' | 'wix' | 'virtuemart' | 'unknown';
 
@@ -767,7 +768,12 @@ export type ScrapeFn = (
 ) => Promise<string>;
 
 /* Signature of the JSON LLM call. Injectable for tests. */
-export type ClassifyFn = (prompt: string, key: string, maxTokens?: number) => Promise<any>;
+export type ClassifyFn = (
+  prompt: string,
+  key: string,
+  maxTokens?: number,
+  effort?: Effort
+) => Promise<any>;
 
 /*
  * Distill homepage content into a compact platform fingerprint for the LLM:
@@ -1079,6 +1085,11 @@ export function searchUrlsFor(origin: string, query: string, platform: string): 
 /* Below this a page is a stub, not a catalogue - see answeredQuery. */
 const MIN_JUDGEABLE_CHARS = 2000;
 
+/* LRU bound on remembered control pages. One per shop we read as HTML, and a
+ * fan-out touches a dozen; this exists so a long-lived process cannot grow a
+ * page cache without limit. */
+const MAX_CONTROL_PAGES = 32;
+
 /*
  * A plant no nursery stocks, sent to a shop's own search URL to see whether it
  * searches at all. Latin-script and meaningless on purpose: a Hebrew word risks
@@ -1207,8 +1218,15 @@ export function scoreMarkdown(markdown: string | null, query: string): number {
  * listings filtered out of the excerpt before the model ever saw them, and came
  * back as an indistinguishable "0 items". Alternation is deliberate over a
  * looser `product[-/]` so blog paths like /product-reviews/ stay excluded.
+ *
+ * `/items/` is al-haderech.co.il, and it was the last one left: its entire
+ * 28-product grid read as zero, because nothing about those links says
+ * "product" except where they go. The card reader stopped trusting URL shape
+ * for exactly this reason (it climbs from the price instead), but the markdown
+ * excerpt still filters on it, so the shop stayed invisible on every page the
+ * structured readers could not reach.
  */
-const PRODUCT_LINK_RE = /\/(?:products?|product-page|catalog\/product|shop\/p)\//;
+const PRODUCT_LINK_RE = /\/(?:products?|product-page|catalog\/product|shop\/p|items)\//;
 
 /*
  * An ILS price. Israeli nursery sites write the currency at least five ways and
@@ -1234,14 +1252,96 @@ function countPrices(s: string): number {
  * `- [**Name** ₪price](url)` - all are kept.
  */
 export function priceFocusedExcerpt(markdown: string, max = 18000): string {
-  const kept = markdown
+  const lines = markdown
     .split('\n')
     .map((l) => l.replace(/!\[[^\]]*\]\([^)]*\)/g, '').trim())
     .filter(Boolean)
-    .filter((l) => !l.startsWith('data:image'))
-    .filter((l) => /^#{1,6}\s/.test(l) || ILS_PRICE_RE.test(l) || PRODUCT_LINK_RE.test(l));
-  return kept.join('\n').slice(0, max);
+    .filter((l) => !l.startsWith('data:image'));
+
+  const joined = joinSplitCurrency(lines);
+
+  const isAnchor = (l: string) =>
+    /^#{1,6}\s/.test(l) || ILS_PRICE_RE.test(l) || LABELLED_PRICE_RE.test(l) || PRODUCT_LINK_RE.test(l);
+
+  const keep = joined.map(isAnchor);
+
+  /*
+   * A price on its own line has a name SOMEWHERE, and it is usually the line
+   * above.
+   *
+   * The filter keeps a line only if it looks product-ish, so a grid that writes
+   * the product name as plain text - no heading, no markdown link - loses the
+   * name and keeps the number. What reaches the model is then a column of
+   * prices it has to pair with products by guessing, and a mis-pairing is
+   * silent and looks like a confident wrong price.
+   *
+   * Deliberately one line, deliberately BACKWARDS, and deliberately only for a
+   * price line with no words of its own. A window either side would drag in the
+   * footer and the cookie banner sitting next to the last price on the page,
+   * and noise is the other half of what makes this path weak. When the line
+   * above is already kept - a heading, usually - nothing is pulled in at all,
+   * because the name is there already.
+   */
+  joined.forEach((line, i) => {
+    if (!keep[i] || i === 0 || keep[i - 1]) return;
+    if (!isBarePrice(line)) return;
+    if (!NAME_LIKE_RE.test(joined[i - 1])) return;
+    keep[i - 1] = true;
+  });
+
+  return joined
+    .filter((_, i) => keep[i])
+    .join('\n')
+    .slice(0, max);
 }
+
+/*
+ * Markdown renders a price's symbol and its number from two separate spans, and
+ * a line break lands between them: `₪` on one line, `49.90` on the next. A lone
+ * `₪` has no adjacent digit and a lone `49.90` has no currency token, so
+ * ILS_PRICE_RE rejects BOTH and the price is deleted from the excerpt before the
+ * model ever sees it. Rejoining them is the whole fix, and it has to happen
+ * before anything is filtered.
+ */
+const LONE_CURRENCY_RE = /^(?:₪|ש"ח|ש״ח|שח|NIS|ILS)$/i;
+const LONE_NUMBER_RE = /^\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?$/;
+
+export function joinSplitCurrency(lines: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const a = lines[i];
+    const b = lines[i + 1];
+    if (b !== undefined) {
+      if (LONE_CURRENCY_RE.test(a) && LONE_NUMBER_RE.test(b)) {
+        out.push(`${a}${b}`);
+        i += 1;
+        continue;
+      }
+      if (LONE_NUMBER_RE.test(a) && LONE_CURRENCY_RE.test(b)) {
+        out.push(`${a} ${b}`);
+        i += 1;
+        continue;
+      }
+    }
+    out.push(a);
+  }
+  return out;
+}
+
+/*
+ * A price stated with the currency in a sibling element: `מחיר: 49.90`. The
+ * label is what makes it safe to read a bare number as money - `9 עד 17` is
+ * opening hours, and no rule that admits it is worth the prices it buys.
+ */
+const LABELLED_PRICE_RE = /(?:מחיר|עלות|price|cost)\s*:?\s*\d/i;
+
+/* A price line carrying no words of its own, so its product name is elsewhere. */
+function isBarePrice(line: string): boolean {
+  return !/[A-Za-z֐-׿]{2,}/.test(line.replace(/ש"ח|ש״ח|שח|NIS|ILS/gi, ''));
+}
+
+/* Enough letters to be a product name rather than punctuation or a lone digit. */
+const NAME_LIKE_RE = /[A-Za-z֐-׿]{2,}/;
 
 // --- OpenAI ----------------------------------------------------------------
 
@@ -1266,10 +1366,24 @@ export const OPENAI_MODEL = 'gpt-5.6-luna';
  * retry once with a doubled budget, then report the truncation by name instead
  * of as a parse error.
  */
+/*
+ * How hard the model should think before answering.
+ *
+ * Verified against this project's key on 2026-09-15: the model accepts
+ * 'none' | 'low' | 'medium' | 'high' | 'xhigh' and rejects 'minimal'. Left
+ * UNSET for anything whose answer is a judgement about plants - planning a
+ * query, reading a catalogue, auditing what was read - and set to 'low' only
+ * where the task is a narrow classification with the rules already written out
+ * in the prompt. Thinking time is latency the user waits through, and a search
+ * makes several of these calls in series behind the slowest shop.
+ */
+export type Effort = 'none' | 'low' | 'medium' | 'high' | 'xhigh';
+
 export async function callOpenAIJson(
   prompt: string,
   openaiKey: string,
-  maxTokens = 1200
+  maxTokens = 1200,
+  effort?: Effort
 ): Promise<any> {
   const attempt = async (cap: number) => {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -1280,6 +1394,7 @@ export async function callOpenAIJson(
         messages: [{ role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
         max_completion_tokens: cap,
+        ...(effort ? { reasoning_effort: effort } : {}),
       }),
     });
     if (!res.ok) {
@@ -1327,6 +1442,19 @@ export interface Plant {
    * which for a shop with 28 Alocasias is most of the work.
    */
   url?: string;
+  /*
+   * Where this row's PRICE came from.
+   *
+   * 'stated' means the shop published this number in machine-readable form -
+   * its storefront JSON, or its own product markup - and we copied it. 'read'
+   * means a model transcribed it out of a page. The distinction is the whole
+   * basis of the final cross-nursery price check: that pass exists to catch a
+   * phone number or a free-shipping threshold mistaken for a price, which is a
+   * READING failure and cannot happen to a number the shop published in a
+   * price field. Absent means 'read', so an older caller is treated as the
+   * cautious case.
+   */
+  priceSource?: 'stated' | 'read';
 }
 
 /* Auditor verdict. */
@@ -1413,8 +1541,26 @@ function plantFromStructured(p: StructuredProduct): Plant {
     name: p.name,
     price: formatPrice(p),
     availability: p.availability,
+    /* The shop published this number; nothing read it off a rendered page. */
+    priceSource: 'stated',
     ...(p.url && /^https?:\/\//i.test(p.url) ? { url: p.url } : {}),
   };
+}
+
+/*
+ * The page, at the TOP of every prompt that reads it, byte for byte the same.
+ *
+ * The extraction pass and the verification pass are given the identical source
+ * text, and the source text is by far the largest thing in either prompt - up
+ * to 18KB against a few hundred bytes of instructions. With it at the END, as
+ * it used to be, the two prompts share no prefix at all, so the second call
+ * re-reads from the first token and OpenAI's automatic prefix cache can never
+ * fire. Leading with it makes the whole page a shared prefix: the audit pass
+ * starts from a cached read of the same bytes, which is cheaper and answers
+ * sooner. The instructions follow, where a change to them costs nothing.
+ */
+function sourceBlock(excerpt: string, site: string): string {
+  return `SOURCE TEXT - the ${site} page, mostly Hebrew:\n${excerpt}\n--- end of SOURCE TEXT ---\n`;
 }
 
 /* Extraction pass: the model reads the condensed markdown and returns the plant
@@ -1425,9 +1571,10 @@ export async function extractPlants(
   site: string,
   openaiKey: string
 ): Promise<Plant[]> {
-  const prompt = `You are extracting products from a plant nursery website (${site}).
+  const prompt = `${sourceBlock(excerpt, site)}
+You are extracting products from the plant nursery website above (${site}).
 The content is mostly Hebrew. The user searched for: "${query}" (match either English or Hebrew, including translations and related plant types).
-From the content below, return ONLY products that match the search query.
+From the SOURCE TEXT above, return ONLY products that match the search query.
 Return ONLY valid JSON in exactly this shape:
 { "plants": [{ "name": "product name in its original language", "price": "₪XX", "availability": "in_stock" | "out_of_stock" | "unknown", "url": "absolute link to that product's page, or omit if the content has none" }] }
 Rules:
@@ -1435,8 +1582,7 @@ Rules:
 - Only REAL products that have a price. Ignore blog posts, articles, guides ("איך לגדל"), categories, cart/shipping/total/free-shipping lines.
 - availability: "out_of_stock" only if the text clearly says sold out / אזל / לא במלאי; "in_stock" if clearly purchasable; otherwise "unknown".
 - url: copy the product's own link EXACTLY from the content (markdown links look like [name](https://...)). Never invent, guess or shorten a URL - omit the field instead.
-- If nothing matches, return { "plants": [] }.
-Content:\n${excerpt}`;
+- If nothing matches, return { "plants": [] }.`;
   /*
    * 6000, not 2000. A full nursery search page can carry 20+ matching listings,
    * and the model reasons before it writes: measured on al-haderech's Monstera
@@ -1456,7 +1602,8 @@ async function verifyPlantsWithGPT(
   site: string,
   openaiKey: string
 ): Promise<VerificationReport> {
-  const prompt = `You are a strict data auditor for a plant nursery scraper (${site}). The data below was extracted in a separate pass. Your only job is to verify it against the SOURCE TEXT - do not extract anything new.
+  const prompt = `${sourceBlock(excerpt, site)}
+You are a strict data auditor for a plant nursery scraper (${site}). The data below was extracted from the SOURCE TEXT above in a separate pass. Your only job is to verify it against that text - do not extract anything new.
 The user searched for: "${query}". The source is mostly Hebrew.
 Cross-reference every field of the extracted JSON against the SOURCE TEXT and check:
 - Plant name: is it actually present in the source and accurately captured (not hallucinated, not a blog/category)?
@@ -1476,10 +1623,7 @@ Rules:
 - A MISSING STOCK STATEMENT IS NOT A REASON TO DROP A ROW. If the product and its price are supported by the source but the source never says whether it is in stock, KEEP the row and set availability to "unknown". Dropping it removes a shop that does sell the plant, on the grounds that we could not prove it - "unknown" states exactly what the source supports. Drop a row only when the product or its price is unsupported or invented.
 
 EXTRACTED JSON TO AUDIT:
-${JSON.stringify({ plants }, null, 2)}
-
-SOURCE TEXT:
-${excerpt}`;
+${JSON.stringify({ plants }, null, 2)}`;
 
   // Same budget as the extraction pass: the auditor echoes the whole corrected
   // list back, so its answer is at least as long as what it was given.
@@ -1518,7 +1662,10 @@ export async function judgeMatches(
   query: string,
   names: string[],
   site: string,
-  openaiKey: string
+  openaiKey: string,
+  /* Overridable so the effort choice below can be A/B'd against real titles
+   * rather than asserted. See the harness note in docs/RETRIEVAL.md. */
+  effort: Effort | undefined = 'low'
 ): Promise<MatchVerdict[]> {
   const prompt = `A user searched a plant nursery (${site}) for: "${query}".
 The shop's catalogue returned the product titles below. They are mostly Hebrew, and Hebrew transliterations of Latin plant names vary between shops - "דליסיוסה", "דלסיוסה" and "דלישיוזה" are all Monstera deliciosa, and a title may add a pot size, a colour, or the word מבצע (sale).
@@ -1534,7 +1681,14 @@ Return ONLY valid JSON in exactly this shape, one entry per title, echoing each 
 TITLES:
 ${names.map((n) => `- ${n}`).join('\n')}`;
 
-  const parsed = await callOpenAIJson(prompt, openaiKey, 4000);
+  /*
+   * 'low', because every rule this call applies is written out above it: the
+   * question is "is this title the same plant", with the transliteration cases,
+   * the cultivar cases and the tie-break all stated. It is asked once per shop
+   * inside a fan-out the user is waiting on, and measured on this key a low
+   * effort answers in about half the time.
+   */
+  const parsed = await callOpenAIJson(prompt, openaiKey, 4000, effort);
   const rows = Array.isArray(parsed?.verdicts) ? parsed.verdicts : [];
   return rows.map((r: any) => ({
     name: String(r?.name ?? ''),
@@ -1560,6 +1714,12 @@ export interface ExtractDeps {
    * rescues is server-rendered, so nothing here needs a renderer.
    */
   fetchProductHtml?: (url: string) => Promise<string>;
+  /*
+   * `fetch` for robots.txt and the sitemaps behind it. Injected like every
+   * other reader here so the sitemap rescue is testable without a network, and
+   * so a test can never reach a real nursery.
+   */
+  fetchSitemap?: typeof fetch;
 }
 
 /*
@@ -1606,6 +1766,9 @@ export function snapPricesToStructured(plants: Plant[], products: StructuredProd
     return {
       ...plant,
       price: formatPrice(match),
+      /* Snapped back to the number the page stated, so this row's price is no
+       * longer a transcription even though a model produced the row. */
+      priceSource: 'stated',
       // The page's own stock statement outranks the model's reading of it, but
       // only when the page actually made one.
       availability: match.availability !== 'unknown' ? match.availability : plant.availability,
@@ -1710,6 +1873,15 @@ export async function extractAndVerifyPlants(
      * "related products" links - which is how a two-page rescue becomes a crawl.
      */
     noFollow?: boolean;
+    /*
+     * What the SEARCH did, as the searcher saw it. Both fields already existed
+     * one layer up; they are threaded in here because they are what separates
+     * "this shop answered and does not stock it" from "this shop never answered
+     * at all", and only the second is worth a sitemap rescue (see
+     * sitemapForPrices). Absent means no claim, and no rescue.
+     */
+    answered?: boolean;
+    searchStatus?: number;
   },
   deps: ExtractDeps = {}
 ): Promise<PipelineResult> {
@@ -1782,7 +1954,59 @@ export async function extractAndVerifyPlants(
 
     const links = productLinks(html, url, plan);
     if (links.length === 0) return null;
+    return priceLinks(links);
+  };
 
+  /*
+   * The shop never answered, so ask it for its list of products instead.
+   *
+   * This is the six nurseries with no storefront JSON, and every new shop that
+   * turns out to be one of them. When their own search is missing or broken -
+   * yahalomr.co.il has no /search endpoint and 404s every query, others hand
+   * back the front page whatever you ask - the page path has nothing to read
+   * and the shop is reported as unreadable. Meanwhile the same shop publishes a
+   * complete machine-readable list of everything it sells, at a URL
+   * standardised twenty years ago, for free.
+   *
+   * GATED ON THE SEARCH HAVING FAILED, not on it having found nothing. A shop
+   * that answered and did not list the plant has told us something, and paying
+   * to read its whole sitemap to disagree would cost every shop in a fan-out a
+   * multi-megabyte fetch to confirm what it just said. `searchUnusable` is
+   * exactly the population currently told "we could not read this shop".
+   *
+   * It cannot manufacture an absence: nothing here sets `catalogueRead`, so a
+   * sitemap that names no candidate leaves the shop reported exactly as it was.
+   */
+  const sitemapForPrices = async (): Promise<PipelineResult | null> => {
+    if (opts.noFollow || !openaiKey || !plan || !url) return null;
+
+    const searchUnusable =
+      opts.answered === false ||
+      (opts.searchStatus !== undefined && opts.searchStatus >= 400) ||
+      (!markdown.trim() && !html.trim());
+    if (!searchUnusable) return null;
+
+    let origin: string;
+    try {
+      origin = new URL(url).origin;
+    } catch {
+      return null;
+    }
+
+    const { urls, read } = await sitemapProductUrls(origin, { fetchImpl: deps.fetchSitemap });
+    if (!read || urls.length === 0) return null;
+
+    const links = rankSitemapLinks(urls, plan);
+    if (links.length === 0) return null;
+    console.log(`   [${site}] 🗺️  sitemap: ${urls.length} product url(s), ${links.length} worth opening`);
+    return priceLinks(links);
+  };
+
+  /* Open a handful of product pages and read what they cost. Shared by both
+   * rescues, because "we have links, we need prices" is one problem. */
+  const priceLinks = async (
+    links: { name: string; url: string }[]
+  ): Promise<PipelineResult | null> => {
     const { plants, followed, priced, timedOut } = await followProductPages({
       links,
       query,
@@ -1930,7 +2154,97 @@ export async function extractAndVerifyPlants(
     }
   }
 
+  /*
+   * The page route, holding exactly the evidence the JSON route holds.
+   *
+   * When a shop's search page is server-rendered, `extractStructuredProducts`
+   * reads its grid straight out of the DOM: name, price and product URL, paired
+   * by the shop's own markup rather than by anybody's reading of it. Those rows
+   * then became `structuredCatalog(...)`, which was handed to the extraction
+   * pass, the verification pass AND the adjudicator - three model calls to pick
+   * rows out of a list we had already parsed, with the prices forced back
+   * afterwards by `snapPricesToStructured` because the model's copy of them was
+   * not trusted anyway.
+   *
+   * The JSON route answers the identical question with ranking, and a model
+   * only for the genuinely uncertain middle. There is no reason for the same
+   * rows to cost three calls here and none there, and every reason for them not
+   * to: each pass is a chance to transcribe a number wrong, and two of the three
+   * were re-deciding something arithmetic.
+   *
+   * Only ever a SHORTCUT. If ranking finds nothing of the right genus the old
+   * path runs untouched below, so a page whose cards do not name the plant
+   * behaves exactly as it did - this can add answers, never remove one.
+   */
+  if (!opts.products && plan && structured.length > 0) {
+    const ranked = rankCandidates(structured, plan);
+    if (ranked.length > 0) {
+      if (isDecisive(ranked)) {
+        /* Same guard the JSON route needs: decisive means ranking identified
+         * THE product, not that every row handed to it is that product, and
+         * `cheapestMatch` downstream takes the lowest price in whatever list
+         * travels. */
+        const decided = ranked.filter((p) => scoreCandidate(p.name, plan) >= STRONG_MATCH);
+        return {
+          plants: decided.map(plantFromStructured),
+          report: {
+            is_valid: true,
+            confidence_score: 100,
+            feedback: "matched against the page's own product markup - no extraction needed",
+            corrected_output: [],
+          },
+          engines: { extractor: 'none', verifier: 'none' },
+          funnel: {
+            stage: 'ok',
+            mdChars: markdown.length,
+            excerptChars: excerpt.length,
+            extracted: structured.length,
+            kept: decided.length,
+            prices: countPrices(excerpt || markdown),
+          },
+        };
+      }
+
+      const relevant = await adjudicate(
+        ranked.map(plantFromStructured),
+        plan,
+        query,
+        site,
+        openaiKey,
+        judge
+      );
+      return {
+        plants: relevant,
+        report: {
+          is_valid: true,
+          confidence_score: relevant.length ? 90 : 0,
+          feedback: relevant.length
+            ? 'page product markup judged a reasonable match for the query'
+            : 'page product markup judged not to be this plant',
+          corrected_output: [],
+        },
+        engines: { extractor: 'none', verifier: relevant.length || openaiKey ? OPENAI_MODEL : 'none' },
+        funnel: {
+          stage: relevant.length ? 'ok' : 'rejected',
+          mdChars: markdown.length,
+          excerptChars: excerpt.length,
+          extracted: structured.length,
+          kept: relevant.length,
+          prices: countPrices(excerpt || markdown),
+        },
+      };
+    }
+  }
+
   if (!excerpt.trim()) {
+    /*
+     * Nothing to read - which, when the shop's search is what failed, is
+     * exactly when its sitemap is worth asking for. This is the only rescue
+     * available to a shop with no storefront JSON and no working search, and it
+     * is the last thing tried before the shop is written off.
+     */
+    const viaSitemap = await sitemapForPrices();
+    if (viaSitemap) return viaSitemap;
     // Distinguish "nothing was scraped" from "plenty was scraped and none of it
     // looked like a product" - the second is a parser gap on our side.
     return markdown.trim()
@@ -1953,7 +2267,7 @@ export async function extractAndVerifyPlants(
      * dropped before they are counted, and this branch cannot tell that apart
      * from a shop that genuinely lists none.
      */
-    const rescued = await followForPrices();
+    const rescued = (await followForPrices()) ?? (await sitemapForPrices());
     if (rescued) return rescued;
     return {
       plants: [],
@@ -2172,7 +2486,7 @@ ${listing}`;
     // 2500: one verdict per row across every nursery in the search, after the
     // reasoning that compares them. 900 truncated on a busy result set and the
     // catch below then passed every price through unchecked.
-    const out = await classify(prompt, openaiKey, 2500);
+    const out = await classify(prompt, openaiKey, 2500, 'low');
     const results = Array.isArray(out?.results) ? out.results : [];
     for (const r of results) {
       const i = Number(r?.index);
@@ -2251,10 +2565,37 @@ Plant name: ${query}`;
  * Never throws. On any failure the plan degrades to the plain input, which is
  * exactly what translateQuery did.
  */
+/*
+ * Plans already made, keyed by the plant name that produced them.
+ *
+ * A plan is a property of the PLANT, not of the search: the Hebrew spelling of
+ * Monstera deliciosa is the same for every user, every location and every
+ * radius. It was being re-derived by a reasoning model at the head of every
+ * single search, in series, with the whole fan-out waiting on it - the one call
+ * in the pipeline that nothing can overlap.
+ *
+ * Only SUCCESSFUL plans are stored. Caching the degraded fallback would freeze
+ * one transient OpenAI failure into a process-long English-only search of
+ * Hebrew catalogues, which matches nothing and looks like empty shelves.
+ */
+const PLAN_TTL_MS = 24 * 60 * 60 * 1000;
+const MAX_PLANS = 200;
+const planCache = new Map<string, { plan: QueryPlan; at: number }>();
+/* The promise, not just the result: a fan-out that starts two identical
+ * searches at once must not pay for two identical planning calls. */
+const planInFlight = new Map<string, Promise<QueryPlan>>();
+
+/* Exported for the tests, which must not inherit a plan from the test before. */
+export function clearPlanCache(): void {
+  planCache.clear();
+  planInFlight.clear();
+}
+
 export async function planQuery(
   name: string,
   openaiKey: string,
-  classify: ClassifyFn = callOpenAIJson
+  classify: ClassifyFn = callOpenAIJson,
+  now: () => number = Date.now
 ): Promise<QueryPlan> {
   const query = (name || '').trim();
   const bare = () =>
@@ -2265,11 +2606,56 @@ export async function planQuery(
     });
   if (!query || !openaiKey) return bare();
 
-  /* Already Hebrew: nothing to translate, but the alternates would still help.
-   * Not worth a call on its own - the shop's own spelling is what the user
-   * typed, which is the likeliest one to match. */
-  if (hasHebrew(query)) return bare();
+  const key = normalizeHebrew(query).toLowerCase();
+  const hit = planCache.get(key);
+  if (hit && now() - hit.at < PLAN_TTL_MS) return hit.plan;
+  const flying = planInFlight.get(key);
+  if (flying) return flying;
 
+  const job = askForPlan(query, openaiKey, classify)
+    .then((planned) => {
+      if (planned) {
+        planCache.set(key, { plan: planned, at: now() });
+        /* Insertion order is the LRU here, as it is for the catalogue cache. */
+        while (planCache.size > MAX_PLANS) {
+          const oldest = planCache.keys().next().value;
+          if (oldest === undefined) break;
+          planCache.delete(oldest);
+        }
+      }
+      return planned ?? bare();
+    })
+    .finally(() => planInFlight.delete(key));
+
+  planInFlight.set(key, job);
+  return job;
+}
+
+/* The planning call itself. Returns null when the answer was unusable, so the
+ * caller can degrade WITHOUT remembering the degraded answer. */
+async function askForPlan(
+  query: string,
+  openaiKey: string,
+  classify: ClassifyFn
+): Promise<QueryPlan | null> {
+  /*
+   * A Hebrew query is planned too, and only ONE field of the answer is taken
+   * from the model.
+   *
+   * This used to return early: already Hebrew, nothing to translate. But
+   * translating was never the valuable half. The alternates are - a shop that
+   * files Sansevieria under "לשון החמות" answers nothing to "סנסוויריה"
+   * however it is spelled, and the Latin rung is the one that reaches the shops
+   * keeping binomials. A user typing Hebrew was getting a one-rung ladder and
+   * no alternate names at all, which is the weakest search this code can make.
+   *
+   * What the model is NOT allowed to do here is restate the plant. The user's
+   * own spelling stays `hebrew` verbatim, because it is the string they saw in
+   * a shop or on a label; the model only ADDS rungs beside it. A model that
+   * "corrects" מונסטרה דלישיוזה into a different cultivar cannot cost us the
+   * search that way.
+   */
+  const heb = hasHebrew(query);
   /*
    * `alt` asks for two different things on purpose, because shops do two
    * different things. Most transliterate, and vary only in spelling. But some
@@ -2282,7 +2668,11 @@ export async function planQuery(
 Transliterate the genus and cultivar rather than translating them literally - Israeli nurseries write "Alocasia Regal Shield" as "אלוקסיה ריגל שילד", not as a description of a shield.
 Return ONLY JSON: { "hebrew": "<full Hebrew name>", "latin": "<Latin/botanical name>", "alt": ["<other Hebrew names this plant is sold under, 0-3 of them>"] }
 The Hebrew name must start with the genus.
-"alt" should include BOTH other spellings of the transliteration AND the established Hebrew common name if the plant has one - Israeli nurseries sell Ficus lyrata as "פיקוס כינורי" and Sansevieria as "לשון החמות". Never list a different plant.
+"alt" should include BOTH other spellings of the transliteration AND the established Hebrew common name if the plant has one - Israeli nurseries sell Ficus lyrata as "פיקוס כינורי" and Sansevieria as "לשון החמות". Never list a different plant.${
+    heb
+      ? '\nThe plant name below is ALREADY Hebrew. Echo it back unchanged as "hebrew", and spend the answer on "latin" and on "alt" - the other Hebrew names Israeli nurseries file this same plant under.'
+      : ''
+  }
 Plant name: ${query}`;
 
   try {
@@ -2290,17 +2680,24 @@ Plant name: ${query}`;
     // a tight cap returns empty content and the search silently runs in English
     // against Hebrew catalogues, which matches nothing.
     const out = await classify(prompt, openaiKey, 1500);
-    const hebrew = typeof out?.hebrew === 'string' ? out.hebrew.trim() : '';
-    const latin = typeof out?.latin === 'string' ? out.latin.trim() : query;
+    /* A Hebrew query is its own Hebrew name. The model's version of it is not
+     * consulted, so it cannot replace the plant that was asked for. */
+    const hebrew = heb ? query : typeof out?.hebrew === 'string' ? out.hebrew.trim() : '';
+    const latin = typeof out?.latin === 'string' ? out.latin.trim() : '';
     const alt = Array.isArray(out?.alt)
       ? out.alt.filter((s: unknown): s is string => typeof s === 'string' && hasHebrew(s))
       : [];
     /* Guard against the model echoing the English back, or answering in prose -
      * the same guard translateQuery had, for the same reason. */
-    if (!hebrew || !hasHebrew(hebrew)) return bare();
-    return buildQueryPlan({ original: query, hebrew, latin: latin || query, altSpellings: alt });
+    if (!hebrew || !hasHebrew(hebrew)) return null;
+    return buildQueryPlan({
+      original: query,
+      hebrew,
+      latin: latin || (heb ? '' : query),
+      altSpellings: alt,
+    });
   } catch {
-    return bare();
+    return null;
   }
 }
 
@@ -2431,6 +2828,15 @@ export interface SearcherOpts {
    * nursery.
    */
   fetchApi?: typeof fetch;
+  /*
+   * `fetch` for the control read - the same search URL asked for a plant nobody
+   * stocks, used only to compare two pages of one shop. Separate from
+   * `fetchHtml` because that one feeds the EXTRACTOR and drops a page that
+   * reads as a bot wall, while a wall compares perfectly well. Injectable so a
+   * test that exercises the "did this shop search at all" judgement stays off
+   * the network.
+   */
+  fetchCompare?: typeof fetch;
   /*
    * Opt in to the storefront JSON routes (server/index.ts reads RETRIEVAL_API).
    * Leaving it off restores the HTML+LLM path byte for byte, which is what
@@ -2657,11 +3063,25 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
     saveHostPlatforms(opts.hostsFile, persisted);
   }
 
-  async function resolvePlatform(origin: string, host: string): Promise<string> {
+  /*
+   * What we already know this host is, without paying to find out.
+   *
+   * Split out of resolvePlatform because the two questions are different and
+   * only one of them is expensive: "do we know?" is free, "find out" costs a
+   * homepage read, up to three more scrapes and an LLM call.
+   */
+  function cachedPlatform(host: string): string | undefined {
     const cached = platformCache.get(host);
+    if (!cached) return undefined;
     const since = unknownSince.get(host);
-    const staleUnknown = cached === 'unknown' && since !== undefined && now() - since >= UNKNOWN_TTL_MS;
-    if (cached && !staleUnknown) return cached;
+    const staleUnknown =
+      cached === 'unknown' && since !== undefined && now() - since >= UNKNOWN_TTL_MS;
+    return staleUnknown ? undefined : cached;
+  }
+
+  async function resolvePlatform(origin: string, host: string): Promise<string> {
+    const cached = cachedPlatform(host);
+    if (cached) return cached;
     // A host we could not name but CAN search (learned template) is not worth
     // re-identifying: the template already does what a platform name would.
     if (!cached && hostTemplates.has(host)) return 'unknown';
@@ -2833,24 +3253,60 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
        * better at than their search engine. One request, same as before.
        */
       const terms = ladderTerms(plan);
+      /* Rungs are MERGED, not replaced. Two rungs are two different questions -
+       * "אלוקסיה" and "Alocasia", or a transliteration and the established
+       * Hebrew name - and a shop can answer both partially. Keeping only the
+       * last rung's rows threw away a match the first rung had found. */
+      const seenUrls = new Set<string>();
+      /* Every rung we asked has to have been answered IN FULL before an empty
+       * result can be called evidence of absence. One truncated rung is one
+       * question the shop only half answered. */
+      let asked = false;
+      let everyRungComplete = true;
       for (const term of terms) {
         const res = await wooStoreSearch(origin, term, { fetchImpl: opts.fetchApi });
         picked = `${origin}/?s=${encodeURIComponent(term)}&post_type=product`;
         // The route is broken. Ask the shop what it really is before falling
         // all the way back to a scrape.
         if (res.status === 0 || res.status >= 400) return giveUp();
-        /* The server applied the query, so an empty answer here is evidence -
-         * we read their catalogue and this plant was not in it. */
-        catalogueRead = true;
-        products = res.products;
-        if (products.length) break;
+        /*
+         * The server applied the query, so an empty answer here is evidence -
+         * we read their catalogue and this plant was not in it. Unless the
+         * shelf was TRUNCATED: a prefix of 300 products is not a catalogue we
+         * read, and absence from a prefix proves nothing.
+         */
+        asked = true;
+        everyRungComplete = everyRungComplete && res.complete;
+        catalogueRead = asked && everyRungComplete;
+        for (const p of res.products) {
+          const key = p.url || p.name;
+          if (seenUrls.has(key)) continue;
+          seenUrls.add(key);
+          products.push(p);
+        }
+        /*
+         * Stop on a RANKED row, not on any row at all.
+         *
+         * The Store API's `search` matches a product's description and excerpt,
+         * not just its title, so a shop answers "פיקוס" with a bag of compost
+         * for ficus. That is a row, and stopping on it ended the ladder before
+         * the rung that would have worked - the plant's other Hebrew name, or
+         * its Latin one - while `catalogueRead` went out as true. The shop was
+         * then reported as NOT STOCKING a plant nobody had asked it about in a
+         * word it knows. h-shtilshop files Ficus lyrata as "פיקוס כינורי"; that
+         * rung is rung two.
+         */
+        if (rankCandidates(products, plan).length) break;
       }
     }
 
     const ranked = rankCandidates(products, plan);
     return {
       md: '',
-      platform,
+      /* A probe that answered has NAMED this shop - a working Store API is a
+       * WooCommerce shop - and that answer is better than the 'unknown' the
+       * caller passed in when it had nothing cached. */
+      platform: platformCache.get(host) ?? platform,
       picked,
       products: ranked,
       retrieval: 'api',
@@ -2877,22 +3333,44 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
     const term = ladderTerms(plan)[0] ?? plan.hebrew;
 
     const { origin } = new URL(baseUrl);
-    const platform = await resolvePlatform(origin, host);
 
     /*
-     * The shop's own JSON first. On the ten of sixteen nurseries that publish
-     * one this answers exactly, for free, and - the part that matters for
-     * everyone else - it costs none of Firecrawl's ten requests a minute, so
-     * the shops that genuinely need a browser get the whole window.
+     * The shop's own JSON first - BEFORE identification, not after it.
+     *
+     * On the ten of sixteen nurseries that publish one this answers exactly,
+     * for free, and it costs none of Firecrawl's ten requests a minute, so the
+     * shops that genuinely need a browser get the whole window.
+     *
+     * The ordering is the change. `resolvePlatform` used to run first, which
+     * meant a host we had never met paid the WHOLE identification cascade - a
+     * homepage read, then a rendered Firecrawl homepage at a 4s wait plus two
+     * endpoint reads, then an LLM classification - before anyone asked the shop
+     * its own catalogue endpoint. For a WooCommerce shop that cascade's entire
+     * output is the word "woo", which `probeApiRoute` establishes with two
+     * plain GETs fired together, and which it then writes back through
+     * `rememberApiRoute`/`rememberHost` so identification is not merely
+     * deferred, it is answered.
+     *
+     * Every nursery Places discovers for a new user is such a host, so this is
+     * the common path in production and the one the fixtures cannot see.
+     *
+     * A host we ALREADY know keeps the old behaviour exactly: its platform
+     * comes out of the cache for nothing, and `apiSearch` gets it, so a route
+     * we merely inferred still re-probes when it produces nothing (see giveUp).
      */
     if (opts.apiEnabled) {
       try {
-        const viaApi = await apiSearch(origin, host, plan, platform);
+        const viaApi = await apiSearch(origin, host, plan, cachedPlatform(host) ?? 'unknown');
         if (viaApi) return viaApi;
       } catch {
         /* the HTML path below is the fallback, and it is the one we had before */
       }
     }
+
+    /* No JSON route, so the page has to be read - and reading it needs to know
+     * which page to ask for. This is where identification is actually load
+     * bearing, and now the only place that pays for it. */
+    const platform = await resolvePlatform(origin, host);
     return fetchSearchHtml(origin, term, platform, host);
   }
 
@@ -2912,6 +3390,10 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
     query: string;
     host: string;
     origin: string;
+    /* HTTP status of the read that produced `html`, when the caller has it.
+     * Without it this had to fetch the same URL a second time to learn a fact
+     * the caller was already holding. */
+    status?: number;
   }): Promise<boolean | undefined> {
     /*
      * The homepage can only ever CONVICT here. Its agreement is not evidence
@@ -2926,28 +3408,39 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
     });
     if (vsHome === false) return false;
 
-    const controlUrl = applyTemplate(
-      a.url.replace(encodeURIComponent(a.query), '{query}'),
-      a.origin,
-      CONTROL_QUERY
-    );
-    if (controlUrl === a.url) return vsHome;
+    const controlUrl = controlUrlFor(a.url, a.query, a.origin);
+    if (!controlUrl) return vsHome;
 
     /*
      * Raw HTML on both sides when we can get it: free, and stable byte for byte
      * in a way a re-rendered markdown extraction is not. `keepUnreadable`
      * because a page that reads as a wall still compares perfectly well - and
      * yifrach's 357KB page is one of those.
+     *
+     * The caller has usually ALREADY read this URL - `fetchSearchHtml` fires a
+     * direct read alongside the provider scrape - and used to hand the body in
+     * while keeping the status, so this refetched the identical page purely to
+     * learn a number the caller was holding. That is one full round trip
+     * against someone else's server, per HTML-route shop, per search, for
+     * nothing. With the status passed down the refetch happens only when the
+     * body we were given is EMPTY, which is the one case it can still help:
+     * `readHtmlResult` drops a page that reads as a bot wall, and a wall
+     * compares fine.
      */
-    const search = await rawForCompare(a.url);
+    let searchRaw = a.html;
+    let searchStatus = a.status;
+    if (!searchRaw) {
+      const search = await rawForCompare(a.url);
+      searchRaw = search.html;
+      searchStatus = search.status;
+    }
     /* A 404 is not an empty results page. The probe path can settle on one -
      * yifrach.co.il has no /search endpoint, so /search?q= returns the same
      * error page for every term, which reads exactly like a shop that searched
      * and found nothing. */
-    if (search.status >= 400) return false;
-    const searchRaw = a.html || search.html;
+    if (searchStatus !== undefined && searchStatus >= 400) return false;
     if (searchRaw) {
-      const control = await rawForCompare(controlUrl);
+      const control = await controlPage(controlUrl);
       const byHtml = answeredQuery({
         searchText: searchRaw,
         controlText: control.html,
@@ -2968,7 +3461,62 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
   /* A read used only to compare two pages of the same site, never to extract
    * from - so it keeps pages the extractor would refuse. Costs no credits. */
   async function rawForCompare(url: string): Promise<{ html: string; status: number }> {
-    return fetchRawHtmlWithSchemeFallback(url, fetch, true);
+    return fetchRawHtmlWithSchemeFallback(url, opts.fetchCompare ?? fetch, true);
+  }
+
+  /*
+   * The same search URL asked for a plant nobody stocks, or null when this
+   * shop's URL has no query in it to replace.
+   */
+  function controlUrlFor(url: string, query: string, origin: string): string | null {
+    const control = applyTemplate(
+      url.replace(encodeURIComponent(query), '{query}'),
+      origin,
+      CONTROL_QUERY
+    );
+    return control === url ? null : control;
+  }
+
+  /*
+   * The control page, read at most once an hour per shop.
+   *
+   * It is the same page for every plant: `zzqxwvplant` is what we ask, and what
+   * comes back says something about the shop's SEARCH, not about the query. A
+   * fan-out over a dozen shops for two plants was fetching it a dozen times
+   * over, and the answer it buys - "does this shop apply the query at all" -
+   * does not change between two searches a minute apart.
+   *
+   * The promise is cached alongside the result so the preload below and the
+   * judgement that needs it share one request rather than racing into two.
+   */
+  const controlCache = new Map<string, { html: string; status: number; at: number }>();
+  const controlInFlight = new Map<string, Promise<{ html: string; status: number }>>();
+
+  async function controlPage(controlUrl: string): Promise<{ html: string; status: number }> {
+    const hit = controlCache.get(controlUrl);
+    if (hit && now() - hit.at < SEARCH_MAX_AGE_MS) return hit;
+    const flying = controlInFlight.get(controlUrl);
+    if (flying) return flying;
+
+    const job = rawForCompare(controlUrl)
+      .then((res) => {
+        /*
+         * A failed control read is cached too. A shop that refuses a bare GET
+         * refuses it every time, and re-learning that per search is the cost
+         * this cache exists to remove.
+         */
+        controlCache.set(controlUrl, { ...res, at: now() });
+        while (controlCache.size > MAX_CONTROL_PAGES) {
+          const oldest = controlCache.keys().next().value;
+          if (oldest === undefined) break;
+          controlCache.delete(oldest);
+        }
+        return res;
+      })
+      .finally(() => controlInFlight.delete(controlUrl));
+
+    controlInFlight.set(controlUrl, job);
+    return job;
   }
 
   async function fetchSearchHtml(
@@ -3008,6 +3556,20 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
        * site in the fan-out for nothing.
        */
       const htmlPromise = readHtmlResult(url);
+      /*
+       * The control read starts HERE, next to the other two, rather than after
+       * both have finished.
+       *
+       * `judgeAnswered` needs it for almost every shop on this path, and it is
+       * a plain GET of a URL we can already name - so waiting until the scrape
+       * has settled to begin it simply adds one round trip to the end of every
+       * site in the fan-out. Started now it overlaps the scrape and costs
+       * nothing; cached per shop, most searches do not even make the request.
+       * Nothing awaits this handle: whoever needs the page asks `controlPage`
+       * for it and joins the same in-flight promise.
+       */
+      const controlUrl = controlUrlFor(url, query, origin);
+      if (controlUrl) void controlPage(controlUrl);
       let md = '';
       try {
         md = await scrape(url, firecrawlKey, {
@@ -3068,7 +3630,7 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
        * asked. Checking costs one free direct GET of the homepage, and only for
        * pages that did not echo the term in the first place.
        */
-      const confirmed = await judgeAnswered({ url, md, html, query, host, origin });
+      const confirmed = await judgeAnswered({ url, md, html, query, host, origin, status });
 
       if (confirmed === false) {
         /*

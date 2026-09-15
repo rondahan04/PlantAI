@@ -127,6 +127,79 @@ test('a Woo search maps the shelf and reports that the SERVER did the filtering'
   assert.equal(res.products[0].source, 'api');
 });
 
+/*
+ * The truncated shelf, one level up from WOO_DEFAULT_PER_PAGE.
+ *
+ * per_page is capped at 100 by the Store API, so a shop with more than 100
+ * products matching the genus answers with a full page and says nothing about
+ * the rest - and the cultivar we were sent for is simply missing from the
+ * response. The shop then looks like it stocks every Ficus except the one asked
+ * for, which is the confident wrong absence this whole module exists to avoid.
+ */
+test('a full Woo page means the shelf may be longer, so paging continues', async () => {
+  const page1 = Array.from({ length: 100 }, (_, i) => wooRow({ name: `פיקוס ${i}` }));
+  const page2 = [wooRow({ name: 'פיקוס ליראטה' })];
+  const seen: string[] = [];
+  const res = await wooStoreSearch(ORIGIN, 'פיקוס', {
+    fetchImpl: (async (url: string) => {
+      seen.push(url);
+      const body = url.includes('page=2') ? page2 : page1;
+      return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+    }) as any,
+  });
+  assert.equal(res.products.length, 101);
+  assert.equal(res.complete, true);
+  assert.ok(seen.some((u) => u.includes('page=2')));
+  assert.ok(res.products.some((p) => p.name === 'פיקוס ליראטה'));
+});
+
+test('a shelf that fits in one page still costs exactly one request', async () => {
+  const seen: string[] = [];
+  const res = await wooStoreSearch(ORIGIN, 'אלוקסיה', {
+    fetchImpl: (async (url: string) => {
+      seen.push(url);
+      return { ok: true, status: 200, text: async () => JSON.stringify([wooRow()]) };
+    }) as any,
+  });
+  assert.equal(seen.length, 1);
+  assert.equal(res.complete, true);
+  assert.equal(res.products.length, 1);
+});
+
+test('a Woo shelf cut off at the page cap is NOT complete, so absence proves nothing', async () => {
+  const full = Array.from({ length: 100 }, (_, i) => wooRow({ name: `פיקוס ${i}` }));
+  const res = await wooStoreSearch(ORIGIN, 'פיקוס', {
+    maxPages: 2,
+    fetchImpl: (async () => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify(full),
+    })) as any,
+  });
+  assert.equal(res.complete, false);
+  assert.equal(res.products.length, 200);
+});
+
+test('a later Woo page failing narrows the shelf rather than erasing it', async () => {
+  const full = Array.from({ length: 100 }, (_, i) => wooRow({ name: `פיקוס ${i}` }));
+  const res = await wooStoreSearch(ORIGIN, 'פיקוס', {
+    fetchImpl: (async (url: string) =>
+      url.includes('page=2')
+        ? { ok: false, status: 500, text: async () => 'boom' }
+        : { ok: true, status: 200, text: async () => JSON.stringify(full) }) as any,
+  });
+  assert.equal(res.products.length, 100);
+  assert.equal(res.complete, false);
+});
+
+test('page one failing is still a route that does not answer', async () => {
+  const res = await wooStoreSearch(ORIGIN, 'פיקוס', {
+    fetchImpl: (async () => ({ ok: false, status: 404, text: async () => 'nope' })) as any,
+  });
+  assert.equal(res.products.length, 0);
+  assert.equal(res.status, 404);
+});
+
 test('the search term is encoded, so Hebrew and spaces survive the URL', () => {
   const url = wooSearchUrl(ORIGIN, 'אלוקסיה ריגל שילד');
   assert.ok(url.includes('search=%D7%90'));
@@ -194,6 +267,53 @@ test('a catalogue cut off at the page cap is NOT complete, so absence proves not
     maxPages: 2,
     fetchImpl: fakeFetch({ '/products.json': { body: full } }),
   });
+  assert.equal(res.complete, false);
+});
+
+/*
+ * Page 1 alone, then batches. A cold Render process re-downloads a Shopify
+ * catalogue from scratch, on the user's search, so 8 serial quarter-megabyte
+ * round trips are latency the user pays - and a shop whose whole catalogue fits
+ * in one page must not pay for the other seven to find that out.
+ */
+test('page one is read alone, and the rest are read together', async () => {
+  const full = (n: number) => ({
+    products: Array.from({ length: SHOPIFY_PAGE_SIZE }, (_, i) => shopifyRow({ handle: `p${n}-${i}` })),
+  });
+  /* When a batch is in flight, every request in it starts before any settles. */
+  let inFlight = 0;
+  let widest = 0;
+  const res = await shopifyCatalogue('https://decogarden.co.il', {
+    maxPages: 8,
+    fetchImpl: (async (url: string) => {
+      inFlight += 1;
+      widest = Math.max(widest, inFlight);
+      await new Promise((r) => setTimeout(r, 1));
+      inFlight -= 1;
+      const page = Number(/page=(\d+)/.exec(url)?.[1] ?? '1');
+      const body = page >= 5 ? { products: [shopifyRow({ handle: 'last' })] } : full(page);
+      return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+    }) as any,
+  });
+  assert.equal(widest, 3, 'pages after the first are requested together');
+  /* 4 full pages plus the short one that ended it. */
+  assert.equal(res.products.length, SHOPIFY_PAGE_SIZE * 4 + 1);
+  assert.equal(res.complete, true);
+});
+
+test('a batch is consumed in page order, so a gap cannot be read as a catalogue', async () => {
+  const full = { products: Array.from({ length: SHOPIFY_PAGE_SIZE }, (_, i) => shopifyRow({ handle: `p${i}` })) };
+  const res = await shopifyCatalogue('https://decogarden.co.il', {
+    maxPages: 8,
+    fetchImpl: (async (url: string) => {
+      const page = Number(/page=(\d+)/.exec(url)?.[1] ?? '1');
+      /* Page 3 fails while page 4 answers. Taking 4 anyway would report a
+       * catalogue with a hole in it as though it were contiguous. */
+      if (page === 3) return { ok: false, status: 503, text: async () => 'down' };
+      return { ok: true, status: 200, text: async () => JSON.stringify(full) };
+    }) as any,
+  });
+  assert.equal(res.products.length, SHOPIFY_PAGE_SIZE * 2, 'stops at the gap, keeps pages 1-2');
   assert.equal(res.complete, false);
 });
 

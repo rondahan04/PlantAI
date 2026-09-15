@@ -22,6 +22,7 @@ import {
   parseMicrodataProducts,
   parseMetaProduct,
   parseProductCards,
+  parseProductPage,
   extractStructuredProducts,
   formatPrice,
 } from './structuredPrice.ts';
@@ -319,4 +320,68 @@ test('a grid is read at close to its real size', () => {
       `${f.host} ${f.slug}: read ${found.length} of ${f.pricedProducts} products`
     );
   }
+});
+
+// --- a page that IS one product ---------------------------------------------
+
+/*
+ * The card reader pairs a price with a titled LINK, because on a grid that link
+ * is what says which product the price belongs to. A product page does not link
+ * to itself - and a product page is where BOTH rescues end up: the follow from
+ * a catalogue that prices nothing, and the sitemap route into a shop whose
+ * search does not work.
+ */
+const PRODUCT_PAGE = `
+<html><body>
+  <nav class="site-header"><a href="/cart">עגלה</a><span class="price">₪0.00</span></nav>
+  <h1 class="product_title">מונסטרה דליסיוסה</h1>
+  <p class="price"><bdi>149&nbsp;<span>₪</span></bdi></p>
+  <form class="cart"><button>הוסף לסל</button></form>
+</body></html>`;
+
+test('a product page is priced from its own markup, with no link to climb to', () => {
+  const p = parseProductPage(PRODUCT_PAGE, 'https://x.co.il/product/monstera/');
+  assert.equal(p?.name, 'מונסטרה דליסיוסה');
+  assert.equal(p?.price, 149);
+  assert.equal(p?.url, 'https://x.co.il/product/monstera/');
+});
+
+test('the mini-cart total in the header is not the product price', () => {
+  assert.equal(parseProductPage(PRODUCT_PAGE, '')?.price, 149);
+});
+
+test('a sale page quotes what the shopper pays, not the struck-through original', () => {
+  const html = `
+    <html><body>
+      <h1>אלוקסיה ריגל שילד</h1>
+      <p class="price"><del><bdi>699.00&nbsp;₪</bdi></del> <ins><bdi>499.90&nbsp;₪</bdi></ins></p>
+    </body></html>`;
+  assert.equal(parseProductPage(html, '')?.price, 499.9);
+});
+
+/* Narrow on purpose: `h1 + a price` describes a great many pages that are not
+ * products, so a page full of prices is a grid and not a product. */
+test('a grid is not a product page', () => {
+  const rows = Array.from(
+    { length: 8 },
+    (_, i) => `<li><span class="price">₪${40 + i}</span></li>`
+  ).join('');
+  assert.equal(parseProductPage(`<html><body><h1>חנות</h1><ul>${rows}</ul></body></html>`, ''), null);
+});
+
+test('a page with no heading names nothing, so nothing is claimed', () => {
+  assert.equal(parseProductPage('<html><body><p class="price">₪149</p></body></html>', ''), null);
+});
+
+test('the product-page reader never outranks a real catalogue', () => {
+  /* A search page carrying both a grid and an h1: the grid is the answer. */
+  const html = `
+    <html><body>
+      <h1>תוצאות חיפוש</h1>
+      <li class="product"><a href="https://x.co.il/product/a/"><h2>מונסטרה</h2><span class="price">₪149</span></a></li>
+      <li class="product"><a href="https://x.co.il/product/b/"><h2>פיקוס</h2><span class="price">₪99</span></a></li>
+    </body></html>`;
+  const out = extractStructuredProducts(html, 'https://x.co.il/?s=x');
+  assert.equal(out.length, 2);
+  assert.ok(out.every((p) => p.name !== 'תוצאות חיפוש'));
 });

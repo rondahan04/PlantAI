@@ -85,6 +85,16 @@ const WOO_DEFAULT_PER_PAGE = 100;
 
 /* Shopify's own maximum. Fewer pages beats smaller pages. */
 export const SHOPIFY_PAGE_SIZE = 250;
+/*
+ * How many catalogue pages to request at once after the first.
+ *
+ * Three, because the trade is between round trips and wasted requests: a shop
+ * with 2000 products used to cost 8 serial fetches of ~250KB each, and this
+ * makes it 4 waits (1, then 3, then 3, then 1). A shop whose catalogue fits in
+ * one page still costs exactly one request, because page 1 is always read
+ * alone - the only page we know we want before reading anything.
+ */
+export const SHOPIFY_PAGE_BATCH = 3;
 /* 2000 products. Past this a "nursery" is a general marketplace and the
  * catalogue route is the wrong tool; the HTML search page is a better bet. */
 export const SHOPIFY_MAX_PAGES = 8;
@@ -176,10 +186,16 @@ const empty = (route: ApiRoute, status: number, filteredByServer: boolean): ApiR
 
 // --- WooCommerce Store API ---------------------------------------------------
 
-export function wooSearchUrl(origin: string, term: string, perPage = WOO_DEFAULT_PER_PAGE): string {
+export function wooSearchUrl(
+  origin: string,
+  term: string,
+  perPage = WOO_DEFAULT_PER_PAGE,
+  page = 1
+): string {
+  const paged = page > 1 ? `&page=${page}` : '';
   return `${origin.replace(/\/$/, '')}/wp-json/wc/store/v1/products?search=${encodeURIComponent(
     term
-  )}&per_page=${perPage}`;
+  )}&per_page=${perPage}${paged}`;
 }
 
 /*
@@ -238,21 +254,76 @@ export function wooProduct(row: any, origin: string): StructuredProduct | null {
   };
 }
 
-/* Search a WooCommerce shop. One request; the server applies the query. */
+/*
+ * How many pages of a Woo shelf we will read.
+ *
+ * `per_page` is capped at 100 by the Store API itself, and WOO_DEFAULT_PER_PAGE
+ * already asks for all of it - but a shop with more than 100 products matching
+ * the genus hands back a full page and says nothing about the rest. That is the
+ * truncated shelf the comment on WOO_DEFAULT_PER_PAGE warns about, arriving one
+ * level up: al-haderech lists 64 Alocasia and fits, a genus like פיקוס or קקטוס
+ * at a large shop does not, and the cultivar we were sent for is simply absent
+ * from the response. The shop then looks like it stocks everything except the
+ * plant that was asked for.
+ *
+ * A page is only requested when the one before it came back FULL, so a shop
+ * whose shelf fits in one page - nearly all of them - still costs exactly one
+ * request. Three pages is 300 products, past which the genus is not a shelf and
+ * ranking has plenty to work with.
+ */
+export const WOO_MAX_PAGES = 3;
+
+/*
+ * Search a WooCommerce shop; the server applies the query.
+ *
+ * One request for the common case, and one more per full page after that. The
+ * pages are read in sequence rather than together because the stopping
+ * condition IS the previous page's length: firing three at once would spend two
+ * requests on every shop to learn that the first page was the whole answer.
+ */
 export async function wooStoreSearch(
   origin: string,
   term: string,
-  opts: { perPage?: number; fetchImpl?: FetchLike } = {}
+  opts: { perPage?: number; maxPages?: number; fetchImpl?: FetchLike } = {}
 ): Promise<ApiResult> {
   const fetchImpl = opts.fetchImpl ?? fetch;
-  const url = wooSearchUrl(origin, term, opts.perPage ?? WOO_DEFAULT_PER_PAGE);
-  const { body, status } = await getJson(url, fetchImpl);
-  if (!Array.isArray(body)) return empty('woo-store', status, true);
+  const perPage = opts.perPage ?? WOO_DEFAULT_PER_PAGE;
+  const maxPages = Math.max(1, opts.maxPages ?? WOO_MAX_PAGES);
 
-  const products = body
-    .map((row) => wooProduct(row, origin))
-    .filter((p): p is StructuredProduct => p !== null);
-  return { products, status, filteredByServer: true, route: 'woo-store', complete: true };
+  const products: StructuredProduct[] = [];
+  let status = 0;
+  let complete = false;
+
+  for (let page = 1; page <= maxPages; page++) {
+    const { body, status: s } = await getJson(
+      wooSearchUrl(origin, term, perPage, page),
+      fetchImpl
+    );
+    /*
+     * Page 1 failing is a route that does not answer, which is what the caller
+     * falls back on. A LATER page failing leaves a prefix we can still rank, so
+     * it narrows the answer instead of erasing it - but it is not proof of
+     * absence, so `complete` stays false.
+     */
+    if (!Array.isArray(body)) {
+      if (page === 1) return empty('woo-store', s, true);
+      status = status || s;
+      break;
+    }
+    status = s;
+    for (const row of body) {
+      const p = wooProduct(row, origin);
+      if (p) products.push(p);
+    }
+    /* A short page is the end of the shelf - the only signal this endpoint
+     * gives, since the Store API's totals live in headers getJson discards. */
+    if (body.length < perPage) {
+      complete = true;
+      break;
+    }
+  }
+
+  return { products, status, filteredByServer: true, route: 'woo-store', complete };
 }
 
 // --- Shopify catalogue -------------------------------------------------------
@@ -309,35 +380,62 @@ export function shopifyProduct(row: any, origin: string): StructuredProduct | nu
  */
 export async function shopifyCatalogue(
   origin: string,
-  opts: { maxPages?: number; limit?: number; fetchImpl?: FetchLike } = {}
+  opts: { maxPages?: number; limit?: number; batch?: number; fetchImpl?: FetchLike } = {}
 ): Promise<ApiResult> {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const limit = opts.limit ?? SHOPIFY_PAGE_SIZE;
   const maxPages = opts.maxPages ?? SHOPIFY_MAX_PAGES;
+  const batch = Math.max(1, opts.batch ?? SHOPIFY_PAGE_BATCH);
 
   const products: StructuredProduct[] = [];
   let status = 0;
   let complete = false;
 
-  for (let page = 1; page <= maxPages; page++) {
-    const { body, status: s } = await getJson(shopifyPageUrl(origin, page, limit), fetchImpl);
-    status = s;
-    const rows = (body as any)?.products;
-    if (!Array.isArray(rows)) {
-      // Page 1 failing means no catalogue at all. A later page failing leaves
-      // us with a prefix, which is usable but not proof of absence.
-      if (page === 1) return empty('shopify-json', s, false);
-      break;
-    }
-    for (const row of rows) {
-      const p = shopifyProduct(row, origin);
-      if (p) products.push(p);
-    }
-    /* A short page is the end of the catalogue - the only signal this endpoint
-     * gives, since it carries no total count. */
-    if (rows.length < limit) {
-      complete = true;
-      break;
+  /*
+   * Page 1 alone first, then the rest in concurrent batches.
+   *
+   * The stopping condition is a short page, so pages cannot all be fired at
+   * once without spending eight requests on a shop whose catalogue fits in one.
+   * But the shops that DO need eight were paying eight serial round trips of a
+   * quarter-megabyte each, on a cache that a Render cold start empties - which
+   * is latency on the user's search, not on a warm-up. Page 1 decides whether
+   * there is more at all; after that, three at a time turns 8 round trips into
+   * 3 without ever requesting a page we did not already have reason to want.
+   */
+  pages: for (let first = 1; first <= maxPages; first += first === 1 ? 1 : batch) {
+    const size = first === 1 ? 1 : Math.min(batch, maxPages - first + 1);
+    const numbers = Array.from({ length: size }, (_, i) => first + i);
+    const responses = await Promise.all(
+      numbers.map((page) => getJson(shopifyPageUrl(origin, page, limit), fetchImpl))
+    );
+
+    /*
+     * Consumed IN ORDER, whatever order they settled in. A gap in the middle of
+     * a catalogue is not a catalogue: taking page 5 after page 4 failed would
+     * report a prefix as if it were contiguous, and `complete` would then be a
+     * claim about a set we never held.
+     */
+    for (let i = 0; i < responses.length; i++) {
+      const { body, status: s } = responses[i];
+      const rows = (body as any)?.products;
+      if (!Array.isArray(rows)) {
+        // Page 1 failing means no catalogue at all. A later page failing leaves
+        // us with a prefix, which is usable but not proof of absence.
+        if (numbers[i] === 1) return empty('shopify-json', s, false);
+        status = status || s;
+        break pages;
+      }
+      status = s;
+      for (const row of rows) {
+        const p = shopifyProduct(row, origin);
+        if (p) products.push(p);
+      }
+      /* A short page is the end of the catalogue - the only signal this endpoint
+       * gives, since it carries no total count. */
+      if (rows.length < limit) {
+        complete = true;
+        break pages;
+      }
     }
   }
 

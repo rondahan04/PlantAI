@@ -35,10 +35,15 @@ import {
   scrapeUrl,
 } from '../scraper/core.ts';
 import { discoverNurseries, resolvePhotoUrl } from '../scraper/places.ts';
-import { runNurserySearch, type PipelineDeps, type NurseryResult } from '../scraper/pipeline.ts';
+import {
+  runNurserySearch,
+  type CachedShopResult,
+  type PipelineDeps,
+  type NurseryResult,
+} from '../scraper/pipeline.ts';
 import { clientIp, createGate, readGateConfig } from './gate.ts';
 import { createJobStore } from './jobs.ts';
-import { createNurseryCache, searchKey } from './nurseryCache.ts';
+import { createNurseryCache, createShopCache, searchKey } from './nurseryCache.ts';
 import {
   translateDiagnosis,
   openAiTranslate,
@@ -97,6 +102,22 @@ const jobs = createJobStore<NurseryResult[]>();
 const scrapeHealth = createScrapeHealth();
 
 const nurseryCache = createNurseryCache<NurseryResult[]>({
+  url: env('SUPABASE_URL') ?? env('EXPO_PUBLIC_SUPABASE_URL'),
+  serviceKey: env('SUPABASE_SERVICE_ROLE_KEY'),
+});
+
+/*
+ * The second grain, and the one that will actually hit.
+ *
+ * `nurseryCache` keys on the whole question - term, point rounded to ~100m,
+ * radius - so it answers only when the same thing is asked from within a
+ * hundred metres of where it was asked before, which GPS jitter alone defeats.
+ * This one keys on the shop and the plant, which is the part of a search that
+ * does not depend on who is asking or from where, so a search pays only for the
+ * shops nobody has asked about lately. Same service-role key, same
+ * fail-to-a-scrape contract; see server/nurseryCache.ts.
+ */
+const shopCache = createShopCache<CachedShopResult>({
   url: env('SUPABASE_URL') ?? env('EXPO_PUBLIC_SUPABASE_URL'),
   serviceKey: env('SUPABASE_SERVICE_ROLE_KEY'),
 });
@@ -230,6 +251,8 @@ const deps: PipelineDeps = {
   readFallbackUrls,
   nationalUrls: NATIONAL_NURSERIES,
   onSiteRead: (host, stage) => scrapeHealth.record(host, stage),
+  readShopCache: (host, query) => shopCache.get(host, query),
+  writeShopCache: (host, query, row) => shopCache.put(host, query, row, row.outcome),
 };
 
 // Temporary: the lecturer's shared OpenAI key has no credits (2026-08-22).
@@ -487,6 +510,9 @@ const server = http.createServer(async (req, res) => {
       // `cache.enabled: false` means every search is a live paid scrape. It is
       // the only failure here that costs money while looking perfectly healthy.
       cache: nurseryCache.stats(),
+      /* The per-shop layer, reported separately: the two answer different
+       * questions and can be healthy or broken independently. */
+      shopCache: shopCache.stats(),
       /*
        * Summary only. The per-host detail is behind ?errors=1 with the rest of
        * the diagnostics: which shops we scrape is not something an

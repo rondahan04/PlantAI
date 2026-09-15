@@ -52,6 +52,21 @@ export function searchKey(parts: SearchParts): string {
   ].join('|');
 }
 
+/*
+ * The identity of one SHOP's answer, which is the part of a search that is
+ * actually reusable.
+ *
+ * `searchKey` above is the whole question - term, point, radius - so it answers
+ * only when the same thing is asked from within a hundred metres of where it
+ * was asked before. GPS jitter defeats that on its own. But "does this shop
+ * stock this plant, and for how much" has nothing to do with where the person
+ * asking is standing, or how wide a radius they chose, so keyed this way one
+ * user's search warms every overlapping search after it.
+ */
+export function shopKey(host: string, query: string): string {
+  return `${host.trim().toLowerCase()}|${query.trim().toLowerCase()}`;
+}
+
 export interface NurseryCacheConfig {
   url?: string;
   serviceKey?: string;
@@ -202,6 +217,140 @@ export function createNurseryCache<T>(config: NurseryCacheConfig = {}): NurseryC
       try {
         // merge-duplicates so a re-scrape REPLACES the stale row rather than
         // conflicting with it - the newest answer is the only one worth having.
+        const res = await call('?on_conflict=key', {
+          method: 'POST',
+          body: JSON.stringify(row),
+          headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+        });
+        if (res.ok) counts.stores += 1;
+        else fail(`write failed: HTTP ${res.status}`);
+      } catch (err) {
+        fail(`write threw: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    },
+  };
+}
+
+// --- the per-shop layer ------------------------------------------------------
+
+export interface ShopCache<T> {
+  enabled: boolean;
+  get(host: string, query: string): Promise<CacheHit<T> | null>;
+  put(host: string, query: string, result: T, outcome?: string): Promise<void>;
+  stats(): NurseryCacheStats;
+}
+
+/*
+ * How long one shop's answer is worth keeping.
+ *
+ * Shorter than the week the whole-search cache keeps, and deliberately so: this
+ * layer answers far more often, so a stale row here is seen far more often too.
+ * A day is long enough that a fan-out over a dozen shops mostly reads rather
+ * than scrapes, and short enough that a shop restocking is reflected the next
+ * day rather than the next week.
+ */
+export const DEFAULT_SHOP_TTL_MS = 24 * 60 * 60_000;
+
+/*
+ * Cache one shop's verdict, so a search pays only for the shops nobody has
+ * asked about lately.
+ *
+ * Every rule the whole-search cache follows holds here too, for the same
+ * reasons: it never fails a scrape, it is optional, and without a service-role
+ * key it is a no-op that reports `enabled: false` rather than a 0% hit rate.
+ */
+export function createShopCache<T>(config: NurseryCacheConfig = {}): ShopCache<T> {
+  const {
+    url,
+    serviceKey,
+    ttlMs = DEFAULT_SHOP_TTL_MS,
+    fetchImpl = fetch,
+    now = Date.now,
+    timeoutMs = 5_000,
+    onError = (detail: string) => console.warn(`[shop-cache] ${detail}`),
+  } = config;
+
+  const enabled = Boolean(url && serviceKey);
+  const base = url ? `${url.replace(/\/+$/, '')}/rest/v1/nursery_shop_results` : '';
+  const counts = { hits: 0, misses: 0, stores: 0, errors: 0 };
+  const fail = (detail: string): void => {
+    counts.errors += 1;
+    onError(detail);
+  };
+  const headers = {
+    apikey: serviceKey ?? '',
+    Authorization: `Bearer ${serviceKey ?? ''}`,
+    'Content-Type': 'application/json',
+  };
+
+  async function call(
+    path: string,
+    init: RequestInit & { headers?: Record<string, string> }
+  ): Promise<Response> {
+    const { headers: extra, ...rest } = init;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetchImpl(`${base}${path}`, {
+        ...rest,
+        headers: { ...headers, ...extra },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return {
+    enabled,
+
+    stats() {
+      return { enabled, ...counts };
+    },
+
+    async get(host, query) {
+      if (!enabled || !host) return null;
+      try {
+        const res = await call(
+          `?key=eq.${encodeURIComponent(shopKey(host, query))}&select=result,scraped_at&limit=1`,
+          { method: 'GET' }
+        );
+        if (!res.ok) {
+          fail(`lookup failed: HTTP ${res.status}`);
+          counts.misses += 1;
+          return null;
+        }
+        const rows = await res.json();
+        const row = Array.isArray(rows) ? rows[0] : null;
+        if (!row) {
+          counts.misses += 1;
+          return null;
+        }
+        const scrapedAt = Date.parse(row.scraped_at);
+        if (!Number.isFinite(scrapedAt) || now() - scrapedAt > ttlMs || row.result == null) {
+          counts.misses += 1;
+          return null;
+        }
+        counts.hits += 1;
+        return { results: row.result as T, scrapedAt };
+      } catch (err) {
+        fail(`lookup threw: ${err instanceof Error ? err.message : String(err)}`);
+        counts.misses += 1;
+        return null;
+      }
+    },
+
+    async put(host, query, result, outcome) {
+      if (!enabled || !host) return;
+      const row = {
+        key: shopKey(host, query),
+        host: host.trim().toLowerCase(),
+        query: query.trim().toLowerCase(),
+        result,
+        outcome: outcome ?? null,
+        scraped_at: new Date(now()).toISOString(),
+      };
+      try {
         const res = await call('?on_conflict=key', {
           method: 'POST',
           body: JSON.stringify(row),

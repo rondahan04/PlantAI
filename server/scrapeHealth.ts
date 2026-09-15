@@ -45,7 +45,18 @@ export type SiteStage =
    * perfectly readable body, so every "did we read anything" test passed on it.
    * Both shops were dead for a month and the health report showed nothing.
    */
-  | 'no_search';
+  | 'no_search'
+  /*
+   * We did not read this shop on this search because we already had a reading
+   * of it from within the day (server/nurseryCache.ts, createShopCache).
+   *
+   * Evidence about neither side. Counted as a failure it would mark healthy
+   * shops stale; counted as a success it would clear a broken shop's record
+   * without anyone having touched that shop. So it moves no counter at all -
+   * it only stamps that this host came up - and the health report goes on
+   * describing the last time we actually read each shop.
+   */
+  | 'cached';
 
 /*
  * Did we manage to READ this shop's catalogue?
@@ -99,6 +110,17 @@ export function createScrapeHealth(config: ScrapeHealthConfig = {}): ScrapeHealt
     record(host, stage) {
       const at = new Date(now()).toISOString();
       const prev = hosts.get(host);
+
+      /*
+       * A cache hit read nothing, so it proves nothing. Stamp that the host
+       * came up and leave every counter exactly where the last real read left
+       * it - see the 'cached' stage above.
+       */
+      if (stage === 'cached') {
+        if (prev) hosts.set(host, { ...prev, lastSeenAt: at });
+        return;
+      }
+
       const ok = readable(stage);
 
       const next: SiteHealth = {

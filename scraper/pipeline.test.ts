@@ -834,3 +834,281 @@ test('a shop with stock still outranks a nearer nursery with no website', async 
   );
   assert.deepEqual(out.map((n) => n.name), ['Green House', 'No Site']);
 });
+
+// --- what the final price check is actually for -----------------------------
+
+/*
+ * It filtered on `inStockKnown`, which is a fact about STOCK, not about the
+ * price. A listing whose page never says whether the plant is in stock kept its
+ * price and skipped the check entirely - and a delivery threshold read off such
+ * a page is exactly as wrong as one read off any other.
+ */
+test('a price on a listing with no stock statement is still checked', async () => {
+  let seen: { site: string; price: string }[] = [];
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      extract: async () => ({
+        plants: [{ name: 'Monstera', price: '₪350', availability: 'unknown' }],
+        report: { is_valid: true, confidence_score: 100, feedback: '', corrected_output: [] },
+        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        funnel: funnel(),
+      }),
+      checkPrices: async (_q, candidates) => {
+        seen = candidates;
+        return candidates.map(() => ({ plausible: false, reason: 'free-delivery threshold' }));
+      },
+    })
+  );
+  assert.equal(seen.length, 1, 'the row was checked');
+  assert.equal(out[0].inStockKnown, false);
+  assert.equal(out[0].plantPrice, '-', 'and the number we do not trust is hidden');
+  assert.equal(out[0].priceSuspect, true);
+});
+
+/*
+ * The check catches a READING failure: a phone number or a shipping threshold
+ * mistaken for a price. That cannot happen to a number copied out of the shop's
+ * own price field, and the call is the last thing standing between the user and
+ * their results.
+ */
+test('a price the shop published is not sent to the model to be second-guessed', async () => {
+  let calls = 0;
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      extract: async () => ({
+        plants: [
+          { name: 'Monstera', price: '₪175', availability: 'in_stock', priceSource: 'stated' },
+        ],
+        report: { is_valid: true, confidence_score: 100, feedback: '', corrected_output: [] },
+        engines: { extractor: 'none', verifier: 'none' },
+        funnel: funnel(),
+      }),
+      checkPrices: async (_q, candidates) => {
+        calls += 1;
+        return candidates.map(() => ({ plausible: true, reason: '' }));
+      },
+    })
+  );
+  assert.equal(calls, 0, 'nothing on this search was read by a model');
+  assert.equal(out[0].plantPrice, '₪175');
+  assert.equal(out[0].priceStated, true);
+});
+
+test('a search mixing published and read prices checks only the read ones', async () => {
+  let batch: { site: string; price: string }[] = [];
+  await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      discover: async () => [
+        { name: 'A', website: 'https://a.example/', lat: 32.1, lng: 34.8, address: '' },
+        { name: 'B', website: 'https://b.example/', lat: 32.2, lng: 34.9, address: '' },
+      ],
+      nationalUrls: [],
+      extract: async (o) => ({
+        plants: [
+          o.site === 'a.example'
+            ? { name: 'Monstera', price: '₪175', availability: 'in_stock', priceSource: 'stated' as const }
+            : { name: 'Monstera', price: '₪350', availability: 'in_stock' },
+        ],
+        report: { is_valid: true, confidence_score: 100, feedback: '', corrected_output: [] },
+        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        funnel: funnel(),
+      }),
+      checkPrices: async (_q, candidates) => {
+        batch = candidates;
+        return candidates.map(() => ({ plausible: true, reason: '' }));
+      },
+    })
+  );
+  assert.deepEqual(batch.map((c) => c.price), ['₪350']);
+});
+
+// --- the fan-out stops waiting on its tail ----------------------------------
+
+/*
+ * With most shops answering from their own JSON in about a second, a 45s
+ * per-site ceiling means one dead nursery decides how long a search takes that
+ * was otherwise finished in two - and the user sits in front of a complete set
+ * of results waiting for a shop that is not going to answer.
+ */
+test('once most of the fan-out is in, a straggler gets a grace period, not the ceiling', async () => {
+  const never = new Promise<never>(() => {});
+  const started = Date.now();
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      siteBudgetMs: 60_000, // the ceiling must NOT be what ends this
+      tailGraceMs: 40,
+      nationalUrls: [],
+      discover: async () => [
+        { name: 'A', website: 'https://a.example/', lat: 32.1, lng: 34.8, address: '' },
+        { name: 'B', website: 'https://b.example/', lat: 32.2, lng: 34.9, address: '' },
+        { name: 'Dead', website: 'https://dead.example/', lat: 32.3, lng: 34.9, address: '' },
+      ],
+      search: async (website) =>
+        website.includes('dead')
+          ? ((await never) as never)
+          : { md: '# מונסטרה\n₪175', platform: 'woo', picked: `${website}?s=x` },
+    })
+  );
+  assert.ok(Date.now() - started < 5000, 'the search did not wait out the ceiling');
+  const dead = out.find((n) => n.id === 'dead.example');
+  assert.equal(dead?.outcome, 'not_found', 'a shop we stopped waiting for is unread');
+  assert.equal(dead?.availability?.kind, 'error');
+  /* And the shops that answered are all still here, priced. */
+  assert.equal(out.filter((n) => n.outcome === 'found').length, 2);
+});
+
+/*
+ * The grace period may not start before there is a quorum to start it. A fan-out
+ * where nothing has finished has no evidence that anything is slow.
+ */
+test('the grace period does not start until enough sites have settled', async () => {
+  const slowButGood = (ms: number) =>
+    new Promise((resolve) => setTimeout(() => resolve({ md: '# מונסטרה\n₪175', platform: 'woo', picked: 'https://x/?s=y' }), ms));
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      siteBudgetMs: 60_000,
+      tailGraceMs: 30,
+      nationalUrls: [],
+      discover: async () => [
+        { name: 'A', website: 'https://a.example/', lat: 32.1, lng: 34.8, address: '' },
+        { name: 'B', website: 'https://b.example/', lat: 32.2, lng: 34.9, address: '' },
+      ],
+      /* Both shops are slow; neither is a straggler, because neither has anyone
+       * to straggle behind. */
+      search: async () => (await slowButGood(80)) as any,
+    })
+  );
+  assert.equal(out.filter((n) => n.outcome === 'found').length, 2);
+});
+
+// --- the per-shop cache: what a search actually reuses -----------------------
+
+/*
+ * The whole-search cache keys on term + point + radius, so it answers only when
+ * the same thing is asked from within ~100m of where it was asked before - GPS
+ * jitter alone defeats it. What is genuinely the same answer for everybody is
+ * one shop's shelf for one plant.
+ */
+test('a shop read today is not read again for the next user', async () => {
+  let searched = 0;
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      nationalUrls: [],
+      search: async () => {
+        searched += 1;
+        return { md: '# מונסטרה\n₪175', platform: 'woo', picked: 'https://x/?s=y' };
+      },
+      readShopCache: async () => ({
+        results: {
+          plantPrice: '₪149',
+          hasPlant: true,
+          inStockKnown: true,
+          outcome: 'found' as const,
+          productName: 'מונסטרה דליסיוסה',
+          productUrl: 'https://shop.example/product/monstera/',
+        },
+        scrapedAt: Date.now() - 60_000,
+      }),
+    })
+  );
+  assert.equal(searched, 0, 'nobody paid to read this shop again');
+  assert.equal(out[0].plantPrice, '₪149');
+  assert.equal(out[0].fromCache, true);
+  /* Identity is the FRESH one: a cached row must never serve one user another
+   * user's distance. */
+  assert.equal(out[0].name, 'Green House');
+  assert.ok(Number.isFinite(out[0].distanceKm));
+});
+
+test('a cache that throws costs a scrape, never a search', async () => {
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      nationalUrls: [],
+      readShopCache: async () => {
+        throw new Error('supabase down');
+      },
+    })
+  );
+  assert.equal(out[0].outcome, 'found');
+  assert.equal(out[0].fromCache, undefined);
+});
+
+/*
+ * `not_found` is not a reading of a shop - it is a shop that was down,
+ * rate-limited, or cut off behind the fan-out's tail. Storing it would turn one
+ * bad minute into a day of telling every user we cannot check a shop that is by
+ * then answering perfectly well.
+ */
+test('only a real reading of a shop is worth keeping', async () => {
+  const written: { host: string; outcome?: string }[] = [];
+  await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      nationalUrls: [],
+      discover: async () => [
+        { name: 'Good', website: 'https://good.example/', lat: 32.1, lng: 34.8, address: '' },
+        { name: 'Down', website: 'https://down.example/', lat: 32.2, lng: 34.9, address: '' },
+      ],
+      search: async (website) => {
+        if (website.includes('down')) throw new Error('ECONNREFUSED');
+        return { md: '# מונסטרה\n₪175', platform: 'woo', picked: 'https://x/?s=y' };
+      },
+      writeShopCache: async (host, _q, row) => {
+        written.push({ host, outcome: row.outcome });
+      },
+    })
+  );
+  await new Promise((r) => setImmediate(r)); // the write is fire-and-forget
+  assert.deepEqual(written.map((w) => w.host), ['good.example']);
+  assert.equal(written[0].outcome, 'found');
+});
+
+test('a row served from the cache is not written straight back to it', async () => {
+  let writes = 0;
+  await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      nationalUrls: [],
+      readShopCache: async () => ({
+        results: { plantPrice: '₪149', hasPlant: true, inStockKnown: true, outcome: 'found' as const },
+        scrapedAt: Date.now(),
+      }),
+      writeShopCache: async () => {
+        writes += 1;
+      },
+    })
+  );
+  await new Promise((r) => setImmediate(r));
+  assert.equal(writes, 0);
+});
+
+/* A price the cross-nursery check rejected must not be handed to tomorrow's
+ * searches as though it had passed. */
+test('what is cached is the verified row, not the one before the price check', async () => {
+  let stored: { plantPrice: string } | undefined;
+  await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      nationalUrls: [],
+      extract: async () => ({
+        plants: [{ name: 'Monstera', price: '₪0521234567', availability: 'in_stock' }],
+        report: { is_valid: true, confidence_score: 100, feedback: '', corrected_output: [] },
+        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        funnel: funnel(),
+      }),
+      checkPrices: async () => [{ plausible: false, reason: 'that is a phone number' }],
+      writeShopCache: async (_h, _q, row) => {
+        stored = row as { plantPrice: string };
+      },
+    })
+  );
+  await new Promise((r) => setImmediate(r));
+  assert.equal(stored?.plantPrice, '-');
+});

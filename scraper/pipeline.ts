@@ -64,6 +64,21 @@ export interface NurseryResult {
    */
   priceSuspect?: boolean;
   priceNote?: string;
+  /*
+   * True when the shop PUBLISHED this price - in its storefront JSON, or in its
+   * own product markup - rather than a model reading it off a rendered page.
+   * Carried so the final cross-nursery price check can skip these rows: that
+   * pass exists to catch a phone number or a delivery threshold mistaken for a
+   * price, and a number copied out of a price field was never mistaken for
+   * anything. Absent means "we do not know", which is treated as read.
+   */
+  priceStated?: boolean;
+  /*
+   * This row came from the per-shop cache rather than from a read made during
+   * THIS search. Set so the write-back does not store a row it just read, and
+   * so a client can tell a fresh reading from a recent one.
+   */
+  fromCache?: boolean;
   shipsToHome: boolean; // national fallback (Deliver tab) vs local (Pick Up tab)
 }
 
@@ -120,6 +135,68 @@ export interface SearchInput {
 const SITE_BUDGET_MS = Number(env('NURSERY_SITE_BUDGET_MS')) || 45_000;
 
 /*
+ * The other deadline, and the one that actually fires.
+ *
+ * SITE_BUDGET_MS is a ceiling per shop, so a search takes as long as its
+ * slowest shop no matter how quickly the rest answered - and with most shops
+ * now served from their own JSON in about a second, the 45s ceiling means one
+ * dead nursery decides the length of a search that was otherwise finished in
+ * two. The user sits in front of a complete set of results waiting for a shop
+ * that is not going to answer.
+ *
+ * So once most of the fan-out is in, the stragglers get a short grace period
+ * rather than the full ceiling. Both deadlines still apply: this one cannot
+ * fire before a quorum has actually finished, and the ceiling still bounds the
+ * case where nothing finishes at all.
+ *
+ * A shop cut off here reports exactly as it did before - as a shop we could not
+ * read, never as a shop that does not stock the plant.
+ */
+const TAIL_QUORUM = 0.7;
+const TAIL_GRACE_MS = Number(env('NURSERY_TAIL_GRACE_MS')) || 10_000;
+
+/*
+ * The shared clock for one search's fan-out. `finished` is called as each site
+ * settles; when enough have, the remainder are given `graceMs` and no more.
+ */
+export function createPacer(
+  total: number,
+  opts: { graceMs?: number; quorum?: number } = {}
+) {
+  const graceMs = opts.graceMs ?? TAIL_GRACE_MS;
+  /*
+   * FLOOR, not ceil. Rounding up means a three-shop fan-out needs all three
+   * before the grace period can start - which is precisely the case it exists
+   * for, since the shop it is waiting on is the one that never finishes. A
+   * quorum is "at least this many have settled", and with three shops that is
+   * two.
+   */
+  const quorum = Math.max(1, Math.floor(total * (opts.quorum ?? TAIL_QUORUM)));
+  let done = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let fire: (() => void) | undefined;
+  const expired = new Promise<typeof BUDGET_EXPIRED>((resolve) => {
+    fire = () => resolve(BUDGET_EXPIRED);
+  });
+  return {
+    expired,
+    finished(): void {
+      done += 1;
+      if (done < quorum || timer) return;
+      timer = setTimeout(() => fire?.(), graceMs);
+      /* A grace timer must never be the reason the process stays alive. */
+      (timer as { unref?: () => void }).unref?.();
+    },
+    /* Every site has settled or been cut; nothing is waiting on this any more. */
+    cancel(): void {
+      clearTimeout(timer);
+    },
+  };
+}
+
+export type Pacer = ReturnType<typeof createPacer>;
+
+/*
  * How many prices a page must state before we will call it a catalogue.
  *
  * Not 1. Nearly every Israeli shop carries a free-delivery threshold in its
@@ -132,6 +209,9 @@ const PRICED_CATALOGUE_MIN = 3;
 export interface PipelineDeps {
   /* Override the per-site ceiling; tests set it small. */
   siteBudgetMs?: number;
+  /* How long the stragglers get once most of the fan-out has settled. Tests set
+   * it small; see createPacer. */
+  tailGraceMs?: number;
   discover: (lat: number, lng: number, radiusM: number) => Promise<DiscoveredNursery[]>;
   search: (
     website: string,
@@ -170,6 +250,10 @@ export interface PipelineDeps {
     decisive?: boolean;
     /* Holds the model's answer to the same relevance bar the JSON path meets. */
     plan?: QueryPlan;
+    /* What the search itself did. A shop whose search never answered is the one
+     * case worth reading a sitemap for - see sitemapForPrices in core.ts. */
+    answered?: boolean;
+    searchStatus?: number;
   }) => Promise<PipelineResult>;
   /*
    * No longer used by runNurserySearch: neither surviving outcome shows a
@@ -212,6 +296,87 @@ export interface PipelineDeps {
    * must never fail a search, so every call is wrapped.
    */
   onSiteRead?: (host: string, stage: SiteStage) => void;
+  /*
+   * A durable per-shop cache (server/nurseryCache.ts, createShopCache).
+   *
+   * What it caches is one shop's verdict for one plant, which is the part of a
+   * search that is actually reusable: it does not depend on where the person
+   * asking is standing, how wide a radius they chose, or which other shops came
+   * back beside it. The whole-search cache one layer up answers only when the
+   * same question is asked from within ~100m of where it was asked before -
+   * GPS jitter alone defeats it - so this is what catches everything it misses.
+   *
+   * Optional and best-effort, exactly like the layer above: a lookup that
+   * throws must cost a scrape, never a search. Only rows we would show are
+   * stored - see `worthCaching`.
+   */
+  readShopCache?: (
+    host: string,
+    query: string
+  ) => Promise<{ results: CachedShopResult; scrapedAt: number } | null>;
+  writeShopCache?: (host: string, query: string, row: CachedShopResult) => Promise<void>;
+}
+
+/*
+ * The part of a NurseryResult that is about the SHOP'S SHELF rather than about
+ * this particular search.
+ *
+ * Identity - name, address, distance, phone, photo, whether it ships - is
+ * rebuilt from Places on every search and is cheap; caching it would serve one
+ * user another user's distance. What is expensive, and what is genuinely the
+ * same answer for everybody, is what the shop had and what it cost.
+ */
+export type CachedShopResult = Pick<
+  NurseryResult,
+  | 'plantPrice'
+  | 'hasPlant'
+  | 'inStockKnown'
+  | 'availability'
+  | 'availabilityNote'
+  | 'outcome'
+  | 'productUrl'
+  | 'productName'
+  | 'matchCount'
+  | 'priceSuspect'
+  | 'priceNote'
+  | 'priceStated'
+>;
+
+const SHOP_FIELDS = [
+  'plantPrice',
+  'hasPlant',
+  'inStockKnown',
+  'availability',
+  'availabilityNote',
+  'outcome',
+  'productUrl',
+  'productName',
+  'matchCount',
+  'priceSuspect',
+  'priceNote',
+  'priceStated',
+] as const;
+
+export function shelfOf(row: NurseryResult): CachedShopResult {
+  const out: Record<string, unknown> = {};
+  for (const field of SHOP_FIELDS) {
+    if (row[field] !== undefined) out[field] = row[field];
+  }
+  return out as CachedShopResult;
+}
+
+/*
+ * Which verdicts are worth keeping for a day.
+ *
+ * `found` and `not_sold` are READINGS of a shop - we opened its catalogue and
+ * saw what was on it - and they are the same reading for everyone who asks
+ * tomorrow. `not_found` is not a reading at all: it means the shop was down,
+ * rate-limited, timed out behind the fan-out's tail, or refused us. Caching
+ * that would turn one bad minute into a day of telling every user we cannot
+ * check a shop that is, by then, answering perfectly well.
+ */
+export function worthCaching(row: NurseryResult): boolean {
+  return row.outcome === 'found' || row.outcome === 'not_sold';
 }
 
 const R_KM = 6371;
@@ -268,7 +433,10 @@ async function scrapeOne(
    * "type exactly this". The user's original wording stays in
    * `input.plantName` for the extractor, which matches either language.
    */
-  searchTerm: string | QueryPlan = input.plantName
+  searchTerm: string | QueryPlan = input.plantName,
+  /* The fan-out's shared clock. Absent for a caller scraping one shop on its
+   * own, where there is no fan-out to be the tail of. */
+  pacer?: Pacer
 ): Promise<NurseryResult> {
   const host = hostOf(n.website);
 
@@ -290,6 +458,16 @@ async function scrapeOne(
    * Facebook page where a website should be. The row is built from what Places
    * knows and nothing is scraped. */
   const contactOnly = !n.website;
+
+  /*
+   * What this shop was asked for, as the cache key's other half. The PLAN is
+   * what the shop actually sees, and two users typing "Monstera deliciosa" and
+   * "monstera deliciosa" produce the same plan - but the user's own wording is
+   * what a bare-string caller passes, so both shapes collapse to one string
+   * here rather than keying on an object.
+   */
+  const cacheTerm =
+    typeof searchTerm === 'string' ? searchTerm : searchTerm.original || searchTerm.hebrew;
 
   const base: NurseryResult = {
     /* A contact-only place has no host to be identified by, and two of them
@@ -343,8 +521,38 @@ async function scrapeOne(
     (timer as { unref?: () => void }).unref?.();
   });
 
+  /*
+   * Ask the cache before anyone's server.
+   *
+   * A hit is the whole read: this shop's shelf for this plant, seen within the
+   * day, by whoever asked first. The identity around it - name, distance,
+   * phone, photo - is the fresh one Places just gave us, because that half IS
+   * about this search and this user.
+   *
+   * A lookup that fails costs a scrape, never a search: `readShopCache` is
+   * wrapped, and anything it throws is treated as a miss.
+   */
+  if (deps.readShopCache) {
+    try {
+      const cached = await deps.readShopCache(host, cacheTerm);
+      if (cached) {
+        noteSite(host, 'cached');
+        return { ...base, ...cached.results, fromCache: true };
+      }
+    } catch {
+      /* a cache that cannot answer is a cache miss, and nothing more */
+    }
+  }
+
   try {
-    const outcome = await Promise.race([readOneSite(), overBudget]);
+    /*
+     * Three outcomes race: the read, this shop's own ceiling, and the fan-out
+     * giving up on its tail. The last one is what usually fires, because the
+     * ceiling is sized for a shop that might still answer and the tail is sized
+     * for a user who already has their results.
+     */
+    const racing = pacer ? [readOneSite(), overBudget, pacer.expired] : [readOneSite(), overBudget];
+    const outcome = await Promise.race(racing);
     if (outcome === BUDGET_EXPIRED) {
       noteSite(host, 'timeout');
       return {
@@ -360,6 +568,12 @@ async function scrapeOne(
     return outcome;
   } finally {
     clearTimeout(timer);
+    /*
+     * Counted however this site ended, including on the deadline that cut it.
+     * The quorum is about how much of the fan-out is no longer moving, not
+     * about how much of it succeeded.
+     */
+    pacer?.finished();
   }
 
   async function readOneSite(): Promise<NurseryResult> {
@@ -378,6 +592,8 @@ async function scrapeOne(
       /* Only when the caller planned the query; a bare string carries no tokens
        * to judge relevance with. */
       plan: typeof searchTerm === 'string' ? undefined : searchTerm,
+      answered,
+      searchStatus,
     });
     /*
      * A search URL that does not exist is its own failure, and naming it is the
@@ -434,6 +650,7 @@ async function scrapeOne(
       return {
         ...base,
         plantPrice: best.price,
+        priceStated: best.priceSource === 'stated',
         hasPlant: best.availability !== 'out_of_stock',
         inStockKnown: stockKnown,
         availability: stockKnown
@@ -598,20 +815,35 @@ export async function runNurserySearch(
   const localHosts = new Set(discovered.map((n) => hostOf(n.website)));
   const natUrls = deps.nationalUrls.filter((u) => !localHosts.has(hostOf(u)));
 
-  const [local, national] = await Promise.all([
-    Promise.all(discovered.map((n) => scrapeOne(n, input, deps, false, searchTerm))),
-    Promise.all(
-      natUrls.map((url) =>
-        scrapeOne(
-          { name: hostOf(url), website: url, lat: 0, lng: 0, address: '' },
-          input,
-          deps,
-          true,
-          searchTerm
+  /*
+   * One clock for the whole fan-out, so a shop that has stopped answering costs
+   * the search a grace period rather than the full per-site ceiling.
+   */
+  const pacer = createPacer(discovered.length + natUrls.length, {
+    graceMs: deps.tailGraceMs,
+  });
+
+  let local: NurseryResult[];
+  let national: NurseryResult[];
+  try {
+    [local, national] = await Promise.all([
+      Promise.all(discovered.map((n) => scrapeOne(n, input, deps, false, searchTerm, pacer))),
+      Promise.all(
+        natUrls.map((url) =>
+          scrapeOne(
+            { name: hostOf(url), website: url, lat: 0, lng: 0, address: '' },
+            input,
+            deps,
+            true,
+            searchTerm,
+            pacer
+          )
         )
-      )
-    ),
-  ]);
+      ),
+    ]);
+  } finally {
+    pacer.cancel();
+  }
 
   // 4. Dedup by id, sort: in-stock first, then by distance.
   const seen = new Set<string>();
@@ -631,7 +863,28 @@ export async function runNurserySearch(
    * Comparing the shops against each other is what catches that, so this runs
    * once over the whole result set rather than per site.
    */
-  return await verifyPrices(rows, input.plantName, deps);
+  const verified = await verifyPrices(rows, input.plantName, deps);
+
+  /*
+   * Stored AFTER the cross-nursery price check, so a number that pass rejected
+   * is not handed to tomorrow's searches as though it had passed. Fire and
+   * forget: a write that fails has cost nothing but itself, and the user is
+   * waiting on none of it.
+   */
+  if (deps.writeShopCache) {
+    const term =
+      typeof searchTerm === 'string' ? searchTerm : searchTerm.original || searchTerm.hebrew;
+    for (const row of verified) {
+      if (!row.website || !worthCaching(row) || row.fromCache) continue;
+      void Promise.resolve(deps.writeShopCache(hostOf(row.website), term, shelfOf(row))).catch(
+        () => {
+          /* a cache that cannot be written is still a correct search */
+        }
+      );
+    }
+  }
+
+  return verified;
 }
 
 async function verifyPrices(
@@ -641,10 +894,27 @@ async function verifyPrices(
 ): Promise<NurseryResult[]> {
   if (!deps.checkPrices) return rows;
 
-  // Only rows that actually quote a price have anything to check.
+  /*
+   * Rows that quote a price a MODEL READ. Two changes from what this used to
+   * select, and both are about asking the right question of the right rows.
+   *
+   * It filtered on `inStockKnown`, which is a fact about STOCK: a listing whose
+   * page never says whether the plant is in stock kept its price and skipped
+   * the check entirely. That is backwards - the price is exactly as likely to
+   * be a delivery threshold on a page that states no stock, and those rows went
+   * to the user unchecked.
+   *
+   * And it checked every price, including the ones the shop published in its
+   * own storefront JSON or price markup. This pass exists to catch a phone
+   * number, a free-shipping threshold or a decimal slip mistaken for a price -
+   * all of them READING failures, none of which can happen to a number copied
+   * out of a field labelled `price`. On a search where every shop answered from
+   * its JSON there is now nothing to check, and the call - the last thing
+   * standing between the user and their results - is not made at all.
+   */
   const priced = rows
     .map((n, i) => ({ n, i }))
-    .filter(({ n }) => n.inStockKnown && n.plantPrice && n.plantPrice !== '-');
+    .filter(({ n }) => n.plantPrice && n.plantPrice !== '-' && n.priceStated !== true);
   if (priced.length === 0) return rows;
 
   const verdicts = await deps.checkPrices(
