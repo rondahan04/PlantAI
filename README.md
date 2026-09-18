@@ -8,6 +8,7 @@ An Expo/React Native app (iOS, Android) plus a small Node API. Hebrew and Englis
 both first-class - the Hebrew build is RTL, not a mirrored English one.
 
 - **API:** https://plantai-api-eev0.onrender.com (Render, deployed from `main`)
+- **API docs:** https://plantai-api-docs.vercel.app ([`docs/api-site`](docs/api-site), Vercel)
 - **Status and plan:** [`TODOS.md`](TODOS.md) - the single running record of what
   shipped, what is broken, and what is next. Read it before planning work.
 - **Working agreements for coding agents:** [`AGENTS.md`](AGENTS.md)
