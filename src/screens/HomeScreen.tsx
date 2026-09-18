@@ -36,7 +36,6 @@ import { useSession } from '../hooks/useSession';
 import { copy, localeTag } from '../services/language';
 import { LOGO_GLYPH } from '../brand';
 import type { CareKind } from '../services/plants/plantStore';
-import { TAB_BAR_CLEARANCE } from '../navigation/tabBarMetrics';
 
 /*
  * Home - the first screen of the app, and the only one that answers "what
@@ -531,7 +530,7 @@ function TaskCard({
 const makeStyles = (t: Theme) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: t.color.background },
-    scroll: { padding: t.space.lg, paddingBottom: t.space.lg + TAB_BAR_CLEARANCE },
+    scroll: { padding: t.space.lg },
 
     /* Same shape as Portfolio's warning card - one library, one look. */
     warnCard: {
