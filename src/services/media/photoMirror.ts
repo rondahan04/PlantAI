@@ -60,3 +60,13 @@ const deviceFs: MirrorDeps = {
 };
 
 export const plantPhotoMirror = createPhotoMirror(deviceFs);
+
+/*
+ * The account's avatar, mirrored by the same machinery in its own directory.
+ *
+ * Separate rather than a reserved id inside the plant mirror: that one is swept
+ * against the list of plant ids, and an avatar filed under a plant's name would
+ * be deleted by the first sweep that ran. Same reasoning as the separate
+ * storage bucket. Keyed on the user id, so there is exactly one file in it.
+ */
+export const avatarMirror = createPhotoMirror(deviceFs, 'profile-avatar');

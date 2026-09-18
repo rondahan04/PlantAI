@@ -11,6 +11,7 @@ import SettingsCard from '../../components/SettingsCard';
 import SettingsRow from '../../components/SettingsRow';
 import { copy, getLanguage } from '../../services/language';
 import { getProfile, Profile } from '../../services/auth/auth';
+import Avatar from '../../components/Avatar';
 import { supabase } from '../../services/auth/supabase';
 
 type Props = {
@@ -118,9 +119,23 @@ export default function SettingsScreen({ navigation }: Props) {
 
       <ScrollView contentContainerStyle={s.scroll}>
         <View style={s.avatarWrap}>
-          <View style={s.avatarCircle}>
-            <Ionicons name="person-add-outline" size={32} color={t.color.onPrimary} />
-          </View>
+          {/*
+            The circle has been a glyph on a green disc since Epic 1, waiting
+            for this. Tapping it is the only way into the picture editor - a
+            settings ROW for it would put the one control on this screen that
+            is already a picture behind a line of text.
+          */}
+          <Avatar
+            size={96}
+            /* `||`, not `??`: clearing your full name stores an empty string
+             * rather than null, and `??` would keep that - leaving the circle
+             * on the generic person glyph for an account that has a perfectly
+             * good username to take an initial from. */
+            name={profile.full_name || profile.username}
+            onPress={() => navigation.navigate('EditAvatar')}
+            accessibilityLabel={copy.settings.avatarChange}
+          />
+          <Text style={s.avatarHint}>{copy.settings.avatarChange}</Text>
         </View>
 
         <SettingsCard>
@@ -179,7 +194,8 @@ function makeStyles(t: Theme) {
     loggedOutBody: { paddingTop: t.space['2xl'] },
     loggedOutText: { ...t.type.body, color: t.color.textSecondary, textAlign: 'center', marginBottom: t.space.xl },
 
-    avatarWrap: { alignItems: 'center', marginBottom: t.space.xl },
+    avatarWrap: { alignItems: 'center', marginBottom: t.space.xl, gap: t.space.sm },
+    avatarHint: { ...t.type.caption, color: t.color.primary },
     avatarCircle: {
       width: 96,
       height: 96,
