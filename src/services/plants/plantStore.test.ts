@@ -9,7 +9,6 @@ import {
   wateringHistory,
   careHistory,
   leafHistory,
-  MAX_WATERING_LOG,
   MAX_CARE_LOG,
   type StorageDeps,
 } from './plantStore.ts';
@@ -664,13 +663,13 @@ test('the log is bounded so the library blob cannot grow without limit', () => {
   const id = saved.ok && (saved.plant.id as string);
 
   const start = Date.parse('2020-01-01T09:00:00.000Z');
-  for (let i = 0; i < MAX_WATERING_LOG + 25; i++) {
+  for (let i = 0; i < MAX_CARE_LOG + 25; i++) {
     store.markWatered(id as string, start + i * 86_400_000);
   }
 
   const log = store.load().plants[0].wateringLog!;
-  assert.equal(log.length, MAX_WATERING_LOG);
-  assert.equal(log[0], new Date(start + (MAX_WATERING_LOG + 24) * 86_400_000).toISOString(),
+  assert.equal(log.length, MAX_CARE_LOG);
+  assert.equal(log[0], new Date(start + (MAX_CARE_LOG + 24) * 86_400_000).toISOString(),
     'the newest entry is kept, the oldest is dropped');
 });
 

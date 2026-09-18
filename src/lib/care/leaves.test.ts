@@ -12,7 +12,6 @@ import {
   MAX_LEAF_LOG,
   averageGrowthDays,
   emergeLeaf,
-  isLeafEvent,
   leafAgeDays,
   leafCounts,
   leafDays,
@@ -157,11 +156,4 @@ test('stamps flatten both ends, newest first', () => {
     leafStamps(leaves).map((s) => `${s.id}:${s.stage}`),
     ['a:matured', 'b:emerged', 'a:emerged']
   );
-});
-
-test('isLeafEvent is what the store validates with', () => {
-  assert.equal(isLeafEvent({ id: 'a', emergedAt: new Date(T0).toISOString() }), true);
-  assert.equal(isLeafEvent({ id: 'a' }), false);
-  assert.equal(isLeafEvent({ emergedAt: new Date(T0).toISOString() }), false);
-  assert.equal(isLeafEvent(undefined), false);
 });

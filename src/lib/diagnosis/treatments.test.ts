@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseProductFromTitle, treatmentProduct, shoppableTreatments } from './treatments.ts';
+import { parseProductFromTitle, treatmentProduct } from './treatments.ts';
 
 test('a branded product is searched for by its brand, not its method', () => {
   assert.equal(parseProductFromTitle('Confidor (imidacloprid) soil drench'), 'Confidor');
@@ -29,16 +29,6 @@ test('the more specific substance wins over the generic one', () => {
 test('empty or whitespace titles are not shoppable', () => {
   assert.equal(parseProductFromTitle(''), null);
   assert.equal(parseProductFromTitle('   '), null);
-});
-
-test('only the shoppable treatments come back, each with its search term', () => {
-  const out = shoppableTreatments([
-    { title: 'Confidor (imidacloprid) soil drench', description: '', urgent: true },
-    { title: 'Wipe the scale off by hand', description: '', urgent: false },
-  ]);
-  assert.equal(out.length, 1);
-  assert.equal(out[0].product, 'Confidor');
-  assert.equal(out[0].treatment.urgent, true);
 });
 
 /*
@@ -84,13 +74,4 @@ test('a Hebrew treatment with no product field offers nothing rather than guessi
     treatmentProduct({ title: 'הגבירו את הלחות סביב הצמח', description: '', urgent: false }),
     null
   );
-});
-
-test('shoppableTreatments follows the same rule', () => {
-  const result = shoppableTreatments([
-    { title: 'ריסוס', description: '', urgent: true, product: 'Confidor' },
-    { title: 'נגבו ביד', description: '', urgent: false, product: '' },
-  ]);
-  assert.equal(result.length, 1);
-  assert.equal(result[0].product, 'Confidor');
 });

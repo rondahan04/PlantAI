@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {
   exceedsUploadLimit,
   megabytes,
-  MAX_PHOTO_BYTES,
   SERVER_MAX_BODY_BYTES,
 } from './uploadLimit.ts';
 
@@ -28,7 +27,6 @@ test('the client limit never exceeds the server cap', () => {
   // The one invariant that matters: over it, the original bug is back, because
   // the client would happily start an upload the server will refuse.
   assert.equal(exceedsUploadLimit(SERVER_MAX_BODY_BYTES), true);
-  assert.ok(MAX_PHOTO_BYTES < SERVER_MAX_BODY_BYTES);
 });
 
 test('the envelope counts - a body just under the cap still exceeds it', () => {

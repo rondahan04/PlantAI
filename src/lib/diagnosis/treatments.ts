@@ -135,14 +135,3 @@ export function treatmentProductLabel(treatment: Treatment, product: string): st
   const label = treatment.productLabel;
   return typeof label === 'string' && label.trim() !== '' ? label.trim() : product;
 }
-
-/* The treatments worth showing a "find it nearby" button on, paired with
- * the term each one should scrape for and the words to put on the button. */
-export function shoppableTreatments(
-  treatments: Treatment[]
-): { treatment: Treatment; product: string; label: string }[] {
-  return treatments
-    .map((treatment) => ({ treatment, product: treatmentProduct(treatment) }))
-    .filter((entry): entry is { treatment: Treatment; product: string } => entry.product !== null)
-    .map((entry) => ({ ...entry, label: treatmentProductLabel(entry.treatment, entry.product) }));
-}
