@@ -3,6 +3,7 @@ import { plantRepo } from '../plants/plantRepoInstance';
 import { clearSignedUrlCache } from '../plants/supabasePlantCloud';
 import { plantPhotoMirror } from '../media/photoMirror';
 import { photoSizes } from '../media/photoSizes';
+import { signAvatar, clearAvatarUrlCache } from './avatarStorage';
 import { isUniqueViolation } from '../../lib/authErrors';
 import type { Session } from '@supabase/supabase-js';
 
@@ -91,6 +92,7 @@ export async function signOut(): Promise<void> {
   /* And the measurements taken from them, which are a list of that account's
    * object paths. Not secret, but there is no reason for them to outlive it. */
   photoSizes.clear();
+  clearAvatarUrlCache();
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {
@@ -190,6 +192,7 @@ export async function deleteAccount(): Promise<void> {
   clearSignedUrlCache();
   plantPhotoMirror.clear();
   photoSizes.clear();
+  clearAvatarUrlCache();
 }
 
 export interface Profile {
@@ -197,7 +200,40 @@ export interface Profile {
   username: string;
   full_name: string | null;
   bio: string | null;
+  /*
+   * The storage OBJECT PATH, which is the durable fact, and a signed URL for
+   * it, which is not. The path is what identifies the picture across
+   * re-signings - it is the avatar's cache key and the mirror's filename - so
+   * both travel together rather than the URL alone.
+   */
+  avatar_path: string | null;
+  avatar_url: string | null;
+  avatar_focus_y: number;
+  avatar_zoom: number;
 }
+
+/*
+ * The columns every read of a profile asks for, in one place - a select list
+ * that drifts between the read and the write is how a screen ends up rendering
+ * `undefined` for a field the other call site knows about.
+ */
+const PROFILE_COLUMNS = 'id, username, full_name, bio, avatar_path, avatar_focus_y, avatar_zoom';
+
+/*
+ * A row as stored, turned into a profile the app can render.
+ *
+ * The bucket is private, so `avatar_path` is not something <Image> can draw -
+ * it has to be exchanged for a signed URL first, exactly as a plant's photo
+ * path is. A failure to sign is deliberately not fatal: the rest of the
+ * profile is still correct and still worth showing, and the avatar falls back
+ * to its placeholder rather than taking the whole settings screen down.
+ */
+async function withAvatarUrl(row: ProfileRow): Promise<Profile> {
+  const url = row.avatar_path ? await signAvatar(row.avatar_path) : null;
+  return { ...row, avatar_url: url };
+}
+
+type ProfileRow = Omit<Profile, 'avatar_url'>;
 
 export async function getProfile(): Promise<Profile | null> {
   const { data: sessionData } = await supabase.auth.getSession();
@@ -206,17 +242,20 @@ export async function getProfile(): Promise<Profile | null> {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, username, full_name, bio')
+    .select(PROFILE_COLUMNS)
     .eq('id', userId)
     .single();
   if (error) throw new AuthServiceError(error.message);
-  return data;
+  return withAvatarUrl(data as ProfileRow);
 }
 
 export async function updateProfile(patch: {
   username?: string;
   full_name?: string;
   bio?: string;
+  avatar_path?: string | null;
+  avatar_focus_y?: number;
+  avatar_zoom?: number;
 }): Promise<Profile> {
   const { data: sessionData } = await supabase.auth.getSession();
   const userId = sessionData.session?.user.id;
@@ -226,12 +265,12 @@ export async function updateProfile(patch: {
     .from('profiles')
     .update(patch)
     .eq('id', userId)
-    .select('id, username, full_name, bio')
+    .select(PROFILE_COLUMNS)
     .single();
 
   if (error) {
     if (isUniqueViolation(error.message)) throw new DuplicateUsernameError();
     throw new AuthServiceError(error.message);
   }
-  return data;
+  return withAvatarUrl(data as ProfileRow);
 }

@@ -39,6 +39,7 @@ import ForgotPasswordScreen from './src/screens/auth/ForgotPasswordScreen';
 import ResetPasswordConfirmScreen from './src/screens/auth/ResetPasswordConfirmScreen';
 import SettingsScreen from './src/screens/settings/SettingsScreen';
 import EditProfileFieldScreen from './src/screens/settings/EditProfileFieldScreen';
+import EditAvatarScreen from './src/screens/settings/EditAvatarScreen';
 import ManageAccountScreen from './src/screens/settings/ManageAccountScreen';
 import ChangePasswordScreen from './src/screens/auth/ChangePasswordScreen';
 import NotificationsScreen from './src/screens/settings/NotificationsScreen';
@@ -167,6 +168,7 @@ export default function App() {
             <Stack.Screen name="ResetPasswordConfirm" component={ResetPasswordConfirmScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="EditProfileField" component={EditProfileFieldScreen} />
+            <Stack.Screen name="EditAvatar" component={EditAvatarScreen} />
             <Stack.Screen name="ManageAccount" component={ManageAccountScreen} />
             <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
             <Stack.Screen name="Notifications" component={NotificationsScreen} />

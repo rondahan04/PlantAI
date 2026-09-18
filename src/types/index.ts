@@ -219,6 +219,13 @@ export type RootStackParamList = {
   ResetPasswordConfirm: undefined;
   Settings: undefined;
   EditProfileField: { field: 'full_name' | 'username' | 'bio'; current: string };
+  /*
+   * No params. The picture and its framing are read from the avatar service
+   * rather than passed in: route params are persisted and restored, and a
+   * stale photo URI restored from a previous launch would have the editor
+   * open on an image that is no longer the account's.
+   */
+  EditAvatar: undefined;
   ManageAccount: undefined;
   ChangePassword: undefined;
   Notifications: undefined;
