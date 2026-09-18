@@ -53,6 +53,7 @@ import { handledOf, type TranslateProgress } from '../../services/bulk/bulkTrans
 import { staleIdsFor } from '../../lib/diagnosis/diagnosisProse';
 import { getLanguage } from '../../services/language';
 import PlantCard from '../../components/PlantCard';
+import Avatar from '../../components/Avatar';
 import ImportBanner from '../../components/ImportBanner';
 
 /*
@@ -669,6 +670,21 @@ export default function PortfolioScreen({ navigation }: Props) {
                 plants, and how many of them there are.
               */}
               <View style={s.libHeader}>
+                {/*
+                  Leading edge, same as the dashboard greeting, and to Settings
+                  for the same reason: here the face says whose library this is
+                  rather than offering to change itself. The gear stays - an
+                  avatar is not a discoverable settings affordance, and quietly
+                  swapping one for the other would cost a user the icon they
+                  already know.
+                */}
+                <Avatar
+                  size={36}
+                  name={profileName}
+                  onPress={() => navigation.navigate('Settings')}
+                  accessibilityLabel={copy.settings.profileSettings}
+                  style={s.libHeaderAvatar}
+                />
                 <View style={s.libHeaderText}>
                   <Text style={s.libEyebrow}>
                     {profileName
@@ -1100,6 +1116,9 @@ function makeStyles(t: Theme) {
       paddingBottom: t.space.lg,
     },
     libHeaderText: { flex: 1, marginEnd: t.space.sm },
+    /* Aligned to the eyebrow rather than the row, so the circle sits against
+     * the three lines of text instead of floating above them. */
+    libHeaderAvatar: { marginEnd: t.space.sm, marginTop: 2 },
     libEyebrow: { ...t.type.eyebrow, color: t.color.textMuted, writingDirection: 'auto' },
     libHeaderTitle: { ...t.type.display, color: t.color.foreground, marginTop: t.space.xs, writingDirection: 'auto' },
     libHeaderCount: { ...t.type.caption, color: t.color.textSecondary, marginTop: 2, writingDirection: 'auto' },

@@ -10,6 +10,7 @@ import {
   InteractionManager,
 } from 'react-native';
 import FramedPhoto from '../components/FramedPhoto';
+import Avatar from '../components/Avatar';
 import { syncPhotoCache } from '../services/media/photoCache';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -261,6 +262,19 @@ export default function HomeScreen({ navigation }: Props) {
     <SafeAreaView style={s.container} edges={['top']} /* bottom inset belongs to the tab bar */>
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         <View style={s.headerRow}>
+          {/*
+            The account's face, next to the greeting that already uses their
+            name. Tapping it goes to Settings rather than straight to the photo
+            editor: on this screen it is an identity, not a control, and a user
+            reaching for "my account" expects the account.
+          */}
+          <Avatar
+            size={40}
+            name={profileName}
+            onPress={() => navigation.navigate('Settings')}
+            accessibilityLabel={copy.settings.profileSettings}
+            style={s.headerAvatar}
+          />
           <View style={s.headerText}>
             <Text style={s.eyebrow}>{today}</Text>
             <Text style={s.title} numberOfLines={2}>
@@ -545,6 +559,9 @@ const makeStyles = (t: Theme) =>
     warnText: { ...t.type.caption, color: t.color.textSecondary, marginTop: 2 },
 
     headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: t.space.md },
+    /* Nudged down so a 40pt circle sits against the two lines of the greeting
+     * rather than against the top of the date above them. */
+    headerAvatar: { marginTop: 2 },
     headerText: { flex: 1 },
     eyebrow: { ...t.type.eyebrow, color: t.color.textMuted, writingDirection: 'auto' },
     title: { ...t.type.display, color: t.color.foreground, marginTop: t.space.xs, writingDirection: 'auto' },
