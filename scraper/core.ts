@@ -1306,7 +1306,7 @@ export function priceFocusedExcerpt(markdown: string, max = 18000): string {
 const LONE_CURRENCY_RE = /^(?:₪|ש"ח|ש״ח|שח|NIS|ILS)$/i;
 const LONE_NUMBER_RE = /^\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?$/;
 
-export function joinSplitCurrency(lines: string[]): string[] {
+function joinSplitCurrency(lines: string[]): string[] {
   const out: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const a = lines[i];
@@ -1565,7 +1565,7 @@ function sourceBlock(excerpt: string, site: string): string {
 
 /* Extraction pass: the model reads the condensed markdown and returns the plant
  * JSON array matching the Plant schema. */
-export async function extractPlants(
+async function extractPlants(
   excerpt: string,
   query: string,
   site: string,

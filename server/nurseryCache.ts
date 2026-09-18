@@ -63,7 +63,7 @@ export function searchKey(parts: SearchParts): string {
  * asking is standing, or how wide a radius they chose, so keyed this way one
  * user's search warms every overlapping search after it.
  */
-export function shopKey(host: string, query: string): string {
+function shopKey(host: string, query: string): string {
   return `${host.trim().toLowerCase()}|${query.trim().toLowerCase()}`;
 }
 

@@ -178,7 +178,7 @@ const KM_PER_DEG_LNG = 111.32;
  * and cropping is invisible - you cannot miss what you were never shown. The
  * corners it adds are removed by the exact distance check instead.
  */
-export function boundingBox(lat: number, lng: number, radiusM: number) {
+function boundingBox(lat: number, lng: number, radiusM: number) {
   const km = radiusM / 1000;
   const dLat = km / KM_PER_DEG_LAT;
   /* Guard the poles, where cos(lat) → 0 and the longitude span explodes. */
