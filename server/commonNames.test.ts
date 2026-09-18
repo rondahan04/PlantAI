@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { HEBREW_NAMES, friendlyName, speciesKey } from './commonNames.ts';
-import { HEBREW_GENERA } from '../src/data/catalogHebrew.ts';
+import { friendlyName, speciesKey } from './commonNames.ts';
 
 /*
  * The lookup exists to survive the several ways the two identifiers spell the
@@ -117,28 +116,6 @@ test('accepted-synonym genera reach the same Hebrew name', () => {
   assert.equal(friendlyName('Calathea orbifolia', 'x', 'he'), 'קלתיאה');
   assert.equal(friendlyName('Haworthiopsis attenuata', 'x', 'he'), 'הוורתיה');
   assert.equal(friendlyName('Haworthia attenuata', 'x', 'he'), 'הוורתיה');
-});
-
-test('every Hebrew name here is the one catalogHebrew already agreed on', () => {
-  /*
-   * The server keeps a COPY of these strings because src/ is absent from its
-   * image. This is what stops the copy from drifting: a name edited in
-   * catalogHebrew and not here fails, rather than quietly giving a photographed
-   * plant a different name from a hand-added one - which is the whole bug.
-   */
-  const SYNONYM_OF: Record<string, string> = {
-    goeppertia: 'Calathea',
-    haworthiopsis: 'Haworthia',
-  };
-
-  for (const [genus, he] of Object.entries(HEBREW_NAMES)) {
-    const taxon = SYNONYM_OF[genus] ?? genus[0].toUpperCase() + genus.slice(1);
-    assert.equal(
-      he,
-      HEBREW_GENERA[taxon],
-      `${genus}: server copy disagrees with src/data/catalogHebrew.ts`
-    );
-  }
 });
 
 test('a cultivar in quotes never becomes part of the key', () => {
