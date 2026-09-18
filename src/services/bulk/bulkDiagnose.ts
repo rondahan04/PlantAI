@@ -130,5 +130,3 @@ export function createBulkDiagnose(deps: BulkDiagnoseDeps) {
 
   return { subscribe, run, cancel, dismiss, get: () => progress };
 }
-
-export type BulkDiagnose = ReturnType<typeof createBulkDiagnose>;

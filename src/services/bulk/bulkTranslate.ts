@@ -208,5 +208,3 @@ export function createBulkTranslate(deps: BulkTranslateDeps) {
 
   return { subscribe, run, cancel, dismiss, get: () => progress };
 }
-
-export type BulkTranslate = ReturnType<typeof createBulkTranslate>;

@@ -367,5 +367,3 @@ export function createPhotoMirror(deps: MirrorDeps) {
 
   return { dir, localFor, ensure, pending, discard, sweep, subscribe, clear };
 }
-
-export type PhotoMirror = ReturnType<typeof createPhotoMirror>;

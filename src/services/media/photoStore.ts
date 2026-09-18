@@ -214,5 +214,3 @@ export function createPhotoStore(deps: PhotoDeps) {
 
   return { dir, adopt, discard, sweep, owns };
 }
-
-export type PhotoStore = ReturnType<typeof createPhotoStore>;

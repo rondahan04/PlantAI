@@ -177,5 +177,3 @@ export function createOnboardingStore(storage: StorageDeps, opts: OnboardingOpti
 
   return { load, complete, setName, reset };
 }
-
-export type OnboardingStore = ReturnType<typeof createOnboardingStore>;
