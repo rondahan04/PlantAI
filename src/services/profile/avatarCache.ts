@@ -130,5 +130,3 @@ export function createAvatarCache(deps: AvatarCacheDeps) {
 
   return { get, put, clear };
 }
-
-export type AvatarCache = ReturnType<typeof createAvatarCache>;

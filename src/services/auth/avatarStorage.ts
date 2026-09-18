@@ -71,7 +71,7 @@ export async function signAvatar(path: string): Promise<string | null> {
  * is not decoration - a path that does not start with the user's own id is
  * rejected by the policy rather than silently stored somewhere odd.
  */
-export function avatarObjectPath(userId: string, extension: string = 'jpg'): string {
+function avatarObjectPath(userId: string, extension: string = 'jpg'): string {
   const stamp = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   return `${userId}/${stamp}.${extension}`;
 }

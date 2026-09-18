@@ -5,7 +5,6 @@ import { getProfile, updateProfile, type Profile } from '../auth/auth';
 import {
   uploadAvatar,
   deleteAvatarObject,
-  signAvatar,
   clearAvatarUrlCache,
 } from '../auth/avatarStorage';
 import { DEFAULT_FOCUS_Y, DEFAULT_ZOOM } from '../../lib/media/photoFocus';
@@ -122,7 +121,7 @@ export function framing(): { focusY: number; zoom: number } {
  * Also the only place the mirror is asked to fetch: it needs a signed url, and
  * this is the moment one exists.
  */
-export function hydrate(profile: Profile | null): void {
+function hydrate(profile: Profile | null): void {
   if (!profile) {
     signedUrl = null;
     cache.put(null);
@@ -256,15 +255,6 @@ export function clear(): void {
   userId = null;
   view = null;
   notify();
-}
-
-/* Re-signing, for a url that expired while the app was open and before the
- * mirror had the file. Rare; the mirror normally makes it moot. */
-export async function resign(): Promise<void> {
-  const snapshot = cache.get();
-  if (!snapshot || !userId || avatarMirror.localFor(userId)) return;
-  signedUrl = await signAvatar(snapshot.path);
-  rebuild();
 }
 
 /*
