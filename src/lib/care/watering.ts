@@ -173,12 +173,3 @@ export function wateringState(
     label: daysUntilDue <= 1 ? words.nextTomorrow : words.nextInDays(daysUntilDue),
   };
 }
-
-/*
- * Whether the library list should call this plant out. Deliberately narrower
- * than `status !== 'ok'`: a plant that has never been watered is not a problem
- * to flag on the Home screen, it is a schedule the user has not started.
- */
-export function needsWater(state: WateringState): boolean {
-  return state.status === 'due' || state.status === 'overdue';
-}

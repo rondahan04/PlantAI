@@ -354,7 +354,6 @@ export const he: Copy = {
   plantSearch: {
     title: 'חיפוש צמח',
     subtitle: 'חפשו משתלות בסביבתכם לצמח שאתם רוצים לקנות, והשוו מחירים.',
-    placeholder: 'אלוקזיה ריגל שילד',
     inputA11y: 'הצמח שאתם מחפשים',
     clear: 'ניקוי החיפוש',
     deliver: 'משלוח',

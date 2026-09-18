@@ -310,5 +310,3 @@ export function createGenusCarePlanCache(deps: GenusCarePlanDeps) {
 
   return { peek, get };
 }
-
-export type GenusCarePlanCache = ReturnType<typeof createGenusCarePlanCache>;

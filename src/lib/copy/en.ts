@@ -421,7 +421,6 @@ export const en = {
   plantSearch: {
     title: 'Find a plant',
     subtitle: 'Search nurseries near you for a plant you want to buy, and compare prices.',
-    placeholder: 'Alocasia Regal Shield',
     inputA11y: 'Plant to search for',
     clear: 'Clear search',
     deliver: 'Deliver',

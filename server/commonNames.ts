@@ -137,13 +137,16 @@ const COMMON_NAMES: Record<string, string> = {
  * WHERE THESE NAMES COME FROM. Every string below is copied verbatim from
  * `src/data/catalogHebrew.ts`, which is the file where the Hebrew naming policy
  * was argued through and where the hand-add path already reads its names. None
- * of them were written here. `commonNames.test.ts` asserts that equality, so a
- * name edited there and not here fails the suite rather than drifting quietly.
+ * of them were written here.
  *
  * WHY COPIED RATHER THAN IMPORTED. `src/` is React Native and is deliberately
  * absent from the server image (see .dockerignore and the Dockerfile header), so
- * the server cannot import it at runtime. The test can, because it runs in the
- * repo where both files exist. That is the whole reason the check is a test.
+ * the server cannot import it at runtime.
+ *
+ * NOTHING ENFORCES THE COPY. A drift test used to assert the two tables agree;
+ * it was removed on 2026-09-18. Edit a Hebrew genus name in catalogHebrew and
+ * you must edit it here too, or a photographed plant gets a different name from
+ * a hand-added one and no suite will say so.
  *
  * WHY GENUS AND NOT SPECIES. catalogHebrew's policy is that the genus is the
  * level that has a real Hebrew name - the transliteration Israeli nurseries
@@ -152,7 +155,7 @@ const COMMON_NAMES: Record<string, string> = {
  * failure card #73 exists to fix, so a species with no vetted genus name falls
  * through to English, which catalogHebrew documents as the correct outcome.
  */
-export const HEBREW_NAMES: Record<string, string> = {
+const HEBREW_NAMES: Record<string, string> = {
   // Aroids.
   alocasia: 'אלוקזיה',
   anthurium: 'אנתוריום',

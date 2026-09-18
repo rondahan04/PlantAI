@@ -63,7 +63,7 @@ const warmed = new Set<string>();
  * them. Fire and forget - a failure means the photo decodes on demand, which is
  * the behaviour this is an improvement on.
  */
-export function warmPhotos(uris: readonly (string | undefined)[], cap: number = WARM_CAP): void {
+function warmPhotos(uris: readonly (string | undefined)[], cap: number = WARM_CAP): void {
   const fresh: string[] = [];
   for (const uri of uris) {
     if (fresh.length >= cap) break;

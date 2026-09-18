@@ -29,9 +29,6 @@ export const SERVER_MAX_BODY_BYTES = 12 * 1024 * 1024;
  */
 const ENVELOPE_BYTES = 256;
 
-/* Base64 is 4 bytes of payload for every 3 bytes of file. */
-export const MAX_PHOTO_BYTES = Math.floor(((SERVER_MAX_BODY_BYTES - ENVELOPE_BYTES) * 3) / 4);
-
 /*
  * Takes the ENCODED length, because that is what goes on the wire and it is
  * the number the caller already has - re-deriving the file size from it would

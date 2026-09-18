@@ -241,9 +241,6 @@ export type UpdateResult =
  */
 export const MAX_CARE_LOG = 1000;
 
-/* Kept as the original name so existing callers and tests are untouched. */
-export const MAX_WATERING_LOG = MAX_CARE_LOG;
-
 /*
  * The three things a user logs against a plant. Each maps to one bounded log
  * plus one denormalized "last" field; the pair is the same design in all three

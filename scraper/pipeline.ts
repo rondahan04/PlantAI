@@ -159,7 +159,7 @@ const TAIL_GRACE_MS = Number(env('NURSERY_TAIL_GRACE_MS')) || 10_000;
  * The shared clock for one search's fan-out. `finished` is called as each site
  * settles; when enough have, the remainder are given `graceMs` and no more.
  */
-export function createPacer(
+function createPacer(
   total: number,
   opts: { graceMs?: number; quorum?: number } = {}
 ) {
@@ -357,7 +357,7 @@ const SHOP_FIELDS = [
   'priceStated',
 ] as const;
 
-export function shelfOf(row: NurseryResult): CachedShopResult {
+function shelfOf(row: NurseryResult): CachedShopResult {
   const out: Record<string, unknown> = {};
   for (const field of SHOP_FIELDS) {
     if (row[field] !== undefined) out[field] = row[field];
@@ -375,7 +375,7 @@ export function shelfOf(row: NurseryResult): CachedShopResult {
  * that would turn one bad minute into a day of telling every user we cannot
  * check a shop that is, by then, answering perfectly well.
  */
-export function worthCaching(row: NurseryResult): boolean {
+function worthCaching(row: NurseryResult): boolean {
   return row.outcome === 'found' || row.outcome === 'not_sold';
 }
 

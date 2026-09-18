@@ -170,5 +170,3 @@ export function createPhotoSizeStore(deps: SizeStorageDeps) {
 
   return { get, remember, clear, size };
 }
-
-export type PhotoSizeStore = ReturnType<typeof createPhotoSizeStore>;

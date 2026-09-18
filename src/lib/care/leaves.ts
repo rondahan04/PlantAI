@@ -54,16 +54,6 @@ function isIso(v: unknown): v is string {
   return typeof v === 'string' && v !== '' && !Number.isNaN(Date.parse(v));
 }
 
-export function isLeafEvent(v: unknown): v is LeafEvent {
-  if (typeof v !== 'object' || v === null) return false;
-  const leaf = v as Record<string, unknown>;
-  if (typeof leaf.id !== 'string' || leaf.id === '') return false;
-  if (!isIso(leaf.emergedAt)) return false;
-  /* Absent is the normal state; present-but-junk is damage and must not reach
-   * a calendar as `Invalid Date`. */
-  return leaf.maturedAt === undefined || isIso(leaf.maturedAt);
-}
-
 /*
  * Clean a stored list into something every reader can walk unguarded.
  *

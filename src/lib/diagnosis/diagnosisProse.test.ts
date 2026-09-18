@@ -8,7 +8,6 @@ import {
   proseOf,
   withProse,
   languageOf,
-  cachedProse,
   rememberProse,
   resolveForLanguage,
   needsCallFor,
@@ -148,13 +147,6 @@ test('a miss is a miss - nothing is invented', () => {
   const out = resolveForLanguage(EN, 'he');
   assert.ok(!out.hit);
   assert.equal(out.diagnosis, EN, 'unchanged, so the caller can leave it alone');
-});
-
-test('cachedProse answers for both directions once filed', () => {
-  const he = rememberProse(EN, 'he', HE_PROSE);
-  assert.equal(cachedProse(he, 'he')?.description, HE_PROSE.description);
-  assert.equal(cachedProse(he, 'en')?.description, EN.description);
-  assert.equal(cachedProse(EN, 'he'), undefined);
 });
 
 /* A batch must not bill for plants there is nothing to do to. */

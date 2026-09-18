@@ -539,5 +539,3 @@ export function createPlantRepo(deps: RepoDeps) {
     wipeAllLocal,
   };
 }
-
-export type PlantRepo = ReturnType<typeof createPlantRepo>;

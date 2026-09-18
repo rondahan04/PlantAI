@@ -55,5 +55,3 @@ export function createNotificationPrefsStore(storage: StorageDeps) {
 
   return { load, setWateringRemindersEnabled };
 }
-
-export type NotificationPrefsStore = ReturnType<typeof createNotificationPrefsStore>;

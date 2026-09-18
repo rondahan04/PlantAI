@@ -125,11 +125,6 @@ export function languageOf(d: PlantDiagnosis): Language {
   return scriptOf(d);
 }
 
-export function cachedProse(d: PlantDiagnosis, lang: Language): DiagnosisProse | undefined {
-  if (languageOf(d) === lang) return proseOf(d);
-  return d.translations?.[lang];
-}
-
 /*
  * File a freshly translated copy, keeping the one already in hand.
  *
