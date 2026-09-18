@@ -1,7 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DAY_MS } from './care/watering.ts';
-import { greetingFor, needsCareCount, pickHeroPhoto, stripFaces, taskGroups, taskSubtitle } from './home.ts';
+import {
+  gardenState,
+  greetingFor,
+  needsCareCount,
+  pickHeroPhoto,
+  stripFaces,
+  taskGroups,
+  taskSubtitle,
+} from './home.ts';
 import type { DueItem } from './portfolio.ts';
 import type { CareKind, StoredPlant } from '../services/plants/plantStore.ts';
 
@@ -139,4 +147,84 @@ test('pickHeroPhoto: plants with no picture are never chosen', () => {
   for (const roll of [0, 0.33, 0.66, 1]) {
     assert.equal(pickHeroPhoto(mixed, roll), 'file://b.jpg');
   }
+});
+
+// --- gardenState: unreadable outranks empty --------------------------------
+//
+// Home's three reassuring lines - "Start your garden with one photo.", "No
+// plants yet.", "Nothing due this week. Your plants are set." - are only true
+// if the library actually LOADED. plantStore returns `plants: []` on every
+// failure path, so a corrupt blob and a genuinely new user are byte-identical
+// at the `.plants` level and only `ok` tells them apart.
+//
+// PortfolioScreen already refuses to conflate them: "A damaged library must
+// never be reported as an empty one - 'you have no plants' is
+// indistinguishable from a deletion the user never performed." Home is the
+// FIRST screen and said it three times over.
+
+test('a damaged library is unreadable, never empty', () => {
+  assert.deepEqual(gardenState({ ok: false, reason: 'corrupt', plants: [] }), {
+    kind: 'unreadable',
+    reason: 'corrupt',
+  });
+});
+
+test('a future-version library is unreadable too, and keeps its own reason', () => {
+  /* The two need different copy: one is damaged, the other is intact data this
+   * build is too old to read, and telling a user their data is corrupt when the
+   * fix is "update the app" is its own wrong answer. */
+  assert.deepEqual(gardenState({ ok: false, reason: 'future_version', plants: [] }), {
+    kind: 'unreadable',
+    reason: 'future_version',
+  });
+});
+
+test('unreadable wins even when some plants survived', () => {
+  /* LoadResult carries plants on the failure branch too. Today every failure
+   * path returns [], but the type permits a partial read, and a partial library
+   * must not be presented as the whole garden. */
+  assert.deepEqual(
+    gardenState({ ok: false, reason: 'corrupt', plants: [plant('a', 'Fern')] }),
+    { kind: 'unreadable', reason: 'corrupt' }
+  );
+});
+
+test('a genuinely new user is empty, not unreadable', () => {
+  assert.deepEqual(gardenState({ ok: true, plants: [] }), { kind: 'empty' });
+});
+
+test('a library that loaded with plants is ready', () => {
+  assert.deepEqual(gardenState({ ok: true, plants: [plant('a', 'Fern')] }), { kind: 'ready' });
+});
+
+// --- stripFaces: a broken photo is as absent as a missing one --------------
+
+test('a plant whose photo failed to load is skipped like one with no photo', () => {
+  /*
+   * stripFaces already refuses to draw a plant with no photoUri, and says why:
+   * "the strip is meant to be recognisable at 40pt, and a row of grey boxes is
+   * not." A broken or expired URL is truthy, so it walked straight past that
+   * guard and produced the grey box the guard exists to prevent. Signed URLs
+   * carry a TTL, so this is the expiry case, not a hypothetical.
+   */
+  const a = plant('a', 'Fern', 1);
+  const b = plant('b', 'Ivy', 2);
+  const c = plant('c', 'Palm', 3);
+  const d = plant('d', 'Oak', 4);
+  const { shown } = stripFaces([a, b, c, d], 3, new Set([b.photoUri]));
+  assert.deepEqual(shown.map((p) => p.id), ['a', 'c', 'd']);
+});
+
+test('the overflow count still describes the whole library, not the drawable part', () => {
+  /* The "+n" is about how many plants the user has, not how many rendered. A
+   * failed photo must not quietly shrink the number the strip reports. */
+  const plants = [1, 2, 3, 4, 5].map((n) => plant(String(n), `P${n}`, n));
+  const { overflow } = stripFaces(plants, 3, new Set([plants[1].photoUri]));
+  assert.equal(overflow, 2);
+});
+
+test('with no failures the strip behaves exactly as before', () => {
+  const plants = [1, 2, 3, 4].map((n) => plant(String(n), `P${n}`, n));
+  assert.deepEqual(stripFaces(plants, 3).shown.map((p) => p.id), ['1', '2', '3']);
+  assert.deepEqual(stripFaces(plants, 3, new Set()).shown.map((p) => p.id), ['1', '2', '3']);
 });

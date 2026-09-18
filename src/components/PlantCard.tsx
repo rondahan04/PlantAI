@@ -1,8 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Image as ExpoImage } from 'expo-image';
-import { photoCacheKey } from '../lib/media/photoCacheKey';
+import FramedPhoto from './FramedPhoto';
 import { Theme, useTheme } from '../theme';
 import { copy } from '../services/language';
 import { directionalIconStyle, iconRow } from '../lib/i18n/rtl';
@@ -173,16 +172,14 @@ function PlantCard({ plant, slots = EMPTY_SLOTS, onPress, onEdit }: PlantCardPro
       */}
       <View style={s.thumbWrap}>
         <Image source={LOGO_GLYPH} style={[s.thumbGlyph, { tintColor: t.color.textMuted }]} />
-        <ExpoImage
-          source={{ uri: plant.photoUri, cacheKey: photoCacheKey(plant.photoUri) }}
+        {/* The framing the user chose in the editor, so the thumbnail keeps
+            the plant rather than whatever happened to be centred. */}
+        <FramedPhoto
+          uri={plant.photoUri}
+          plantId={plant.id}
+          focusY={plant.photoFocusY}
+          zoom={plant.photoZoom}
           style={s.thumb}
-          /* The reason this component switched away from RN's Image: a saved
-           * photo is full resolution, and RN decoded all of it to paint a
-           * 56pt square. expo-image downscales to the view by default. */
-          contentFit="cover"
-          cachePolicy="memory-disk"
-          /* Rows are recycled as the list scrolls; without this a reused row
-           * shows the previous plant's photo until the new one decodes. */
           recyclingKey={plant.id}
           transition={120}
         />

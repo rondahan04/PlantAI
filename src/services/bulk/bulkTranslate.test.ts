@@ -59,15 +59,37 @@ test('paid calls are paced, and the last one is not followed by a wait', async (
 /*
  * A cache hit costs nothing, so pacing behind it would make an already-paid-for
  * library crawl through gaps it never needed.
+ *
+ * And it is NOT a translation. Counting it as one is how the row came to
+ * announce "Translated 1 diagnosis" on every launch for work it had not done -
+ * a run that only ever skipped ends where it started, showing nothing.
  */
-test('a cached plant is counted done and is NOT paced', async () => {
+test('a cached plant is skipped, is NOT paced, and leaves no row behind', async () => {
   const { d, waits, saved } = deps({ translate: async () => null });
   const out = await createBulkTranslate(d).run([plant('a'), plant('b'), plant('c')]);
 
-  assert.equal(out.done, 3);
+  assert.equal(out.done, 0, 'nothing was translated');
+  assert.equal(out.skipped, 3);
   assert.equal(out.failed, 0);
+  assert.equal(out.state, 'idle', 'no row for a run that did nothing');
   assert.equal(waits.length, 0, 'nothing was billed, so nothing to pace');
   assert.deepEqual(saved, [], 'and nothing needed rewriting');
+});
+
+/*
+ * A run that skipped MOST of its plants still has something to report about
+ * the one it really did, so it finishes on 'done' rather than vanishing.
+ */
+test('a run with one real translation among skips still reports', async () => {
+  const { d } = deps({
+    translate: async (id: string, dg: any) => (id === 'b' ? { ...dg, lang: 'he' } : null),
+  });
+  const out = await createBulkTranslate(d).run([plant('a'), plant('b'), plant('c')]);
+
+  assert.equal(out.state, 'done');
+  assert.equal(out.done, 1);
+  assert.equal(out.skipped, 2);
+  assert.equal(out.total, 3);
 });
 
 /*
@@ -99,10 +121,39 @@ test('a translation that could not be saved is a failure, not a success', async 
 });
 
 /*
- * This fires from a screen that can mount more than once. A remount must not
- * double-spend the budget.
+ * The library does not arrive all at once. The screen paints from the local
+ * mirror, the cloud copy lands a moment later, and the second, larger batch
+ * used to be DROPPED because a run was already going - which is how a library
+ * with eleven stale plants reported "Translated 1 diagnosis" and left the
+ * other ten in the wrong language until the next launch.
+ *
+ * So a late batch joins the run in flight and the total grows to match.
  */
-test('a second run while one is going is ignored', async () => {
+test('plants arriving mid-run join it instead of being dropped', async () => {
+  const started: string[] = [];
+  const { d } = deps({
+    translate: async (id: string, dg: any) => {
+      started.push(id);
+      return { ...dg, lang: 'he' };
+    },
+    wait: async () => {},
+  });
+  const job = createBulkTranslate(d);
+  const first = job.run([plant('a'), plant('b')]);
+  const second = await job.run([plant('c')]);
+  const out = await first;
+
+  assert.equal(second.state, 'running', 'the late call joined rather than starting a rival run');
+  assert.deepEqual(started, ['a', 'b', 'c'], "'c' was picked up by the run already going");
+  assert.equal(out.total, 3, 'and the row counts it');
+  assert.equal(out.done, 3);
+});
+
+/*
+ * A remount hands the SAME plants back. Re-queueing them is double-spending
+ * the request budget on prose already being translated.
+ */
+test('a plant already in the run is not queued twice', async () => {
   let calls = 0;
   const { d } = deps({
     translate: async (_id: string, dg: any) => {
@@ -113,11 +164,11 @@ test('a second run while one is going is ignored', async () => {
   });
   const job = createBulkTranslate(d);
   const first = job.run([plant('a'), plant('b')]);
-  const second = await job.run([plant('c')]);
-  await first;
+  await job.run([plant('a'), plant('b')]);
+  const out = await first;
 
-  assert.equal(second.state, 'running', 'the second call saw the job and left it alone');
-  assert.equal(calls, 2, "'c' was never started");
+  assert.equal(calls, 2, 'each plant paid for once');
+  assert.equal(out.total, 2);
 });
 
 /*

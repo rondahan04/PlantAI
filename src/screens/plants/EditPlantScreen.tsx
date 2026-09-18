@@ -20,7 +20,7 @@
  * keystroke-adjacent change would upload three pictures to keep the last.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -31,7 +31,20 @@ import {
   Alert,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
-import { photoCacheKey } from '../../lib/media/photoCacheKey';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import {
+  DEFAULT_FOCUS_Y,
+  DEFAULT_ZOOM,
+  clampZoom,
+  focusForTop,
+  photoLayout,
+  readFocusY,
+  readZoom,
+  type Size,
+} from '../../lib/media/photoFocus';
+import FramedPhoto from '../../components/FramedPhoto';
+import { plantPhotoMirror } from '../../services/media/photoMirror';
+import { resetPhotoWarmth } from '../../services/media/photoCache';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -77,10 +90,92 @@ export default function EditPlantScreen({ navigation, route }: Props) {
 
   const shownPhoto = nextPhoto ?? plant?.photoUri ?? null;
   const storedNickname = plant?.nickname ?? '';
-  /* Trimmed on both sides of the comparison so adding and removing a space is
-   * not a change worth uploading anything for. */
+
+  /*
+   * Where the crop sits, how close in, and the gestures that move both.
+   *
+   * The photo is drawn by the same `photoLayout` every other surface uses, so
+   * what is dragged here is exactly what the card and the hero will show -
+   * there is no second implementation to drift.
+   *
+   * The drag is ONE-TO-ONE with the photograph rather than some chosen
+   * sensitivity: the geometry gives the image's drawn height, so a finger
+   * moving 40px moves the picture 40px and stops dead at the edge. A tuned
+   * multiplier would feel like dragging something slightly slippery. It falls
+   * out of the zoom for free, because a zoomed-in image is drawn taller.
+   */
+  /*
+   * A framing belongs to a PHOTOGRAPH. Replacing the picture therefore resets
+   * it, because the old numbers were chosen against a different image.
+   */
+  const storedFocusY = nextPhoto === null ? readFocusY(plant?.photoFocusY) : DEFAULT_FOCUS_Y;
+  const storedZoom = nextPhoto === null ? readZoom(plant?.photoZoom) : DEFAULT_ZOOM;
+  const [focusY, setFocusY] = useState(storedFocusY);
+  const [zoom, setZoom] = useState(storedZoom);
+  const [geometry, setGeometry] = useState<{ frame: Size; natural: Size } | null>(null);
+
+  /* The drawn image, in frame pixels - the same numbers FramedPhoto is using. */
+  const drawn = useMemo(
+    () => (geometry ? photoLayout(geometry.frame, geometry.natural, focusY, zoom) : null),
+    [geometry, focusY, zoom]
+  );
+  /* Read by the gestures, which must not be rebuilt on every frame of a drag. */
+  const live = useRef({ focusY, zoom, drawn, geometry });
+  live.current = { focusY, zoom, drawn, geometry };
+  const start = useRef({ focusY, zoom });
+
+  const reframe = useMemo(
+    () =>
+      Gesture.Pan()
+        /* On the JS thread on purpose: this sets React state that the layout
+         * is computed from, not an animated style, so a worklet would have to
+         * cross back on every frame anyway. */
+        .runOnJS(true)
+        .onBegin(() => {
+          start.current.focusY = live.current.focusY;
+        })
+        .onUpdate((e) => {
+          const { drawn: d, geometry: g } = live.current;
+          if (!d || !g || d.height <= g.frame.height) return;
+          /*
+           * Where the image WOULD sit if the finger dragged it, then asked
+           * back as a focus. Going through the same geometry in both
+           * directions is what keeps the clamping honest at the edges.
+           */
+          const from = photoLayout(g.frame, g.natural, start.current.focusY, live.current.zoom);
+          setFocusY(focusForTop(g.frame, d.height, from.top + e.translationY));
+        }),
+    []
+  );
+
+  const pinch = useMemo(
+    () =>
+      Gesture.Pinch()
+        .runOnJS(true)
+        .onBegin(() => {
+          start.current.zoom = live.current.zoom;
+        })
+        .onUpdate((e) => {
+          setZoom(clampZoom(start.current.zoom * e.scale));
+        }),
+    []
+  );
+
+  /* Both at once: a pinch almost always carries some drift, and making the
+   * user choose one gesture at a time is how a photo editor feels broken. */
+  const adjust = useMemo(() => Gesture.Simultaneous(reframe, pinch), [reframe, pinch]);
+
+  /* Somewhere to put a framing back that went wrong, without hunting for 1x
+   * by pinch. */
+  const resetFraming = useCallback(() => {
+    setFocusY(DEFAULT_FOCUS_Y);
+    setZoom(DEFAULT_ZOOM);
+  }, []);
+
   const nicknameChanged = nickname.trim() !== storedNickname.trim();
-  const canSave = !saving && plant !== undefined && (nicknameChanged || nextPhoto !== null);
+  const framingChanged = focusY !== storedFocusY || zoom !== storedZoom;
+  const canSave =
+    !saving && plant !== undefined && (nicknameChanged || framingChanged || nextPhoto !== null);
 
   const pickFromLibrary = useCallback(async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -92,6 +187,12 @@ export default function EditPlantScreen({ navigation, route }: Props) {
     if (!result.canceled && result.assets[0]) {
       setPhotoNotice(null);
       setNextPhoto(result.assets[0].uri);
+      /* The framing was chosen against the picture being replaced - see
+       * `storedFocusY`. Its natural size is gone too, so the drag range is
+       * re-measured from the new image's onLoad. */
+      setFocusY(DEFAULT_FOCUS_Y);
+      setZoom(DEFAULT_ZOOM);
+      setGeometry(null);
     }
   }, []);
 
@@ -105,6 +206,12 @@ export default function EditPlantScreen({ navigation, route }: Props) {
     if (!result.canceled && result.assets[0]) {
       setPhotoNotice(null);
       setNextPhoto(result.assets[0].uri);
+      /* The framing was chosen against the picture being replaced - see
+       * `storedFocusY`. Its natural size is gone too, so the drag range is
+       * re-measured from the new image's onLoad. */
+      setFocusY(DEFAULT_FOCUS_Y);
+      setZoom(DEFAULT_ZOOM);
+      setGeometry(null);
     }
   }, []);
 
@@ -130,6 +237,11 @@ export default function EditPlantScreen({ navigation, route }: Props) {
       );
     };
 
+    /*
+     * Both cheap fields in ONE write. They are a single row either way, and
+     * two calls would mean a half-applied edit when the second one failed.
+     */
+    const patch: Parameters<typeof plantRepo.update>[1] = {};
     if (nicknameChanged) {
       const trimmed = nickname.trim();
       /*
@@ -137,9 +249,15 @@ export default function EditPlantScreen({ navigation, route }: Props) {
        * plant goes back to being called by its species - which is what an
        * empty name box means to the person who just emptied it.
        */
-      const result = await plantRepo.update(plant.id, {
-        nickname: trimmed === '' ? undefined : trimmed,
-      });
+      patch.nickname = trimmed === '' ? undefined : trimmed;
+    }
+    if (framingChanged) {
+      patch.photoFocusY = focusY;
+      patch.photoZoom = zoom;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      const result = await plantRepo.update(plant.id, patch);
       if (!result.ok) return fail(result.reason);
     }
 
@@ -161,11 +279,22 @@ export default function EditPlantScreen({ navigation, route }: Props) {
        * replaced reads as the edit having silently failed.
        */
       await Promise.all([ExpoImage.clearMemoryCache(), ExpoImage.clearDiskCache()]);
+      resetPhotoWarmth();
+
+      /*
+       * And drop this plant's mirrored file. It is keyed on the plant, not on
+       * the picture, so a replacement leaves the OLD photograph sitting on the
+       * phone under the right id - and the mirror is preferred over the cloud
+       * url, so that stale file is exactly what every screen would draw. Unlike
+       * the cache clear above this is precise: one plant, one file, and the new
+       * photo is re-downloaded by the next screen that asks for it.
+       */
+      plantPhotoMirror.discard(plant.id);
     }
 
     setSaving(false);
     navigation.goBack();
-  }, [plant, canSave, nickname, nicknameChanged, nextPhoto, navigation]);
+  }, [plant, canSave, nickname, nicknameChanged, framingChanged, focusY, zoom, nextPhoto, navigation]);
 
   /*
    * The plant was deleted while this sheet was open (or the id was stale).
@@ -222,20 +351,44 @@ export default function EditPlantScreen({ navigation, route }: Props) {
         <View style={s.card}>
           <Text style={s.cardTitle}>{copy.editPlant.photo}</Text>
           {shownPhoto ? (
-            <ExpoImage
-              source={{ uri: shownPhoto, cacheKey: photoCacheKey(shownPhoto) }}
-              style={s.preview}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              accessibilityIgnoresInvertColors
-            />
+            <GestureDetector gesture={adjust}>
+              {/* The gesture target is the frame, not the image: at a zoom
+                  below 1 the picture no longer fills it, and a drag started on
+                  the background is still a drag. */}
+              <View
+                accessible
+                accessibilityRole="adjustable"
+                accessibilityLabel={copy.editPlant.reframeA11y}
+              >
+                <FramedPhoto
+                  uri={shownPhoto}
+                  /* Only while showing the SAVED photo. A freshly picked one is
+                     a local file that belongs to no plant yet, and resolving it
+                     through the mirror would draw the picture being replaced. */
+                  plantId={nextPhoto === null ? plant?.id : undefined}
+                  focusY={focusY}
+                  zoom={zoom}
+                  style={s.preview}
+                  onGeometry={setGeometry}
+                />
+              </View>
+            </GestureDetector>
           ) : (
             <View style={[s.preview, s.previewEmpty]}>
               <Ionicons name="leaf-outline" size={28} color={t.color.textMuted} />
               <Text style={s.cardHint}>{copy.editPlant.noPhotoYet}</Text>
             </View>
           )}
-          <Text style={s.cardHint}>{copy.editPlant.photoHint}</Text>
+          <View style={s.hintRow}>
+            <Text style={[s.cardHint, s.hintText]}>
+              {shownPhoto ? copy.editPlant.reframeHint : copy.editPlant.photoHint}
+            </Text>
+            {framingChanged && (
+              <Pressable onPress={resetFraming} hitSlop={10} accessibilityRole="button">
+                <Text style={s.resetFraming}>{copy.editPlant.resetFraming}</Text>
+              </Pressable>
+            )}
+          </View>
 
           <View style={s.photoButtons}>
             <Pressable
@@ -333,7 +486,12 @@ function makeStyles(t: Theme) {
       height: 200,
       borderRadius: t.radius.lg,
       backgroundColor: t.color.surfaceMuted,
+      /* The image is dragged inside this box, so the box is what clips it. */
+      overflow: 'hidden',
     },
+    hintRow: { flexDirection: 'row', alignItems: 'center', gap: t.space.md },
+    hintText: { flex: 1 },
+    resetFraming: { ...t.type.label, color: t.color.primary },
     previewEmpty: { alignItems: 'center', justifyContent: 'center', gap: t.space.sm },
     photoButtons: { flexDirection: 'row', gap: t.space.md },
     photoBtn: {

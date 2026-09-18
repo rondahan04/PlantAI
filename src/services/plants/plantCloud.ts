@@ -1,3 +1,6 @@
+/* Explicit `.ts`: a runtime import that `node --test` has to resolve.
+ * Same rule as diagnosisProse.ts and copy/index.ts. */
+import { readFocusY, readZoom } from '../../lib/media/photoFocus.ts';
 import type { PlantDiagnosis } from '../../types/index';
 import type { SoilMediumId } from '../../lib/care/soilMedia';
 import type { PlantSpecies, StoredPlant } from './plantStore';
@@ -65,6 +68,14 @@ export interface CloudRow {
   species: PlantSpecies | null;
   soil_medium: SoilMediumId | null;
   nickname: string | null;
+  /* Where the photo's crop centres, 0-1 down the image. NOT NULL with a 0.5
+   * default in the table, but typed nullable: a client running against a
+   * database that has not taken the migration yet reads undefined here, and
+   * `readFocusY` turns that back into the centre. */
+  photo_focus_y: number | null;
+  /* How close in, as a multiplier on the cover fit. Same nullability
+   * reasoning as photo_focus_y above. */
+  photo_zoom: number | null;
   last_watered_at: string | null;
   watering_log: string[] | null;
   last_repotted_at: string | null;
@@ -131,6 +142,8 @@ export type CloudPatch = Partial<{
   leafLog: LeafEvent[];
   soilMedium: SoilMediumId | null;
   nickname: string | null;
+  photoFocusY: number;
+  photoZoom: number;
   /* Storage OBJECT PATH, never a URL - see CloudRow.photo_path. */
   photoPath: string | null;
   /* Attaching a finding to a plant that was added by hand, long after it was
@@ -164,6 +177,10 @@ function toStoredPlant(row: CloudRow): StoredPlant {
   if (row.species) plant.species = row.species;
   if (row.soil_medium) plant.soilMedium = row.soil_medium;
   if (row.nickname) plant.nickname = row.nickname;
+  /* Explicitly not `if (row.photo_focus_y)` - 0 is a legitimate focus (crop to
+   * the top of the photo) and would be dropped by a truthiness test. */
+  if (typeof row.photo_focus_y === 'number') plant.photoFocusY = readFocusY(row.photo_focus_y);
+  if (typeof row.photo_zoom === 'number') plant.photoZoom = readZoom(row.photo_zoom);
   if (row.last_watered_at) plant.lastWateredAt = row.last_watered_at;
   if (row.watering_log && row.watering_log.length > 0) plant.wateringLog = row.watering_log;
   if (row.last_repotted_at) plant.lastRepottedAt = row.last_repotted_at;
@@ -199,6 +216,8 @@ function toRow(userId: string, plant: StoredPlant, photoPath: string | null): Cl
     species: plant.species ?? null,
     soil_medium: plant.soilMedium ?? null,
     nickname: plant.nickname ?? null,
+    photo_focus_y: readFocusY(plant.photoFocusY),
+    photo_zoom: readZoom(plant.photoZoom),
     last_watered_at: plant.lastWateredAt ?? null,
     watering_log: plant.wateringLog ?? [],
     last_repotted_at: plant.lastRepottedAt ?? null,
@@ -281,6 +300,8 @@ export function createCloudPlantLibrary(deps: CloudDeps, opts: CloudOptions = {}
     if ('leafLog' in patch) rowPatch.leaf_log = patch.leafLog ?? [];
     if ('soilMedium' in patch) rowPatch.soil_medium = patch.soilMedium ?? null;
     if ('nickname' in patch) rowPatch.nickname = patch.nickname ?? null;
+    if ('photoFocusY' in patch) rowPatch.photo_focus_y = readFocusY(patch.photoFocusY);
+    if ('photoZoom' in patch) rowPatch.photo_zoom = readZoom(patch.photoZoom);
     if ('photoPath' in patch) rowPatch.photo_path = patch.photoPath ?? null;
     if ('diagnosis' in patch) rowPatch.diagnosis = patch.diagnosis ?? null;
 

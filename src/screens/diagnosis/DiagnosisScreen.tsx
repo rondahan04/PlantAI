@@ -8,6 +8,7 @@ import {
   Animated,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,6 +25,7 @@ import { plantLibrary } from '../../services/plants/plantLibrary';
 import { plantPhotos } from '../../services/media/photos';
 import { identityConfidence } from '../../lib/diagnosis/confidence';
 import { treatmentProduct, treatmentProductLabel } from '../../lib/diagnosis/treatments';
+import { shopFor } from '../../lib/diagnosis/treatmentShop';
 import { useSession } from '../../hooks/useSession';
 import { getSessionHint } from '../../services/auth/sessionHint';
 import { copy } from '../../services/language';
@@ -360,6 +362,8 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
               /* Read on the button, searched for in the shop - see the note on
                * `productLabel` in src/types/index.ts. */
               const productName = product ? treatmentProductLabel(tr, product) : '';
+              /* Non-null only for the products a known supplier carries. */
+              const shop = product ? shopFor(product) : null;
               return (
                 <View key={i} style={[s.treatmentCard, tr.urgent && s.treatmentUrgent]}>
                   {tr.urgent && (
@@ -369,17 +373,34 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
                   )}
                   <Text style={s.treatmentTitle}>{tr.title}</Text>
                   <Text style={s.treatmentDesc}>{tr.description}</Text>
-                  {product && (
-                    <Pressable
-                      style={({ pressed }) => [s.shopBtn, pressed && s.shopBtnPressed]}
-                      onPress={() => handleFindTreatment(product)}
-                      accessibilityRole="button"
-                      accessibilityLabel={copy.diagnosis.findProductA11y(productName)}
-                    >
-                      <Ionicons name="storefront-outline" size={16} color={t.color.primary} />
-                      <Text style={s.shopBtnText}>{copy.diagnosis.findProduct(productName)}</Text>
-                    </Pressable>
-                  )}
+                  {product &&
+                    (shop ? (
+                      /*
+                        A nutrient. Same reasoning as PlantDetailScreen: the
+                        nursery scrape cannot find chelated iron or a
+                        micronutrient feed, so this opens a shop that stocks
+                        them. See lib/diagnosis/treatmentShop.ts.
+                      */
+                      <Pressable
+                        style={({ pressed }) => [s.shopBtn, pressed && s.shopBtnPressed]}
+                        onPress={() => Linking.openURL(shop.url).catch(() => {})}
+                        accessibilityRole="link"
+                        accessibilityLabel={copy.diagnosis.buyShopA11y}
+                      >
+                        <Ionicons name="cart-outline" size={16} color={t.color.primary} />
+                        <Text style={s.shopBtnText}>{copy.diagnosis.buyShop[shop.id]}</Text>
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        style={({ pressed }) => [s.shopBtn, pressed && s.shopBtnPressed]}
+                        onPress={() => handleFindTreatment(product)}
+                        accessibilityRole="button"
+                        accessibilityLabel={copy.diagnosis.findProductA11y(productName)}
+                      >
+                        <Ionicons name="storefront-outline" size={16} color={t.color.primary} />
+                        <Text style={s.shopBtnText}>{copy.diagnosis.findProduct(productName)}</Text>
+                      </Pressable>
+                    ))}
                 </View>
               );
             })}

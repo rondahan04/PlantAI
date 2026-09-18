@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Image, Alert } from 'react-native';
-import { Image as ExpoImage } from 'expo-image';
-import { photoCacheKey } from '../../lib/media/photoCacheKey';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Image, Alert, Linking } from 'react-native';
+import FramedPhoto from '../../components/FramedPhoto';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RouteProp } from '@react-navigation/native';
+import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../../types/index';
 import { Theme, useTheme } from '../../theme/index';
 import { directionalIconStyle, iconRow } from '../../lib/i18n/rtl';
@@ -25,6 +24,7 @@ import { copy, localeTag } from '../../services/language';
 import { plantPhotos } from '../../services/media/photos';
 import { wateringState } from '../../lib/care/watering';
 import { treatmentProduct, treatmentProductLabel } from '../../lib/diagnosis/treatments';
+import { shopFor } from '../../lib/diagnosis/treatmentShop';
 import { CARE_KINDS, plantCarePlan, soilPlanFor } from '../../lib/care/care';
 import type { GenusCarePlan } from '../../lib/care/genusCarePlan';
 import type { SoilMediumId } from '../../lib/care/soilMedia';
@@ -114,6 +114,20 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
 
   const [plant, setPlant] = useState(() =>
     plantRepo.loadLocal().plants.find((p) => p.id === plantId) ?? null
+  );
+
+  /*
+   * EditPlantScreen writes through the repo (mirror + cloud) and just calls
+   * `navigation.goBack()` - it never hands its result back here. Without this,
+   * `plant` stayed the pre-edit snapshot from mount: the framing/photo/nickname
+   * edit had genuinely saved, but this screen kept showing the old one, which
+   * reads as "the edit didn't save". Home and Portfolio already reload on
+   * focus for the same reason; this screen was the one place that didn't.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      setPlant(plantRepo.loadLocal().plants.find((p) => p.id === plantId) ?? null);
+    }, [plantId])
   );
   const [watering, setWatering] = useState(false);
   /* New growth writes through the same repo as everything else, which is a
@@ -513,11 +527,12 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
             the cache may be gone, so the mark sits underneath. */}
         <View style={s.imageWrap}>
           <Image source={LOGO_GLYPH} style={[s.heroGlyph, { tintColor: t.color.textMuted }]} />
-          <ExpoImage
-              source={{ uri: plant.photoUri, cacheKey: photoCacheKey(plant.photoUri) }}
+          <FramedPhoto
+              uri={plant.photoUri}
+              plantId={plant.id}
+              focusY={plant.photoFocusY}
+              zoom={plant.photoZoom}
               style={s.image}
-              contentFit="cover"
-              cachePolicy="memory-disk"
               recyclingKey={plant.id}
               transition={160}
             />
@@ -588,6 +603,8 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
               /* Read on the button, searched for in the shop - see the note on
                * `productLabel` in src/types/index.ts. */
               const productName = product ? treatmentProductLabel(tr, product) : '';
+              /* Non-null only for the products a known supplier carries. */
+              const shop = product ? shopFor(product) : null;
               return (
                 <View key={i} style={s.treatmentCard}>
                   {tr.urgent && (
@@ -597,17 +614,34 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
                   )}
                   <Text style={s.treatmentTitle}>{tr.title}</Text>
                   <Text style={s.treatmentDesc}>{tr.description}</Text>
-                  {product && (
-                    <Pressable
-                      style={({ pressed }) => [s.shopBtn, pressed && { opacity: 0.6 }]}
-                      onPress={() => findNearby(product)}
-                      accessibilityRole="button"
-                      accessibilityLabel={copy.plantDetail.findProductA11y(productName)}
-                    >
-                      <Ionicons name="storefront-outline" size={16} color={t.color.primary} />
-                      <Text style={s.shopBtnText}>{copy.plantDetail.findProduct(productName)}</Text>
-                    </Pressable>
-                  )}
+                  {product &&
+                    (shop ? (
+                      /*
+                        A nutrient. The nursery scrape cannot help here - almost
+                        no garden centre stocks chelated iron or a micronutrient
+                        feed - so this opens a shop that does instead of spending
+                        a minute to find nothing. See lib/diagnosis/treatmentShop.ts.
+                      */
+                      <Pressable
+                        style={({ pressed }) => [s.shopBtn, pressed && { opacity: 0.6 }]}
+                        onPress={() => Linking.openURL(shop.url).catch(() => {})}
+                        accessibilityRole="link"
+                        accessibilityLabel={copy.plantDetail.buyShopA11y}
+                      >
+                        <Ionicons name="cart-outline" size={16} color={t.color.primary} />
+                        <Text style={s.shopBtnText}>{copy.plantDetail.buyShop[shop.id]}</Text>
+                      </Pressable>
+                    ) : (
+                      <Pressable
+                        style={({ pressed }) => [s.shopBtn, pressed && { opacity: 0.6 }]}
+                        onPress={() => findNearby(product)}
+                        accessibilityRole="button"
+                        accessibilityLabel={copy.plantDetail.findProductA11y(productName)}
+                      >
+                        <Ionicons name="storefront-outline" size={16} color={t.color.primary} />
+                        <Text style={s.shopBtnText}>{copy.plantDetail.findProduct(productName)}</Text>
+                      </Pressable>
+                    ))}
                 </View>
               );
             })}
