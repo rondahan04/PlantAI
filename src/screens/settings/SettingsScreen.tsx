@@ -127,7 +127,11 @@ export default function SettingsScreen({ navigation }: Props) {
           */}
           <Avatar
             size={96}
-            name={profile.full_name ?? profile.username}
+            /* `||`, not `??`: clearing your full name stores an empty string
+             * rather than null, and `??` would keep that - leaving the circle
+             * on the generic person glyph for an account that has a perfectly
+             * good username to take an initial from. */
+            name={profile.full_name || profile.username}
             onPress={() => navigation.navigate('EditAvatar')}
             accessibilityLabel={copy.settings.avatarChange}
           />

@@ -53,7 +53,16 @@ export default function Avatar({ size, name, onPress, accessibilityLabel, style 
   ) : (
     <View style={[frame, s.placeholder]}>
       {initial ? (
-        <Text style={[s.initial, { fontSize: size * 0.4 }]}>{initial}</Text>
+        /*
+         * fontSize AND lineHeight together, always. The type token this style
+         * is built from carries a lineHeight sized for its own 18px fontSize,
+         * and scaling one without the other draws a 38px glyph into a 25px line
+         * box - which clips the letter top and bottom and leaves a fragment
+         * that does not read as any letter at all.
+         */
+        <Text style={[s.initial, { fontSize: size * 0.4, lineHeight: size * 0.5 }]}>
+          {initial}
+        </Text>
       ) : (
         <Ionicons name="person-outline" size={size * 0.44} color={t.color.onPrimary} />
       )}
@@ -88,7 +97,25 @@ function makeStyles(t: Theme) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    initial: { ...t.type.heading, color: t.color.onPrimary },
+    /*
+     * Built from the heading token's FACE rather than spread from it: the token
+     * is a complete type ramp step - size, line height, tracking - and this is a
+     * single character scaled to whatever circle it lands in, so inheriting
+     * those three is how the glyph got clipped. Tracking is zeroed for the same
+     * reason: letter spacing on one letter is trailing space, which pushes it
+     * off the centre of the circle.
+     */
+    initial: {
+      fontFamily: t.type.heading.fontFamily,
+      fontWeight: t.type.heading.fontWeight,
+      letterSpacing: 0,
+      textAlign: 'center',
+      color: t.color.onPrimary,
+      /* Android reserves extra vertical room inside the line box for ascenders
+       * the glyph may not have; centred in a circle that reads as the letter
+       * sitting slightly high. */
+      includeFontPadding: false,
+    },
     pressed: { opacity: 0.85, transform: [{ scale: 0.97 }] },
   });
 }
