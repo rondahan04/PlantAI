@@ -21,13 +21,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { scoreRetrieval } from './retrievalMetric.ts';
-import { PLANTS, loadRetrievalFixtures } from './retrievalFixtures.ts';
+import { PLANTS, loadRetrievalManifest } from './retrievalFixtures.ts';
 
 const m = scoreRetrieval();
 const pct = (r: number) => `${Math.round(r * 100)}%`;
 
 test('the fixture set exists and carries hand-judged truth', () => {
-  assert.ok(loadRetrievalFixtures().length > 100, 'capture-retrieval-fixtures.ts has not been run');
+  assert.ok(
+    loadRetrievalManifest().fixtures.length > 100,
+    'capture-retrieval-fixtures.ts has not been run'
+  );
   assert.ok(m.rows.length >= 150, `only ${m.rows.length} labelled pairs - run label-retrieval-fixtures.ts`);
   assert.ok(m.listed >= 15, `only ${m.listed} pairs where a shop actually stocks the plant`);
 });

@@ -175,10 +175,6 @@ export function loadRetrievalManifest(): RetrievalManifest {
   return JSON.parse(fs.readFileSync(manifest, 'utf8'));
 }
 
-export function loadRetrievalFixtures(): RetrievalFixture[] {
-  return loadRetrievalManifest().fixtures;
-}
-
 export const RETRIEVAL_FIXTURE_DIR = DIR;
 
 /*
