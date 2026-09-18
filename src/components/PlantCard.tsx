@@ -176,6 +176,7 @@ function PlantCard({ plant, slots = EMPTY_SLOTS, onPress, onEdit }: PlantCardPro
             the plant rather than whatever happened to be centred. */}
         <FramedPhoto
           uri={plant.photoUri}
+          plantId={plant.id}
           focusY={plant.photoFocusY}
           zoom={plant.photoZoom}
           style={s.thumb}

@@ -529,6 +529,7 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
           <Image source={LOGO_GLYPH} style={[s.heroGlyph, { tintColor: t.color.textMuted }]} />
           <FramedPhoto
               uri={plant.photoUri}
+              plantId={plant.id}
               focusY={plant.photoFocusY}
               zoom={plant.photoZoom}
               style={s.image}

@@ -7,8 +7,10 @@ import {
   ScrollView,
   Image,
   AccessibilityInfo,
+  InteractionManager,
 } from 'react-native';
 import FramedPhoto from '../components/FramedPhoto';
+import { syncPhotoCache } from '../services/media/photoCache';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -145,8 +147,42 @@ export default function HomeScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      setLibrary(plantRepo.loadLocal());
-      setHeroRoll(Math.random());
+      const loaded = plantRepo.loadLocal();
+      setLibrary(loaded);
+
+      /*
+       * The re-roll waits for the tab transition to finish.
+       *
+       * It swaps the hero to a DIFFERENT plant, so it is a full-width image
+       * mounting and decoding - and firing it from the focus effect meant that
+       * happened while the screen was still animating in, which is exactly the
+       * frame budget a transition has none of to spare. After the animation the
+       * swap is free, and the user actually sees it happen rather than arriving
+       * to a picture that changed behind the slide.
+       */
+      const roll = InteractionManager.runAfterInteractions(() => setHeroRoll(Math.random()));
+
+      /*
+       * Warm the photographs this screen is about to draw, and pull any that
+       * still live only in the cloud down onto the phone.
+       *
+       * Home is the screen this matters most on. The hero re-rolls on EVERY
+       * focus, so it is a DIFFERENT plant each visit and therefore a guaranteed
+       * cold decode of a full-width image - the one photo on the dashboard that
+       * could never benefit from having been drawn a moment ago. Warming the
+       * whole photographed pool means whichever plant the roll lands on is
+       * already decoded.
+       *
+       * Filtered to plants that HAVE a photo so the warm budget is not spent on
+       * rows that have nothing to draw. Idempotent and near-free once the
+       * library is mirrored, which is what makes it safe on every focus.
+       */
+      syncPhotoCache(loaded.plants.filter((p) => !!p.photoUri));
+
+      /* Leaving before the animation settled means the roll was for a visit
+       * that is already over - re-rolling into a blurred-out screen only costs
+       * the decode. */
+      return () => roll.cancel();
     }, [session])
   );
 
@@ -310,6 +346,7 @@ export default function HomeScreen({ navigation }: Props) {
           {heroPhoto !== undefined && (
             <FramedPhoto
               uri={heroPhoto}
+              plantId={heroPlant?.id}
               focusY={heroPlant?.photoFocusY}
               zoom={heroPlant?.photoZoom}
               style={s.heroPhoto}
@@ -412,6 +449,7 @@ export default function HomeScreen({ navigation }: Props) {
                   <FramedPhoto
                     key={p.id}
                     uri={p.photoUri}
+                    plantId={p.id}
                     focusY={p.photoFocusY}
                     zoom={p.photoZoom}
                     style={[s.face, i > 0 && s.faceOverlap]}

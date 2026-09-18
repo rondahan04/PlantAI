@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
 import { plantRepo } from '../plants/plantRepoInstance';
 import { clearSignedUrlCache } from '../plants/supabasePlantCloud';
+import { plantPhotoMirror } from '../media/photoMirror';
+import { photoSizes } from '../media/photoSizes';
 import { isUniqueViolation } from '../../lib/authErrors';
 import type { Session } from '@supabase/supabase-js';
 
@@ -81,6 +83,14 @@ export async function signOut(): Promise<void> {
   /* A signed URL is a live read capability on a private bucket. Keeping one
    * after sign-out leaves a reader for an account nobody is signed into. */
   clearSignedUrlCache();
+  /* Same rule one level down: the mirror holds the actual photographs of the
+   * account being signed out of, as plain files on a shared device. It is also
+   * indexed by plant id, so leaving it would let the NEXT account's ids collide
+   * with the previous one's pictures. */
+  plantPhotoMirror.clear();
+  /* And the measurements taken from them, which are a list of that account's
+   * object paths. Not secret, but there is no reason for them to outlive it. */
+  photoSizes.clear();
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {
@@ -178,6 +188,8 @@ export async function deleteAccount(): Promise<void> {
   // the app ignoring the deletion the user just confirmed.
   plantRepo.wipeAllLocal();
   clearSignedUrlCache();
+  plantPhotoMirror.clear();
+  photoSizes.clear();
 }
 
 export interface Profile {

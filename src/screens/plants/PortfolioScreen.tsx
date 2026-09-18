@@ -21,6 +21,8 @@ import { Theme, useTheme } from '../../theme/index';
 import { plantRepo } from '../../services/plants/plantRepoInstance';
 import { plantLibrary } from '../../services/plants/plantLibrary';
 import { plantPhotos } from '../../services/media/photos';
+import { plantPhotoMirror } from '../../services/media/photoMirror';
+import { syncPhotoCache } from '../../services/media/photoCache';
 import { genusCarePlans } from '../../services/plants/genusCarePlans';
 import { triageSections } from '../../lib/diagnosis/triage';
 import {
@@ -226,7 +228,17 @@ export default function PortfolioScreen({ navigation }: Props) {
   // appear on the way back.
   useFocusEffect(
     useCallback(() => {
-      setLibrary(plantRepo.loadLocal());
+      const loaded = plantRepo.loadLocal();
+      setLibrary(loaded);
+      /*
+       * Warm the thumbnails before the list asks for them, and mirror anything
+       * still only in the cloud. This is the other half of the Home/Portfolio
+       * swap: the memory image cache is emptied when a screen goes away, so
+       * without this every card decodes from cold on every single visit even
+       * though the bytes never left the phone. Cheap once mirrored - see
+       * `photoCache` - which is why it runs on every focus rather than once.
+       */
+      syncPhotoCache(loaded.plants.filter((p) => !!p.photoUri));
     }, [])
   );
 
@@ -238,6 +250,16 @@ export default function PortfolioScreen({ navigation }: Props) {
     if (!session) return;
     plantRepo.refreshFromCloud().then((fresh) => {
       setLibrary((current) => (fresh.plants.length !== current.plants.length ? fresh : current));
+      /*
+       * Mirror against the FRESHLY SIGNED urls, not the ones the focus effect
+       * already tried. On a cold start the mirror's stored urls were minted
+       * last session and are expired, so this is the first moment in the whole
+       * launch at which a cloud photo can actually be downloaded. Deliberately
+       * outside the setLibrary guard above: that guard compares plant COUNTS,
+       * so a library whose size did not change - the normal case - would never
+       * reach this if it were inside.
+       */
+      syncPhotoCache(fresh.plants.filter((p) => !!p.photoUri));
     });
   }, [session]);
 
@@ -267,9 +289,29 @@ export default function PortfolioScreen({ navigation }: Props) {
    * so a sweep would delete every photo the user has.
    */
   useEffect(() => {
+    if (!library.ok) return;
+
+    /*
+     * The mirrored cloud photos get their own sweep, because they are the one
+     * kind of photo file BOTH branches below ignore: `plantPhotos.sweep` only
+     * looks in the guest directory, and a logged-in user never reaches it.
+     * Without this, deleting a plant leaves its picture on the phone forever.
+     *
+     * Guarded on a non-empty library on top of `libraryReadable`. A cloud
+     * mirror that simply has not been filled yet reports zero plants without
+     * being corrupt at all - it is what a first launch after login looks like
+     * for the moment before `refreshFromCloud` lands - and sweeping against
+     * that would delete every photo just downloaded. A user who genuinely
+     * deleted their last plant gets the sweep on their next visit, when the
+     * library is empty for a reason the app has actually confirmed.
+     */
+    if (library.plants.length > 0) {
+      plantPhotoMirror.sweep(library.plants.map((p) => p.id), { libraryReadable: true });
+    }
+
     // Photos for a logged-in user live in Supabase Storage, not the document
     // directory, so this local-file adopt/sweep must not run against the mirror.
-    if (!library.ok || getSessionHint()) return;
+    if (getSessionHint()) return;
     const plants = library.plants;
 
     (async () => {

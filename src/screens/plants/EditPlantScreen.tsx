@@ -43,6 +43,8 @@ import {
   type Size,
 } from '../../lib/media/photoFocus';
 import FramedPhoto from '../../components/FramedPhoto';
+import { plantPhotoMirror } from '../../services/media/photoMirror';
+import { resetPhotoWarmth } from '../../services/media/photoCache';
 import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -277,6 +279,17 @@ export default function EditPlantScreen({ navigation, route }: Props) {
        * replaced reads as the edit having silently failed.
        */
       await Promise.all([ExpoImage.clearMemoryCache(), ExpoImage.clearDiskCache()]);
+      resetPhotoWarmth();
+
+      /*
+       * And drop this plant's mirrored file. It is keyed on the plant, not on
+       * the picture, so a replacement leaves the OLD photograph sitting on the
+       * phone under the right id - and the mirror is preferred over the cloud
+       * url, so that stale file is exactly what every screen would draw. Unlike
+       * the cache clear above this is precise: one plant, one file, and the new
+       * photo is re-downloaded by the next screen that asks for it.
+       */
+      plantPhotoMirror.discard(plant.id);
     }
 
     setSaving(false);
@@ -349,6 +362,10 @@ export default function EditPlantScreen({ navigation, route }: Props) {
               >
                 <FramedPhoto
                   uri={shownPhoto}
+                  /* Only while showing the SAVED photo. A freshly picked one is
+                     a local file that belongs to no plant yet, and resolving it
+                     through the mirror would draw the picture being replaced. */
+                  plantId={nextPhoto === null ? plant?.id : undefined}
                   focusY={focusY}
                   zoom={zoom}
                   style={s.preview}
