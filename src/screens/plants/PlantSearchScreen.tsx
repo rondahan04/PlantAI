@@ -59,8 +59,6 @@ export default function PlantSearchScreen() {
             style={s.input}
             value={query}
             onChangeText={setQuery}
-            placeholder={copy.plantSearch.placeholder}
-            placeholderTextColor={t.color.textMuted}
             returnKeyType="search"
             onSubmitEditing={submit}
             autoCorrect={false}
