@@ -54,7 +54,6 @@ import { staleIdsFor } from '../../lib/diagnosis/diagnosisProse';
 import { getLanguage } from '../../services/language';
 import PlantCard from '../../components/PlantCard';
 import ImportBanner from '../../components/ImportBanner';
-import { TAB_BAR_CLEARANCE } from '../../navigation/tabBarMetrics';
 
 /*
  * The Portfolio tab - every plant the user owns, not just the ones they
@@ -1083,12 +1082,12 @@ export default function PortfolioScreen({ navigation }: Props) {
 function makeStyles(t: Theme) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: t.color.background },
-    scroll: { paddingBottom: t.space['2xl'] + TAB_BAR_CLEARANCE, paddingHorizontal: t.space.xl },
+    scroll: { paddingBottom: t.space['2xl'], paddingHorizontal: t.space.xl },
 
     // ── Returning-user library layout ──────────────────────────────────────
     // The extra bottom padding clears the floating Add plant button, so the
     // last card is scrollable out from under it rather than trapped beneath.
-    libScroll: { paddingBottom: t.space['3xl'] + TAB_BAR_CLEARANCE, paddingHorizontal: t.space.xl },
+    libScroll: { paddingBottom: t.space['3xl'], paddingHorizontal: t.space.xl },
     libHeader: {
       flexDirection: 'row',
       /* Centre, not flex-start: the buttons belong to the masthead as a whole.

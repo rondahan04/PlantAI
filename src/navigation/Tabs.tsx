@@ -19,6 +19,7 @@
  * existing navigation untouched.
  */
 
+import { StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,7 +30,7 @@ import HomeScreen from '../screens/HomeScreen';
 import PortfolioScreen from '../screens/plants/PortfolioScreen';
 import PlantSearchScreen from '../screens/plants/PlantSearchScreen';
 import { copy } from '../services/language';
-import { TAB_BAR_HEIGHT, TAB_BAR_MARGIN } from './tabBarMetrics';
+import { TAB_BAR_HEIGHT } from './tabBarMetrics';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
@@ -50,27 +51,40 @@ export default function Tabs() {
         tabBarInactiveTintColor: t.color.textMuted,
         tabBarStyle: {
           /*
-           * A detached pill rather than an edge-to-edge bar: the cream canvas is
-           * the surface of this design, and letting it run behind the bar is
-           * what keeps the app feeling like paper with cards on it rather than
-           * a page with a footer bolted to the bottom.
+           * Anchored to the bottom edge, not floating above it.
+           *
+           * This was a detached pill, inset on three sides. The bottom inset was
+           * `max(insets.bottom, 16)`, which on a device with a home indicator is
+           * ~34pt of empty canvas under the bar - and because the pill also had
+           * to float ABOVE the content, the list scrolled underneath it and a
+           * half-card sat in that gap. It read as a bar that had come unstuck
+           * from the bottom of the screen.
+           *
+           * Laid out as a sibling of the scene rather than absolutely
+           * positioned, so the navigator reserves the bar's space and the
+           * screens no longer pad for it by hand. Nothing scrolls underneath it
+           * any more, which is why the clearance constant is gone.
            */
-          position: 'absolute',
-          start: TAB_BAR_MARGIN,
-          end: TAB_BAR_MARGIN,
-          bottom: Math.max(insets.bottom, TAB_BAR_MARGIN),
-          height: TAB_BAR_HEIGHT,
-          borderRadius: t.radius['2xl'],
           backgroundColor: t.color.surface,
-          borderTopWidth: 0,
-          // Android draws the bar's own hairline through `elevation`; the border
-          // is off above, so the shadow is the only thing lifting it off the page.
-          ...t.elevation.raised,
-          // The default bar reserves the home-indicator inset internally. This
-          // one already sits above that inset, so the padding is symmetric and
-          // the pill is exactly as tall as it looks.
+          /*
+           * The bar's own height plus the home-indicator inset, with the inset
+           * paid as bottom padding. That is what puts the background all the way
+           * to the physical edge while keeping the icons and labels above the
+           * indicator - the alternative, a 66pt bar sitting on top of the inset,
+           * is the gap this change exists to remove.
+           */
+          height: TAB_BAR_HEIGHT + insets.bottom,
           paddingTop: 8,
-          paddingBottom: 8,
+          paddingBottom: insets.bottom,
+          /*
+           * A hairline instead of the pill's shadow. The bar is now flush
+           * against the content, so it needs an edge to separate the two; a drop
+           * shadow lifts a thing off the page, which is the opposite of what an
+           * anchored footer should look like.
+           */
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: t.color.border,
+          elevation: 0,
         },
         tabBarItemStyle: { paddingVertical: 0 },
         tabBarLabelStyle: { ...t.type.caption, marginTop: 2 },
