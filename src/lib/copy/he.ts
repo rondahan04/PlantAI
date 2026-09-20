@@ -199,6 +199,20 @@ export const he: Copy = {
     loggedOutBlurb:
       'צרו חשבון כדי לשמור את הפרופיל שלכם ולנהל את הפרטים. האבחון עובד מצוין גם בלי חשבון.',
     profileSettings: 'הגדרות פרופיל',
+    avatarTitle: 'תמונת פרופיל',
+    avatarChange: 'שינוי תמונת הפרופיל',
+    avatarHint: 'גררו כדי למקם, צבטו כדי לקרב.',
+    avatarChoose: 'בחירה מהגלריה',
+    avatarTake: 'צילום תמונה',
+    avatarRemove: 'הסרת התמונה',
+    avatarReset: 'איפוס המסגור',
+    avatarSaveFailed: 'לא הצלחנו לשמור את התמונה. נסו שוב.',
+    avatarPermission: 'הגישה לתמונות כבויה',
+    avatarPermissionBody:
+      'PlantAI צריכה גישה לתמונות שלכם כדי להגדיר תמונת פרופיל. אפשר להפעיל אותה בהגדרות iOS.',
+    avatarCameraPermission: 'הגישה למצלמה כבויה',
+    avatarCameraPermissionBody:
+      'PlantAI צריכה גישה למצלמה כדי לצלם תמונת פרופיל. אפשר להפעיל אותה בהגדרות iOS.',
     fullName: 'שם מלא',
     username: 'שם משתמש',
     emailAddress: 'כתובת אימייל',

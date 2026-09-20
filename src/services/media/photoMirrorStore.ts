@@ -137,8 +137,15 @@ export function idFromMirrorName(name: string): string | null {
   return base.length > 0 ? base : null;
 }
 
-export function createPhotoMirror(deps: MirrorDeps) {
-  const dir = `${deps.documentDir.replace(/\/+$/, '')}/${MIRROR_DIR_NAME}/`;
+/*
+ * `dirName` exists so a second, independent mirror can be created for
+ * something that is not a plant photo - the account's avatar is one file
+ * keyed on the user rather than many keyed on plants, and it must not be
+ * swept by a pass that reasons about the plant id list. Same machinery,
+ * separate directory, separate index.
+ */
+export function createPhotoMirror(deps: MirrorDeps, dirName: string = MIRROR_DIR_NAME) {
+  const dir = `${deps.documentDir.replace(/\/+$/, '')}/${dirName}/`;
 
   /*
    * id -> file URI, built once from a single directory listing.

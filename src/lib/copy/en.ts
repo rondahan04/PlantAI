@@ -241,6 +241,20 @@ export const en = {
     loggedOutBlurb:
       'Create an account to save your profile and manage your details. Diagnosis works fine without one.',
     profileSettings: 'Profile settings',
+    avatarTitle: 'Profile picture',
+    avatarChange: 'Change profile picture',
+    avatarHint: 'Drag to reposition, pinch to zoom.',
+    avatarChoose: 'Choose from library',
+    avatarTake: 'Take a photo',
+    avatarRemove: 'Remove photo',
+    avatarReset: 'Reset framing',
+    avatarSaveFailed: 'Could not save your picture. Please try again.',
+    avatarPermission: 'Photo access is off',
+    avatarPermissionBody:
+      'PlantAI needs access to your photos to set a profile picture. You can turn it on in iOS Settings.',
+    avatarCameraPermission: 'Camera access is off',
+    avatarCameraPermissionBody:
+      'PlantAI needs camera access to take a profile picture. You can turn it on in iOS Settings.',
     fullName: 'Full name',
     username: 'Username',
     emailAddress: 'Email address',
