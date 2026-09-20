@@ -200,6 +200,39 @@ details.why .why-body p{margin:8px 0 0;color:var(--ink-soft);max-width:70ch;}
 details.why .why-body p:first-child{margin-top:0;}
 details.why .why-body b{color:var(--ink);}
 
+/* stack diagram */
+.dgwrap{border:1px solid var(--line);border-radius:8px;padding:16px 14px;margin-top:8px;overflow-x:auto;}
+.dg{width:100%;min-width:660px;height:auto;display:block;
+  font-family:-apple-system,"Segoe UI",Inter,Arial,sans-serif;}
+.dg .bx{fill:var(--panel);stroke:var(--line);stroke-width:1;}
+.dg .bx.hot{fill:var(--accent-soft);stroke:var(--accent);}
+.dg .t{fill:var(--ink);font:600 14px/1 inherit;}
+.dg .s{fill:var(--ink-faint);font:500 9px/1 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.09em;}
+.dg .chip{fill:var(--track);}
+.dg .ct{fill:var(--ink-soft);font:500 10.5px/1 ui-monospace,"SF Mono",Menlo,monospace;}
+.dg .nm{fill:var(--ink);font:600 11.5px/1 inherit;}
+.dg .ep{fill:var(--ink-faint);font:400 8.5px/1 ui-monospace,"SF Mono",Menlo,monospace;}
+.dg .note{fill:var(--ink-faint);font:400 10px/1 inherit;}
+.dg .ln{stroke:var(--accent);stroke-width:1.6;fill:none;}
+.dg marker path{fill:var(--accent);}
+.dg .bdg{fill:var(--accent);}
+.dg .bdgt{fill:#fff;font:700 11px/1 ui-monospace,"SF Mono",Menlo,monospace;}
+.dg .cap{fill:var(--ink-faint);font:500 8.5px/1 ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.06em;}
+
+/* numbered call order inside a card */
+.cards.wide{grid-template-columns:repeat(auto-fill,minmax(330px,1fr));}
+.card .edge{
+  float:right;width:17px;height:17px;border-radius:50%;
+  background:var(--accent);color:#fff;
+  font:700 10px/17px ui-monospace,"SF Mono",Menlo,monospace;text-align:center;
+  margin-left:8px;
+}
+ol.mini{margin:9px 0 0;padding-left:17px;color:var(--ink-soft);font-size:12.5px;line-height:1.5;}
+ol.mini li{margin:4px 0;}
+ol.mini li::marker{color:var(--ink-faint);font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;}
+ol.mini b{display:inline;color:var(--ink);font-weight:600;margin:0;}
+ol.mini code{font-size:.88em;}
+
 /* misc */
 code{font:0.86em/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   background:var(--track);padding:.18em .42em;border-radius:4px;}
@@ -231,6 +264,7 @@ code{font:0.86em/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
 
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" data-go="overview" aria-selected="true">Overview</button>
+    <button class="tab" role="tab" data-go="diagram" aria-selected="false">Diagram</button>
     <button class="tab" role="tab" data-go="diagnose" aria-selected="false">Diagnose</button>
     <button class="tab" role="tab" data-go="nurseries" aria-selected="false">Nursery search</button>
     <button class="tab" role="tab" data-go="pipeline" aria-selected="false">Scraping</button>
@@ -241,6 +275,7 @@ code{font:0.86em/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
     <nav class="side">
       <div class="group">Observe</div>
       <button class="nav" data-go="overview" aria-current="true">Overview</button>
+      <button class="nav" data-go="diagram">Diagram</button>
       <button class="nav" data-go="providers">Providers</button>
       <button class="nav" data-go="routes">Routes</button>
 
@@ -286,6 +321,175 @@ code{font:0.86em/1 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
           <li><b>Providers</b> <span data-pretext>PlantNet, OpenAI, Google Places, Tavily, Firecrawl.</span></li>
           <li><b>Supabase</b> <span data-pretext>Account, library, photos - and the scrape cache shared by every user.</span></li>
         </ol>
+      </section>
+
+      <section class="panel" id="p-diagram">
+        <h2>The stack, in one picture</h2>
+        <p class="lede" data-pretext>Four lines and nothing else. The app talks to one server and to Supabase; only the server talks to a paid provider, because only the server has the keys.</p>
+
+        <div class="dgwrap">
+          <svg class="dg" viewBox="0 0 960 574" role="img"
+               aria-label="PlantAI architecture: the Expo app calls one Node server, which calls PlantNet, OpenAI, Google Places, Tavily and Firecrawl; both the app and the server talk to Supabase.">
+            <defs>
+              <marker id="dg-ar" viewBox="0 0 8 8" refX="7" refY="4"
+                      markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse">
+                <path d="M0 0 L8 4 L0 8 Z"/>
+              </marker>
+            </defs>
+
+            <!-- ── App ────────────────────────────────────────────────── -->
+            <rect class="bx" x="20" y="20" width="250" height="310" rx="10"/>
+            <text class="t"  x="38" y="52">App</text>
+            <text class="s"  x="38" y="70">EXPO 56 &#183; REACT NATIVE 0.85 &#183; TS</text>
+
+            <rect class="chip" x="36" y="86"  width="218" height="20" rx="5"/>
+            <text class="ct"   x="45" y="100">expo-camera &#183; image-picker</text>
+            <rect class="chip" x="36" y="112" width="218" height="20" rx="5"/>
+            <text class="ct"   x="45" y="126">expo-image-manipulator</text>
+            <rect class="chip" x="36" y="138" width="218" height="20" rx="5"/>
+            <text class="ct"   x="45" y="152">expo-location &#183; rn-maps</text>
+            <rect class="chip" x="36" y="164" width="218" height="20" rx="5"/>
+            <text class="ct"   x="45" y="178">expo-sqlite &#183; file-system</text>
+            <rect class="chip" x="36" y="190" width="218" height="20" rx="5"/>
+            <text class="ct"   x="45" y="204">expo-notifications</text>
+            <rect class="chip" x="36" y="216" width="218" height="20" rx="5"/>
+            <text class="ct"   x="45" y="230">react-navigation &#183; reanimated</text>
+            <rect class="chip" x="36" y="242" width="218" height="20" rx="5"/>
+            <text class="ct"   x="45" y="256">@supabase/supabase-js</text>
+            <text class="note" x="38" y="292">No provider key ships in the bundle.</text>
+            <text class="note" x="38" y="308">Logged out, expo-sqlite is the library.</text>
+
+            <!-- ── Server ─────────────────────────────────────────────── -->
+            <rect class="bx hot" x="346" y="20" width="268" height="310" rx="10"/>
+            <text class="t" x="364" y="52">Node API server</text>
+            <text class="s" x="364" y="70">NODE:HTTP &#183; TS &#183; RENDER &#183; :4000</text>
+
+            <rect class="chip" x="362" y="86"  width="236" height="20" rx="5"/>
+            <text class="ct"   x="371" y="100">POST /api/diagnose</text>
+            <rect class="chip" x="362" y="112" width="236" height="20" rx="5"/>
+            <text class="ct"   x="371" y="126">POST /api/nurseries</text>
+            <rect class="chip" x="362" y="138" width="236" height="20" rx="5"/>
+            <text class="ct"   x="371" y="152">GET&#160; /api/nurseries/job/:id</text>
+            <rect class="chip" x="362" y="164" width="236" height="20" rx="5"/>
+            <text class="ct"   x="371" y="178">POST /api/care-plan</text>
+            <rect class="chip" x="362" y="190" width="236" height="20" rx="5"/>
+            <text class="ct"   x="371" y="204">POST /api/translate-diagnosis</text>
+            <rect class="chip" x="362" y="216" width="236" height="20" rx="5"/>
+            <text class="ct"   x="371" y="230">GET&#160; /health</text>
+            <text class="note" x="364" y="266">Rate gate &#183; in-memory job store</text>
+            <text class="note" x="364" y="282">Scraper: parse5 + platform fingerprints</text>
+            <text class="note" x="364" y="298">Every provider key lives here, and only here.</text>
+
+            <!-- ── Providers ──────────────────────────────────────────── -->
+            <rect class="bx" x="690" y="20" width="250" height="310" rx="10"/>
+            <text class="t" x="708" y="52">External APIs</text>
+            <text class="s" x="708" y="70">FIVE PAID PROVIDERS</text>
+
+            <text class="nm" x="708" y="104">PlantNet</text>
+            <text class="ep" x="708" y="119">my-api.plantnet.org/v2/identify/all</text>
+            <text class="nm" x="708" y="150">OpenAI &#183; gpt-5.6-luna</text>
+            <text class="ep" x="708" y="165">api.openai.com/v1/chat/completions</text>
+            <text class="nm" x="708" y="196">Google Places</text>
+            <text class="ep" x="708" y="211">places.googleapis.com/v1/places:searchText</text>
+            <text class="nm" x="708" y="242">Tavily</text>
+            <text class="ep" x="708" y="257">api.tavily.com/extract</text>
+            <text class="nm" x="708" y="288">Firecrawl</text>
+            <text class="ep" x="708" y="303">api.firecrawl.dev/v1/scrape</text>
+
+            <!-- ── Supabase ───────────────────────────────────────────── -->
+            <rect class="bx" x="20" y="420" width="594" height="134" rx="10"/>
+            <text class="t" x="38" y="452">Supabase</text>
+            <text class="s" x="38" y="470">POSTGRES &#183; AUTH &#183; STORAGE</text>
+
+            <rect class="chip" x="36" y="486" width="270" height="20" rx="5"/>
+            <text class="ct"   x="45" y="500">auth &#183; sessions</text>
+            <rect class="chip" x="36" y="512" width="270" height="20" rx="5"/>
+            <text class="ct"   x="45" y="526">plants &#183; growth journal</text>
+            <rect class="chip" x="320" y="486" width="278" height="20" rx="5"/>
+            <text class="ct"   x="329" y="500">photos bucket &#183; signed URLs</text>
+            <rect class="chip" x="320" y="512" width="278" height="20" rx="5"/>
+            <text class="ct"   x="329" y="526">nursery_searches &#183; shop cache</text>
+
+            <!-- ── Edges ──────────────────────────────────────────────── -->
+            <path class="ln" d="M274 150 H342" marker-start="url(#dg-ar)" marker-end="url(#dg-ar)"/>
+            <circle class="bdg" cx="308" cy="150" r="11"/>
+            <text class="bdgt" x="308" y="154" text-anchor="middle">1</text>
+            <text class="cap"  x="308" y="177" text-anchor="middle">HTTPS</text>
+
+            <path class="ln" d="M618 150 H686" marker-start="url(#dg-ar)" marker-end="url(#dg-ar)"/>
+            <circle class="bdg" cx="652" cy="150" r="11"/>
+            <text class="bdgt" x="652" y="154" text-anchor="middle">2</text>
+            <text class="cap"  x="652" y="177" text-anchor="middle">API KEYS</text>
+
+            <path class="ln" d="M480 334 V416" marker-start="url(#dg-ar)" marker-end="url(#dg-ar)"/>
+            <circle class="bdg" cx="480" cy="375" r="11"/>
+            <text class="bdgt" x="480" y="379" text-anchor="middle">3</text>
+            <text class="cap"  x="499" y="379">SCRAPE CACHE</text>
+
+            <path class="ln" d="M145 334 V416" marker-start="url(#dg-ar)" marker-end="url(#dg-ar)"/>
+            <circle class="bdg" cx="145" cy="375" r="11"/>
+            <text class="bdgt" x="145" y="379" text-anchor="middle">4</text>
+            <text class="cap"  x="164" y="379">DIRECT &#183; NO SERVER</text>
+          </svg>
+        </div>
+
+        <h3>Which API is called, and when</h3>
+        <div class="cards wide">
+          <div class="card">
+            <b><span class="edge">1</span>Diagnose a photo</b>
+            <span data-pretext>Two providers, one round trip. Nothing is stored on the server.</span>
+            <ol class="mini">
+              <li><b>App</b> resizes the photo, then <code>POST /api/diagnose</code>. Over the size limit is refused before a credit is spent.</li>
+              <li><b>PlantNet</b> <code>/v2/identify/all</code> &rarr; species, genus, confidence.</li>
+              <li><b>OpenAI</b>, only when the species is a coin-flip inside a confident genus &rarr; re-reads the photo to settle it.</li>
+              <li><b>OpenAI</b> again, photo plus species &rarr; condition, issues, treatments, care.</li>
+              <li>One JSON answer back to the app.</li>
+            </ol>
+          </div>
+
+          <div class="card">
+            <b><span class="edge">2</span>Nursery search</b>
+            <span data-pretext>The expensive flow, and the only asynchronous one.</span>
+            <ol class="mini">
+              <li><code>POST /api/nurseries</code> with plant, lat, lng, radius &rarr; a job id at once.</li>
+              <li><b>Supabase cache</b> checked first. A recent identical search returns <code>results</code> inline and stops here.</li>
+              <li><b>Google Places</b> <code>places:searchText</code> &rarr; nurseries in the radius, boxed then cut to the true circle.</li>
+              <li><b>Tavily</b> <code>/extract</code> reads each shop. <b>Firecrawl</b> <code>/v1/scrape</code> only when the plain read comes back with no product grid.</li>
+              <li><b>OpenAI</b> &rarr; product and price pulled from the page text.</li>
+              <li><code>GET /api/nurseries/job/:id</code> polled until done; the result is written back to the cache for the next user.</li>
+            </ol>
+          </div>
+
+          <div class="card">
+            <b><span class="edge">3</span>Care plan &amp; Hebrew</b>
+            <span data-pretext>One model call each, then never again.</span>
+            <ol class="mini">
+              <li><code>POST /api/care-plan</code> &rarr; <b>OpenAI</b> once per genus, answering for every growing medium in a single call.</li>
+              <li><code>POST /api/translate-diagnosis</code> &rarr; <b>OpenAI</b> turns the diagnosis text into Hebrew.</li>
+              <li>Both land in <b>expo-sqlite</b> on the device, so switching medium or language afterwards is instant and offline.</li>
+            </ol>
+          </div>
+
+          <div class="card">
+            <b><span class="edge">4</span>Account &amp; data</b>
+            <span data-pretext>The one path the Node server is not on.</span>
+            <ol class="mini">
+              <li><b>@supabase/supabase-js</b> calls Supabase straight from the app: Auth, library rows, photo bucket.</li>
+              <li>The session belongs to the user, so routing it through the server would only add a second thing to trust.</li>
+              <li>Writes go to Supabase first, device second &mdash; a failed write never lands locally.</li>
+              <li>The server reaches the same project with a service-role key, but only for the shared scrape cache.</li>
+            </ol>
+          </div>
+        </div>
+
+        <details class="why">
+          <summary>Why one server and not five clients</summary>
+          <div class="why-body">
+            <p data-pretext><b>Keys.</b> Anything compiled into an Expo bundle is readable by anyone who downloads the app. Five provider keys on the device is five keys given away, and every credit spent on them is billed to the project.</p>
+            <p data-pretext><b>Caching.</b> A scrape paid for by one user is worth nothing if the next user cannot see it. The cache only works because every search passes through the same process, keyed the same way.</p>
+            <p data-pretext><b>One thing to watch.</b> <code>GET /health</code> answers for all five providers at once. Spread across clients, an outage is only visible in the reviews.</p>
+          </div>
+        </details>
       </section>
 
       <section class="panel" id="p-providers" hidden>
