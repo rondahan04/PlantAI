@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 /**
- * The scrape success-rate measurement (TODOS "Scrape success rate").
+ * The scrape success-rate measurement.
  *
  * WHY THIS EXISTS AND scripts/retrieval-accuracy.ts DOES NOT ANSWER IT.
  * That harness replays shop pages AS SERVED, grades the deterministic half

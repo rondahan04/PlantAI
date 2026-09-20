@@ -32,7 +32,7 @@ test('a genuine server failure stays ours to own', () => {
 test('an unknown code degrades to a service failure, never to a guess', () => {
   // A code added server-side later must not be silently classified as a
   // problem with the user's photo - blaming the photo for our outage is the
-  // failure mode E9 exists to prevent.
+  // failure mode this classifier exists to prevent.
   assert.equal(classifyDiagnosisFailure(500, 'some_future_code'), 'service');
   assert.equal(classifyDiagnosisFailure(400, ''), 'service');
 });

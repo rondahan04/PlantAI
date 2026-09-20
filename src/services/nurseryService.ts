@@ -4,7 +4,7 @@ import { hasInlineResults } from '../lib/nursery/jobResponse';
 import { clampRadius, DEFAULT_RADIUS_M } from '../lib/nursery/radius';
 
 /*
- * Live nursery lookup (TODOS E12).
+ * Live nursery lookup.
  *
  * WHY THIS IS A JOB AND NOT A REQUEST. The scrape was measured at 480,187 ms
  * end-to-end - eight minutes - against the 90,000 ms abort this file used to
@@ -290,7 +290,7 @@ const cacheKey = (plant: string, lat: number, lng: number, radiusM: number) =>
 
 /*
  * Evict expired entries, then the oldest, so a long session with many distinct
- * searches cannot grow the map without bound (TODOS H7). Map preserves
+ * searches cannot grow the map without bound. Map preserves
  * insertion order, so the first key is the oldest.
  */
 function evict(now: number) {

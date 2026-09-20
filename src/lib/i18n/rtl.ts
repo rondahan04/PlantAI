@@ -1,7 +1,7 @@
 import { I18nManager } from 'react-native';
 
 /*
- * RTL support (TODOS item 14), layout half.
+ * RTL support, layout half.
  *
  * The users are Israeli and the scraped nursery inventory is already Hebrew, so
  * the app has to survive being run in a right-to-left locale even while its own

@@ -112,7 +112,7 @@ export default function CameraScreen({ navigation }: Props) {
    * Failures render as an in-screen StatusView, never an OS alert and never an
    * exception string - DiagnosisServiceError logs its provider detail and hands
    * this layer only a stable code. There is no fabricated fallback: if we cannot
-   * diagnose the plant we say so (TODOS A5, E9).
+   * diagnose the plant we say so.
    *
    * describeFailure is the only place that decides failure copy, so the three
    * error dialects this screen used to speak cannot come back.

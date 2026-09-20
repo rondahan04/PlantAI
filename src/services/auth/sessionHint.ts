@@ -5,7 +5,8 @@ import Storage from 'expo-sqlite/kv-store';
  *
  * Supabase's real session lives behind `AsyncStorage` and is only knowable
  * asynchronously (`supabase.auth.getSession()`), which is fine for Login/
- * Settings but not for Home: D8 requires knowing which local key to read
+ * Settings but not for Home: the adaptive layout requires knowing which local
+ * key to read
  * (guest vs. cloud-mirror) during the FIRST render, the same constraint that
  * made `plantLibrary` and `onboarding` synchronous. `useSession` (a later
  * task) keeps this in sync with every auth state change; it is a hint, not

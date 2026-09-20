@@ -16,7 +16,7 @@ import type { StoredPlant } from '../services/plants/plantStore';
  *
  * The photo is deliberately small and the condition is what carries colour: a
  * library exists so a user can spot the plant that needs help, not to browse
- * photographs. A grid was the alternative (D7) and was rejected for making
+ * photographs. A grid was the alternative and was rejected for making
  * condition secondary to aesthetics.
  */
 
@@ -162,7 +162,7 @@ function PlantCard({ plant, slots = EMPTY_SLOTS, onPress, onEdit }: PlantCardPro
       })}
     >
       {/*
-        The photo may be gone. Item 9 copies it into the document directory on
+        The photo may be gone. `photoStore` copies it into the document directory on
         save, but a plant saved before that shipped - or one whose copy was
         interrupted - still points at the camera cache, which iOS purges on its
         own schedule. Image renders nothing on a dead URI, so the app mark sits
@@ -281,7 +281,7 @@ const makeStyles = (t: Theme) =>
       borderRadius: t.radius.xl,
       padding: t.space.md,
       marginBottom: t.space.md,
-      minHeight: 96, // comfortably past the 44pt minimum target (H6)
+      minHeight: 96, // comfortably past the 44pt accessibility minimum
       ...t.elevation.card,
     },
     cardPressed: { opacity: 0.7 },

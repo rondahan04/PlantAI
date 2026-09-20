@@ -58,7 +58,7 @@ type Props = {
  *
  * The strings are `copy.camera.*` on purpose rather than a second set: the same
  * failure has to read the same way whether the photo came from the camera or
- * from the plant's own record, and one of the app's older bugs (E9) was three
+ * from the plant's own record, and one of the app's older bugs was three
  * screens speaking three error dialects about one network fault.
  *
  * A body only - the title is this screen's own, because the sentence "we could

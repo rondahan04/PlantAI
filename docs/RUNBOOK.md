@@ -57,10 +57,10 @@ Render's log viewer can filter on these fields directly.
 | Symptom | Likely cause | Where to look |
 |---|---|---|
 | `/api/diagnose` always 502 | Provider key expired/out of credits | `lastSuccess.plantnet_identify` vs `.health_assessment` tells you which provider; `?errors=1` has the raw detail |
-| `/api/diagnose` always returns the same generic assessment | `DIAGNOSIS_SKIP_OPENAI=true` still set (Render env var) | This is TODOS item 0 - intentional stub mode, not a bug. Unset the Render env var once OpenAI credits are back |
+| `/api/diagnose` always returns the same generic assessment | `DIAGNOSIS_SKIP_OPENAI=true` still set (Render env var) | Intentional stub mode, not a bug. Unset the Render env var once OpenAI credits are back |
 | Nursery search never finishes | `jobs.active` stuck; check `?errors=1` for `scrape_failed` | Firecrawl/Tavily both down, or a target site started blocking |
 | Every request 401s | `x-plantai-key` mismatch | `API_SHARED_SECRET` on Render must equal `EXPO_PUBLIC_API_SECRET` in the app bundle - see `render.yaml` |
-| Gallery photo upload fails, camera works | Photo over `MAX_BODY_BYTES` (12MB) | `server/index.ts` `MAX_BODY_BYTES` - known gap, TODOS item 9 downscale note |
+| Gallery photo upload fails, camera works | Photo over `MAX_BODY_BYTES` (12MB) | `server/index.ts` `MAX_BODY_BYTES` - known gap, the upload is not downscaled first |
 
 ## Routes
 

@@ -13,7 +13,6 @@ a mirrored English one.
 |---|---|
 | **API** | https://plantai-api-eev0.onrender.com - Render, deployed from `main` |
 | **API docs** | https://plantai-api-docs.vercel.app - [`docs/api-site`](docs/api-site), Vercel |
-| **Status and plan** | [`TODOS.md`](TODOS.md) - the running record of what shipped, what is broken, what is next |
 | **Agent working agreements** | [`AGENTS.md`](AGENTS.md) |
 | **Runbook** | [`docs/RUNBOOK.md`](docs/RUNBOOK.md) |
 

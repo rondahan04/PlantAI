@@ -327,7 +327,7 @@ export function offersGuestImport(opts: { loggedIn: boolean; guestCount: number 
 }
 
 /*
- * Which of the two Home layouts to paint (D8: marketing on first run, library
+ * Which of the two Home layouts to paint (marketing on first run, library
  * once there is something to show).
  *
  * `offeringImport` belongs in this decision and its absence was a data-loss

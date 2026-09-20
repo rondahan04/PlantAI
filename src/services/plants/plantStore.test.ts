@@ -102,7 +102,7 @@ test('newest plant comes first - a just-saved plant is what the user looks for',
 });
 
 test('the persisted blob is versioned from the first write', () => {
-  // Item 6's migrate() chain has nothing to hang off if v1 is unlabelled.
+  // The migrate() chain has nothing to hang off if v1 is unlabelled.
   const s = fakeStorage();
   createPlantStore(s.deps, fixedOpts()).save({ photoUri: 'a', diagnosis });
   assert.equal(JSON.parse(s.data.get(LIBRARY_KEY)!).version, LIBRARY_VERSION);
@@ -118,7 +118,7 @@ test('50 plants all survive - the library is not silently capped', () => {
 });
 
 test('a force-quit mid-write loses only the in-flight save, not the ones before it', () => {
-  // Item 11 (E10): the write that was interrupted is reported as failed by the
+  // The write that was interrupted is reported as failed by the
   // read-back, but that must not touch the bytes already on disk from the
   // saves that came before it.
   const s = fakeStorage();
@@ -298,7 +298,7 @@ test('corrupt data is quarantined, never destroyed', () => {
 });
 
 test('truncated JSON is distinguishable from a real empty library', () => {
-  // Item 11 (E10): "you have no plants" and "your library broke" must not
+  // "You have no plants" and "your library broke" must not
   // collapse into the same shape, or the UI cannot tell a new user from a
   // corrupted one.
   const truncated = createPlantStore(
@@ -373,10 +373,10 @@ test('a library written by a NEWER app version is quarantined, not mangled', () 
   assert.ok(s.data.get(QUARANTINE_KEY), 'the future blob must be preserved');
 });
 
-// ─── The D8 requirement ───────────────────────────────────────────────────────
+// ─── The adaptive Home requirement ────────────────────────────────────────────
 
 test('load is synchronous - the adaptive Home reads it before first paint', () => {
-  // D8 (adaptive Home) shows marketing content on first run and the library
+  // The adaptive Home shows marketing content on first run and the library
   // afterwards. If the read were async, a returning user would see a frame of
   // marketing copy before their plants appeared.
   const s = fakeStorage();
@@ -391,7 +391,7 @@ test('load is synchronous - the adaptive Home reads it before first paint', () =
   assert.equal(result.ok, true);
 });
 
-// ─── Migration chain (item 6) ─────────────────────────────────────────────────
+// ─── Migration chain ──────────────────────────────────────────────────────────
 
 /*
  * There are no real migrations yet - v1 is current. A no-op chain cannot be
@@ -533,7 +533,7 @@ test('an explicit undefined clears a field rather than being ignored', () => {
 });
 
 test('update repoints a photo at its persisted copy', () => {
-  // Item 9: the plant is saved synchronously with the camera's cache URI, then
+  // The plant is saved synchronously with the camera's cache URI, then
   // repointed once the copy into the document directory lands.
   const s = fakeStorage();
   const store = createPlantStore(s.deps, fixedOpts());
