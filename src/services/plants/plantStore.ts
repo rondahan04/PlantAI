@@ -11,7 +11,7 @@ import {
 } from '../../lib/care/leaves.ts';
 
 /*
- * The plant library (TODOS item 5).
+ * The plant library.
  *
  * This is the retention spine. Diagnosis acquires a user and the marketplace
  * transacts, but the library is the only reason anyone opens the app a second
@@ -29,7 +29,7 @@ import {
  *      list - "you have no plants" is indistinguishable from a deletion the
  *      user never performed.
  *
- * Everything is SYNCHRONOUS on purpose. D8 chose an adaptive Home that shows
+ * Everything is SYNCHRONOUS on purpose. The adaptive Home shows
  * marketing copy on first run and the library afterwards; an async read means a
  * returning user sees a frame of marketing content before their plants appear.
  * `expo-sqlite/kv-store` provides sync accessors precisely for this.
@@ -39,7 +39,7 @@ export const LIBRARY_KEY = 'plantai.library';
 export const QUARANTINE_KEY = 'plantai.library.corrupt';
 
 /*
- * Bump ONLY together with a migration step (TODOS item 6). The version lives in
+ * Bump ONLY together with a migration step. The version lives in
  * the blob rather than the key so a migration can read the old shape in place
  * instead of hunting across keys.
  */
@@ -59,11 +59,11 @@ export interface PlantSpecies {
 
 export interface StoredPlant {
   id: string;
-  /* ISO-8601. Sort key for the library and, later, the photo timeline (E2). */
+  /* ISO-8601. Sort key for the library and for the growth journal. */
   savedAt: string;
   /*
    * Normally a file in the app's document directory, copied there on save by
-   * `photoStore` (item 9). It can still be a camera cache URI - a plant saved
+   * `photoStore`. It can still be a camera cache URI - a plant saved
    * before that shipped, or one whose copy was interrupted - and iOS purges
    * that directory on its own schedule, so a reader must tolerate a dead URI.
    * Home repairs what it can on launch.
@@ -198,7 +198,7 @@ interface Library {
 /*
  * The seam that keeps this module testable without a device, mirroring
  * `PipelineDeps` in the scraper. Sync by requirement, not by convenience - see
- * the note on D8 above.
+ * the note on the adaptive Home above.
  */
 export interface StorageDeps {
   getItem(key: string): string | null;
@@ -510,7 +510,8 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
      * A blob from a newer app version is intact data in a shape this build does
      * not understand. Parsing it as the current version would silently drop the
      * fields the newer app wrote, and the next save would persist that loss.
-     * Migration forward is item 6; refusing to mangle is this build's job.
+     * Migrating forward is the chain above; refusing to mangle is this
+     * build's job.
      */
     if (typeof lib.version === 'number' && lib.version > targetVersion) {
       quarantine(raw);
@@ -584,7 +585,7 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
 
   /*
    * Newest first: the plant a user just saved is the one they are most likely
-   * looking for, and D7's triage grouping re-sorts by condition for display
+   * looking for, and the triage grouping re-sorts by condition for display
    * anyway.
    */
   function save(input: { photoUri: string; diagnosis: PlantDiagnosis }): SaveResult {
@@ -644,7 +645,7 @@ export function createPlantStore(storage: StorageDeps, opts: StoreOptions = {}) 
    * Patch one plant in place.
    *
    * Narrow by design: the fields the watering schedule owns, `photoUri` once
-   * item 9's copy into the document directory finishes, and the four the user
+   * the copy into the document directory finishes, and the four the user
    * edits directly on a hand-added plant. A general `update(id, patch)` would
    * let a caller overwrite a diagnosis - the one thing in a stored plant that
    * came from a paid call and cannot be re-derived. That still holds with

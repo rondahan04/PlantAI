@@ -1,5 +1,5 @@
 /*
- * Request gate for the billable endpoints (TODOS A1 + O1).
+ * Request gate for the billable endpoints.
  *
  * ⚠️ THE SHARED SECRET IS A SPEED BUMP, NOT AUTHENTICATION.
  * It has to reach the app through `EXPO_PUBLIC_API_SECRET`, which is the exact
@@ -48,7 +48,7 @@ const OK: GateDecision = {
   reason: '',
 };
 
-/* Billable-request bookkeeping, so O1 can answer "is the cap working?". */
+/* Billable-request bookkeeping, so `/health` can answer "is the cap working?". */
 export interface GateStats {
   day: string;
   allowed: number;

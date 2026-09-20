@@ -3,14 +3,14 @@
  * PlantAI API server. Framework-free (Node http) so it containerizes cleanly.
  *
  * Routes
- *   GET  /health                    → liveness + gate/job counters (O1, O3)
- *   POST /api/diagnose              → PlantDiagnosis            (A3, billable)
+ *   GET  /health                    → liveness + gate/job counters
+ *   POST /api/diagnose              → PlantDiagnosis            (billable)
  *   POST /api/care-plan             → { bySoil } per genus      (billable)
  *   POST /api/translate-diagnosis   → the same prose, translated  (billable)
- *   POST /api/nurseries             → { jobId }                 (E12, billable)
- *   GET  /api/nurseries/job/:id     → job state / result        (E12, free)
+ *   POST /api/nurseries             → { jobId }                 (billable)
+ *   GET  /api/nurseries/job/:id     → job state / result        (free)
  *
- * Every billable route goes through the gate (A1): shared secret, per-IP burst
+ * Every billable route goes through the gate: shared secret, per-IP burst
  * limit, hard daily cap. Read server/gate.ts before changing anything about it
  * - in particular, the shared secret is NOT authentication.
  *
@@ -94,7 +94,7 @@ const jobs = createJobStore<NurseryResult[]>();
  * denies that role every row in the table, so it would silently cache nothing.
  */
 /*
- * Per-nursery scrape freshness (E11). A shop whose markup changed returns zero
+ * Per-nursery scrape freshness. A shop whose markup changed returns zero
  * rows forever while the search as a whole still succeeds, so the global
  * `nursery_scrape` flag stays green through it. This is what makes that
  * visible.
@@ -258,7 +258,7 @@ const deps: PipelineDeps = {
 // Temporary: the lecturer's shared OpenAI key has no credits (2026-08-22).
 // DIAGNOSIS_SKIP_OPENAI swaps the real health assessment for a labelled stub
 // so identify + gating + the client UI stay testable in the meantime. See
-// TODOS.md "Restore OpenAI health assessment" - unset this once credits return.
+// Unset it once credits return; nothing else has to change.
 const SKIP_OPENAI_DIAGNOSIS = env('DIAGNOSIS_SKIP_OPENAI') === 'true';
 if (SKIP_OPENAI_DIAGNOSIS) {
   console.warn('[diagnose] DIAGNOSIS_SKIP_OPENAI=true - serving a stub health assessment, not a real diagnosis.');
@@ -420,7 +420,7 @@ function json(res: http.ServerResponse, status: number, body: unknown) {
 }
 
 /*
- * H3: clients get a stable code and neutral prose, never `err.message`.
+ * Clients get a stable code and neutral prose, never `err.message`.
  * Provider bodies have echoed request payloads including auth headers, and a
  * 429 from OpenAI reads as a sentence about our unpaid invoice. Detail goes to
  * the log with the request id and nowhere else.
@@ -442,7 +442,7 @@ function recordError(rid: string, code: string, detail: string) {
 }
 
 /*
- * O2: one JSON object per line, `rid` on every entry, rather than the
+ * One JSON object per line, `rid` on every entry, rather than the
  * printf-style `[${rid}] text` strings this replaced. A host's log viewer
  * (Render's included) can filter/query a field but not parse an ad-hoc
  * sentence, and grepping a raw string for "the" request id across an
@@ -462,7 +462,7 @@ let requestSeq = 0;
 const nextRequestId = () => `r${(++requestSeq).toString(36)}`;
 
 /*
- * O4: when the last successful call to each provider happened, so `/health`
+ * When the last successful call to each provider happened, so `/health`
  * can answer "is PlantNet actually working" without waiting for a user to hit
  * a broken flow first. A 502 on /api/diagnose is ambiguous between PlantNet
  * and the health-assessment step (PlantNet vs OpenAI/stub) - this splits it.

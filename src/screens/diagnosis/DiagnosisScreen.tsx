@@ -124,7 +124,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
 
 
   /*
-   * Save to the plant library (TODOS item 7).
+   * Save to the plant library.
    *
    * Placement is the header icon rather than a fourth button: this screen
    * already carries three actions and up to two URGENT badges, and "Find a
@@ -161,7 +161,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
     setSavedId(result.plant.id);
 
     /*
-     * Photo persistence (TODOS item 9), deliberately AFTER the synchronous
+     * Photo persistence, deliberately AFTER the synchronous
      * write and deliberately not awaited. Guest-only: a cloud save already
      * uploaded the photo as part of `plantRepo.save()`, so re-adopting it
      * into the local document directory would be pointless (and would

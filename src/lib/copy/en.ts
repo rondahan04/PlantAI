@@ -498,7 +498,7 @@ export const en = {
   camera: {
     /*
      * `describeFailure` is the single source of failure copy on this screen
-     * (E9) - the reason there is one voice here instead of three. Each entry is
+     * - the reason there is one voice here instead of three. Each entry is
      * a title the user can act on plus a body that says what to do next, never
      * a status code.
      */

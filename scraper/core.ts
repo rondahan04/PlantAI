@@ -95,7 +95,7 @@ export function loadEnv(envPath: string): void {
  * for local dev, where `.env` is shared with the Expo app. `server/index.ts`
  * had this logic; `dashboard/server.ts` and the scripts each redeclared a
  * narrower, prefix-only version that could not see a plain-name production
- * var (TODOS H1) - one copy here, every caller.
+ * var - one copy here, every caller.
  */
 export function env(key: string): string | undefined {
   return process.env[key] || process.env[`EXPO_PUBLIC_${key}`];

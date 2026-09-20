@@ -13,4 +13,4 @@ rm -rf ~/Library/Developer/Xcode/DerivedData/PlantAI-*
 ```
 
 Do NOT set `RCT_USE_PREBUILT_RNCORE=0` or `buildReactNativeFromSource` - that trades a one-off
-reset for a source compile of RN on every clean build. See TODOS.md item 29.
+reset for a source compile of RN on every clean build.

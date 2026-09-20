@@ -525,7 +525,7 @@ test('scrapeOne: a site answering inside its budget is unaffected', async () => 
 });
 
 /*
- * E11: the pipeline knows where each site's read stopped and used to throw
+ * The pipeline knows where each site's read stopped and used to throw
  * that away, which is why a nursery that quietly stops parsing has been
  * invisible - the search still succeeds, it just silently contains fewer shops.
  */

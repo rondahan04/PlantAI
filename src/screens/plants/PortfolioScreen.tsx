@@ -101,7 +101,7 @@ export default function PortfolioScreen({ navigation }: Props) {
   const s = useMemo(() => makeStyles(t), [t]);
 
   /*
-   * Adaptive Portfolio (D8/H2): marketing copy on first run, the library once a
+   * Adaptive Portfolio: marketing copy on first run, the library once a
    * plant exists.
    *
    * The lazy useState initializer is the whole reason the store is
@@ -113,7 +113,8 @@ export default function PortfolioScreen({ navigation }: Props) {
   const session = useSession();
 
   /*
-   * Same lazy-initializer requirement as before (D8) - `plantRepo.loadLocal`
+   * Same lazy-initializer requirement as the adaptive layout above -
+   * `plantRepo.loadLocal`
    * is still synchronous, it just picks guest vs. mirror key internally via
    * `sessionHint`, which `useSession` above keeps current.
    */
@@ -275,7 +276,7 @@ export default function PortfolioScreen({ navigation }: Props) {
   }, [session]);
 
   /*
-   * Photo housekeeping (TODOS item 9), once per launch and off the render path.
+   * Photo housekeeping, once per launch and off the render path.
    *
    * Two jobs. First, RETRY: a plant whose `photoUri` still points at the cache
    * directory had its copy interrupted - by a kill, a full disk, a removal that
@@ -1285,7 +1286,7 @@ function makeStyles(t: Theme) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: t.space.sm,
-      minHeight: 44, // H6 minimum target
+      minHeight: 44, // the accessibility minimum for a tap target
     },
     dueRowPressed: { opacity: 0.6 },
     dueIcon: {

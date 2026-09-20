@@ -38,7 +38,7 @@ const GENERIC_FAILURE: NurseryFailure = {
 };
 
 /*
- * Maps a thrown error to what the user reads. Since E12 the search runs as a
+ * Maps a thrown error to what the user reads. The search runs as a
  * server-side job the app polls, so a timeout here means the scrape genuinely
  * ran past ten minutes rather than that we hung up early on work that was still
  * going. Retrying is still the right suggestion - the second run reuses the
@@ -373,7 +373,8 @@ export default function NurseriesScreen({ navigation, route }: Props) {
       return;
     }
     // No site to send them to - a nursery scraped without one is exactly the
-    // case E5 exists for. Israeli nurseries answer WhatsApp, not web forms,
+    // case the WhatsApp handoff exists for. Israeli nurseries answer WhatsApp,
+    // not web forms,
     // so that beats a dead-ended "no website" alert.
     const wa = nursery.phone && waMeLink(nursery.phone, `Hi, is ${plantName} available?`);
     if (wa) {

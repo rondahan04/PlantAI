@@ -1,5 +1,5 @@
 /*
- * Per-nursery scrape freshness (TODOS E11).
+ * Per-nursery scrape freshness.
  *
  * WHY. `recordSuccess('nursery_scrape')` is one global flag: it fires when a
  * search finishes, so it stays green while individual shops quietly stop

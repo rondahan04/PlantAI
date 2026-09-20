@@ -1,7 +1,7 @@
 /*
  * One place that knows how to reach the PlantAI backend.
  *
- * Before A3 the app held provider keys and talked to PlantNet, OpenAI and
+ * The app once held provider keys and talked to PlantNet, OpenAI and
  * Firecrawl directly. It no longer holds any provider key: it talks only to our
  * server, which holds them.
  *
@@ -24,7 +24,7 @@ export const apiHeaders = (extra?: Record<string, string>): Record<string, strin
 /*
  * Shape of every error body the server returns: a stable machine `error` code
  * plus neutral user-facing prose. Provider text never appears in either - that
- * is deliberate and enforced server-side in `fail()` (TODOS H3).
+ * is deliberate and enforced server-side in `fail()`.
  */
 export interface ApiError {
   error: string;

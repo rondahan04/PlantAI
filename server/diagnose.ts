@@ -1,5 +1,5 @@
 /*
- * Server-side plant diagnosis (TODOS A3).
+ * Server-side plant diagnosis.
  *
  * WHY THIS MOVED OFF THE PHONE. `EXPO_PUBLIC_PLANTNET_API_KEY` and
  * `EXPO_PUBLIC_OPENAI_API_KEY` were compiled into the app bundle, which means
@@ -9,8 +9,9 @@
  * app now sends a photo and gets a diagnosis, and never sees a provider key.
  *
  * The trade this makes: diagnosis used to work whenever the phone had internet,
- * and now it also needs this server to be up. Accepted deliberately (see the A3
- * note in TODOS.md). The failure is honest either way - the app says the
+ * and now it also needs this server to be up. Accepted deliberately: a key
+ * anyone can extract is worse than a dependency. The failure is honest either
+ * way - the app says the
  * service did not answer, never invents a diagnosis.
  *
  * The validators and named error types below were written client-side in
@@ -236,7 +237,7 @@ export class NotAPlantError extends Error {
  * The uploaded bytes are not a format the identifier accepts. Worth its own
  * type because the honest sentence is about the file, not about our service -
  * reporting a format problem as "the plant service did not answer" is exactly
- * the dishonest-error pattern E9 exists to remove.
+ * the dishonest-error pattern this whole error taxonomy exists to remove.
  */
 export class UnsupportedImageError extends Error {
   readonly detectedType: string;
@@ -843,7 +844,8 @@ export function openAiAssessHealth(apiKey: string) {
  * (the lecturer's shared key, in this case) and testing everything else -
  * identify, gating, the client UI - shouldn't have to wait on billing. Wired
  * in behind DIAGNOSIS_SKIP_OPENAI (see server/index.ts); never the default.
- * See TODOS.md "Restore OpenAI health assessment" for the revert.
+ * To revert: unset DIAGNOSIS_SKIP_OPENAI once the account has credits again.
+ * Nothing else calls this function, so the stub goes cold on its own.
  */
 export async function stubAssessHealth(
   _image: Buffer,

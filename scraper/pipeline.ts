@@ -288,7 +288,7 @@ export interface PipelineDeps {
   nationalUrls: string[]; // ship-to-home shippers
   /*
    * Optional observer: called once per site with where that site's read
-   * actually stopped (E11). The pipeline has this fact already and threw it
+   * actually stopped. The pipeline has this fact already and threw it
    * away, which is why a nursery that quietly stops parsing has been invisible
    * - the search still succeeds, it just silently contains fewer shops.
    *

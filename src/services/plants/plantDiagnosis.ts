@@ -7,7 +7,7 @@ import { isRemoteUri } from '../../lib/media/remoteUri';
 import { getLanguage } from '../language';
 
 /*
- * Diagnosis client (TODOS A3).
+ * Diagnosis client.
  *
  * The PlantNet and OpenAI calls used to live in this file, which meant both
  * keys were compiled into the app bundle and shipped to everyone who ever
@@ -16,7 +16,7 @@ import { getLanguage } from '../language';
  *
  * The error types below are unchanged on purpose: CameraScreen's
  * `describeFailure` is the single place that decides failure copy, and moving
- * the network work must not reopen the three-error-dialects problem (E9).
+ * the network work must not reopen the three-error-dialects problem.
  */
 
 const TIMEOUT_MS = 60_000;
@@ -78,7 +78,7 @@ export class DiagnosisUnavailableError extends Error {
  * The backend failed, timed out, or answered in a shape we can't use.
  *
  * `detail` is for the log ONLY and must NEVER be shown to the user. The server
- * already strips provider text before answering (H3), so `detail` here is our
+ * already strips provider text before answering, so `detail` here is our
  * own status code - but the rule stands at this layer too, because it is the
  * rule that stopped "You have no credits remaining" from being shown to a
  * person whose plant was dying.
@@ -226,7 +226,7 @@ export async function diagnosePlant(imageUri: string): Promise<PlantDiagnosis> {
  * was wired as a CameraScreen fallback. It rendered at "87% confidence" with an
  * urgent three-step treatment plan and was visually indistinguishable from a
  * real diagnosis, which meant an outage showed a real person fabricated medical
- * advice about their actual plant. Removed 2026-08-16 (TODOS A5).
+ * advice about their actual plant. Removed 2026-08-16.
  *
  * If diagnosis is unavailable, throw - never invent one.
  */

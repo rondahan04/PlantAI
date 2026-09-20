@@ -25,7 +25,7 @@ test('a shop we read is not a shop with a problem', () => {
 test('a shop that stops parsing goes stale; one that simply lacks the plant never does', () => {
   const h = createScrapeHealth({ staleAfter: 3, now: () => 1_000 });
 
-  // The silent failure E11 exists to catch: readable markup, then nothing.
+  // The silent failure this exists to catch: readable markup, then nothing.
   h.record('broken.co.il', 'ok');
   h.record('broken.co.il', 'no_markdown');
   h.record('broken.co.il', 'no_markdown');

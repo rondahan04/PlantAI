@@ -8,7 +8,7 @@ import {
 } from './confidence.ts';
 
 /*
- * E9 exists because a real run rendered a 48%-confidence species match with
+ * The caveat exists because a real run rendered a 48%-confidence species match with
  * the same visual authority as a 92% one. These tests are about the boundary
  * behavior and the caveat that must accompany anything below full confidence.
  */
@@ -69,7 +69,7 @@ test('a low-confidence identity uses a stronger hedge than moderate', () => {
   assert.ok(identity.noteBody.includes('Mini monstera'));
 });
 
-test('the real 48% run that motivated E9 gets a caveat, not plain presentation', () => {
+test('the real 48% run that motivated the caveat is not presented plainly', () => {
   const identity = identityConfidence(48, 'Mini monstera');
   assert.equal(identity.needsCaveat, true, '48% must not render like a confident match');
   assert.notEqual(identity.tier, 'high');

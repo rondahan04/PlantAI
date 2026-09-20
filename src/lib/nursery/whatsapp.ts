@@ -1,11 +1,11 @@
 /*
- * E5: the WhatsApp handoff.
+ * The WhatsApp handoff.
  *
  * Israeli nurseries answer WhatsApp, not web forms - `onOrder` opening a
  * website and otherwise dead-ending in an alert was leaving the transact half
  * of the thesis on the floor for every nursery scraped without a site.
  *
- * `nursery.phone` comes from Google Places' `nationalPhoneNumber` (E5 uses
+ * `nursery.phone` comes from Google Places' `nationalPhoneNumber` (via
  * `scraper/places.ts`), which is a local Israeli format like "050-123 4567" -
  * `wa.me` needs the full international digit string with no separators and no
  * leading 0, so every number is normalized before it becomes a link.

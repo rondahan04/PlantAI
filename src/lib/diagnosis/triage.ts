@@ -1,7 +1,7 @@
 import type { StoredPlant } from '../../services/plants/plantStore';
 
 /*
- * Triage grouping for the plant library (D7).
+ * Triage grouping for the plant library.
  *
  * `PlantDiagnosis.condition` already carries the five-step scale, so grouping
  * by health costs nothing and matches why someone opens the app: a plant is in

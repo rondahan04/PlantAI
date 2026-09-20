@@ -1,5 +1,5 @@
 /*
- * Async job store for the nursery scrape (TODOS E12).
+ * Async job store for the nursery scrape.
  *
  * WHY THIS EXISTS. The scrape was measured end-to-end at 480,187 ms - eight
  * minutes - against a 90,000 ms client abort. There is no host timeout setting
@@ -119,7 +119,7 @@ export function createJobStore<T>(
      * `size()` alone reads as "something is stuck" during a perfectly healthy
      * incident-free hour, because it counts finished jobs kept for late polls
      * alongside genuinely in-flight ones and so never returns to 0 on a busy
-     * server (TODOS H-jobs-split). `active` is the number worth alerting on.
+     * server. `active` is the number worth alerting on.
      */
     stats() {
       sweep();

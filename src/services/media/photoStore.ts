@@ -1,5 +1,5 @@
 /*
- * Photo persistence (TODOS item 9).
+ * Photo persistence.
  *
  * `expo-camera` and `expo-image-picker` both hand back a URI in the CACHE
  * directory. iOS empties that directory whenever it feels pressure for space -
