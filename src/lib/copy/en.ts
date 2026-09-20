@@ -585,11 +585,31 @@ export const en = {
       emerged: 'New leaf',
       matured: 'Fully grown',
     },
+    /*
+     * The growth journal on the care calendar. Not care either - nobody
+     * photographs a plant because the app told them to - but it is the only
+     * other thing the user dates against a plant, and "it pushed that leaf a
+     * week after the repot, look" is a sentence that needs both on one grid.
+     */
+    photo: {
+      short: 'Photos',
+      title: 'Growth journal',
+      empty: 'No photos yet - add one from the plant to start the journal.',
+      logged: (n: number) => `${n} ${n === 1 ? 'photo' : 'photos'} taken`,
+      noneThisMonth: 'No photos this month',
+      /* Row label in Recent, where it names one entry rather than the filter. */
+      one: 'Photo',
+      openJournal: 'Open the growth journal',
+    },
     allTitle: 'Care history',
-    allEmpty: 'Nothing logged yet - water, repot, feed or track a leaf to start.',
-    allLogged: (n: number) => `${n} care ${n === 1 ? 'entry' : 'entries'} logged`,
+    allEmpty: 'Nothing here yet - water, repot, feed, track a leaf or add a photo to start.',
+    /* Not "care entries" any more: the All filter now counts leaves the plant
+     * pushed and photographs the user took, neither of which is care. */
+    allLogged: (n: number) => `${n} ${n === 1 ? 'entry' : 'entries'} on the calendar`,
     allNoneThisMonth: 'Nothing logged this month',
-    daysOfCare: (n: number) => `${n} ${n === 1 ? 'day' : 'days'} of care this month`,
+    /* Days with a MARKER on them, which is no longer the same as days of care -
+     * see `allLogged`. The count follows whatever filter is on. */
+    daysOfCare: (n: number) => `${n} marked ${n === 1 ? 'day' : 'days'} this month`,
     filterAll: 'All',
     missingTitle: 'This plant is no longer saved',
     goBack: 'Go back',
@@ -599,6 +619,9 @@ export const en = {
     nextDue: 'Next due',
     recent: 'Recent',
     doneSuffix: (kind: string) => `, ${kind.toLowerCase()} logged`,
+    /* Its own suffix: a photograph is added, never "logged" - the verb belongs
+     * to the chores, and this is the one marker that is not one. */
+    photoDoneSuffix: ', photo added',
     dueSuffix: (kind: string) => `, ${kind.toLowerCase()} due`,
   },
   plantDetail: {
@@ -923,6 +946,7 @@ export const en = {
     title: 'Growth journal',
     back: 'Plant',
     backA11y: 'Back to the plant',
+    calendarA11y: 'See these photos on the care calendar',
     emptyTitle: 'Nothing here yet',
     emptyBody: 'Add a photo whenever you notice something. In a month they read as one picture.',
     add: 'Add a photo',

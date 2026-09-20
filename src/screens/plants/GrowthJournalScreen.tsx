@@ -260,7 +260,25 @@ export default function GrowthJournalScreen({ navigation, route }: Props) {
           />
           <Text style={s.backText}>{copy.growthJournal.back}</Text>
         </Pressable>
-        {busy && <ActivityIndicator size="small" color={t.color.primary} />}
+        <View style={s.headerRight}>
+          {busy && <ActivityIndicator size="small" color={t.color.primary} />}
+          {/*
+            The same photographs as dates rather than as pictures. Only once
+            there are some: a calendar of one plant with nothing on it is a
+            screen that can only disappoint.
+          */}
+          {entries.length > 0 && (
+            <Pressable
+              style={({ pressed }) => [s.calendarBtn, pressed && { opacity: 0.6 }]}
+              onPress={() => navigation.navigate('WateringHistory', { plantId, kind: 'photo' })}
+              accessibilityRole="button"
+              accessibilityLabel={copy.growthJournal.calendarA11y}
+              hitSlop={8}
+            >
+              <Ionicons name="calendar-outline" size={20} color={t.color.primary} />
+            </Pressable>
+          )}
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
@@ -401,6 +419,8 @@ const makeStyles = (t: Theme) =>
       paddingVertical: t.space.sm,
     },
     backBtn: { ...iconRow, alignItems: 'center', gap: 2, minHeight: 44 },
+    headerRight: { flexDirection: 'row', alignItems: 'center', gap: t.space.sm },
+    calendarBtn: { minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center' },
     backText: { ...t.type.body, color: t.color.primary },
 
     scroll: { paddingHorizontal: t.space.lg, paddingBottom: t.space.xl },

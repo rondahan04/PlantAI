@@ -77,6 +77,17 @@ const light = {
   growth: '#2F8A63',
   onGrowth: '#FFFFFF',
 
+  /*
+   * A growth-journal photograph, on the same calendar as the care kinds and the
+   * leaves. The one marker on that grid that is not about the plant at all - it
+   * records something the USER did - so it is deliberately the only non-botanic
+   * colour there: a dusty indigo, the one hue in this warm green system that
+   * cannot be mistaken for a leaf, a pot or a feed. 6.5:1 against its `on`
+   * text, and clear of the cream paper behind it.
+   */
+  journal: '#565A8C',
+  onJournal: '#FFFFFF',
+
   // Plant condition scale - badge/dot/bar accents (>=3:1 on light surfaces).
   conditionHealthy: '#2F6B4F',
   conditionMild: '#4A7C59',
@@ -127,6 +138,9 @@ const dark = {
 
   growth: '#6FCF9C',
   onGrowth: '#0C2418',
+
+  journal: '#9FA3D8',
+  onJournal: '#151530',
 
   // Plant condition scale - lighter tonal variants for dark surfaces.
   conditionHealthy: '#7FB894',
