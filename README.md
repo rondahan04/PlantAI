@@ -12,7 +12,7 @@ a mirrored English one.
 | | |
 |---|---|
 | **API** | https://plantai-api-eev0.onrender.com - Render, deployed from `main` |
-| **API docs** | https://plantai-api-docs.vercel.app - [`docs/api-site`](docs/api-site), Vercel |
+| **API docs** | https://plantai-api-docs.vercel.app - [`docs/api-site`](docs/api-site), Vercel. Deployed by hand: `cd docs/api-site && vercel --prod`. `main` does not publish it. |
 | **Build notes** | [`docs/BUILD-NOTES.md`](docs/BUILD-NOTES.md) |
 | **Runbook** | [`docs/RUNBOOK.md`](docs/RUNBOOK.md) |
 
