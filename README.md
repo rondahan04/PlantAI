@@ -23,11 +23,16 @@ a mirrored English one.
 npm install
 npm start                 # Expo dev server
 npm run ios               # or: npm run android
-npm run server            # the API, on http://localhost:3000
+npm run server            # the API, on http://localhost:4000
 ```
 
 The app and the server both read `.env`; copy `.env.example` and fill it in.
 Every `.env` variant is gitignored - never commit one.
+
+`npm run server` and `npm run dashboard` both want port 4000 and cannot run at
+the same time. The API takes `PORT` from the environment, the dashboard does
+not, so run the API elsewhere (`PORT=4001 npm run server`) if you need both -
+and remember `EXPO_PUBLIC_API_BASE_URL` in `.env` has to follow it.
 
 Anything visual has to be looked at on a device. Synthetic taps do not register
 in the React Native view, so "the tests pass" is not "it works".
