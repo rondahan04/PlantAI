@@ -585,11 +585,31 @@ export const en = {
       emerged: 'New leaf',
       matured: 'Fully grown',
     },
+    /*
+     * The growth journal on the care calendar. Not care either - nobody
+     * photographs a plant because the app told them to - but it is the only
+     * other thing the user dates against a plant, and "it pushed that leaf a
+     * week after the repot, look" is a sentence that needs both on one grid.
+     */
+    photo: {
+      short: 'Photos',
+      title: 'Growth journal',
+      empty: 'No photos yet - add one from the plant to start the journal.',
+      logged: (n: number) => `${n} ${n === 1 ? 'photo' : 'photos'} taken`,
+      noneThisMonth: 'No photos this month',
+      /* Row label in Recent, where it names one entry rather than the filter. */
+      one: 'Photo',
+      openJournal: 'Open the growth journal',
+    },
     allTitle: 'Care history',
-    allEmpty: 'Nothing logged yet - water, repot, feed or track a leaf to start.',
-    allLogged: (n: number) => `${n} care ${n === 1 ? 'entry' : 'entries'} logged`,
+    allEmpty: 'Nothing here yet - water, repot, feed, track a leaf or add a photo to start.',
+    /* Not "care entries" any more: the All filter now counts leaves the plant
+     * pushed and photographs the user took, neither of which is care. */
+    allLogged: (n: number) => `${n} ${n === 1 ? 'entry' : 'entries'} on the calendar`,
     allNoneThisMonth: 'Nothing logged this month',
-    daysOfCare: (n: number) => `${n} ${n === 1 ? 'day' : 'days'} of care this month`,
+    /* Days with a MARKER on them, which is no longer the same as days of care -
+     * see `allLogged`. The count follows whatever filter is on. */
+    daysOfCare: (n: number) => `${n} marked ${n === 1 ? 'day' : 'days'} this month`,
     filterAll: 'All',
     missingTitle: 'This plant is no longer saved',
     goBack: 'Go back',
@@ -599,6 +619,9 @@ export const en = {
     nextDue: 'Next due',
     recent: 'Recent',
     doneSuffix: (kind: string) => `, ${kind.toLowerCase()} logged`,
+    /* Its own suffix: a photograph is added, never "logged" - the verb belongs
+     * to the chores, and this is the one marker that is not one. */
+    photoDoneSuffix: ', photo added',
     dueSuffix: (kind: string) => `, ${kind.toLowerCase()} due`,
   },
   plantDetail: {
@@ -896,6 +919,70 @@ export const en = {
     history: 'History',
     historyA11y: 'See the new-growth history',
     failTitle: 'That did not save',
+  },
+  /*
+   * The growth journal: photographs of one plant over time.
+   *
+   * The copy never calls a journal photo a "progress" photo. Progress implies a
+   * direction, and a plant that dropped three leaves this month has a journal
+   * too - the point is that the user can SEE what happened, not that the app
+   * has graded it.
+   */
+  growthCard: {
+    title: 'Growth journal',
+    note: 'Photograph it now and then, and watch it change.',
+    empty: 'No photos yet. The first one is where the story starts.',
+    /* Assembled from the parts that are true, never from a template with
+     * blanks - see the same rule in leafCard. */
+    count: (n: number) => `${n} ${n === 1 ? 'photo' : 'photos'}`,
+    span: (n: number) => `over ${n} ${n === 1 ? 'day' : 'days'}`,
+    add: 'Add a photo',
+    addA11y: (name: string) => `Add a growth photo of ${name}`,
+    open: 'See all',
+    openA11y: 'Open the growth journal',
+    thumbA11y: (when: string) => `Growth photo from ${when}`,
+  },
+  growthJournal: {
+    title: 'Growth journal',
+    back: 'Plant',
+    backA11y: 'Back to the plant',
+    calendarA11y: 'See these photos on the care calendar',
+    emptyTitle: 'Nothing here yet',
+    emptyBody: 'Add a photo whenever you notice something. In a month they read as one picture.',
+    add: 'Add a photo',
+    addA11y: 'Add a growth photo',
+    /* The picker. Camera first: the common case is standing in front of the
+     * plant, not going looking for an old shot. */
+    sourceTitle: 'Add a growth photo',
+    sourceCamera: 'Take a photo',
+    sourceLibrary: 'Choose from library',
+    cancel: 'Cancel',
+    cameraDenied: 'Camera access is off for PlantAI. Turn it on in Settings to take a photo.',
+    libraryDenied: 'Photo access is off for PlantAI. Turn it on in Settings to choose a photo.',
+    /* When the picture is gone but the entry is not - a file purged from the
+     * cache before its copy finished. The row still carries the date and the
+     * note, so it says what it is rather than drawing a grey rectangle. */
+    photoMissing: 'This photo could not be found on your phone.',
+    today: 'Today',
+    yesterday: 'Yesterday',
+    daysAgo: (n: number) => `${n} days ago`,
+    count: (n: number) => `${n} ${n === 1 ? 'photo' : 'photos'}`,
+    span: (n: number) => `over ${n} ${n === 1 ? 'day' : 'days'}`,
+    noteAdd: 'Add a note',
+    noteEdit: 'Edit note',
+    notePlaceholder: 'What changed?',
+    noteSave: 'Save',
+    noteCancel: 'Cancel',
+    noteA11y: 'Write a note about this photo',
+    remove: 'Delete',
+    removeA11y: 'Delete this photo',
+    removeTitle: 'Delete this photo?',
+    removeBody: 'The photo and its note go with it, and it cannot be undone.',
+    removeConfirm: 'Delete',
+    failTitle: 'That did not save',
+    /* The only way any of this fails: it is all local. No network line here,
+     * unlike the plant itself, because nothing is sent anywhere. */
+    failStorage: 'Your phone is out of space. Free some up and try again.',
   },
   scheduleCard: {
     water: {

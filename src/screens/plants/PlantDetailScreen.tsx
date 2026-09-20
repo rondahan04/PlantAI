@@ -21,7 +21,7 @@ import {
 } from '../../services/plants/plantDiagnosis';
 import { SERVER_MAX_BODY_BYTES, megabytes } from '../../lib/media/uploadLimit';
 import { copy, localeTag } from '../../services/language';
-import { plantPhotos } from '../../services/media/photos';
+import { growthPhotos, plantPhotos } from '../../services/media/photos';
 import { wateringState } from '../../lib/care/watering';
 import { treatmentProduct, treatmentProductLabel } from '../../lib/diagnosis/treatments';
 import { shopFor } from '../../lib/diagnosis/treatmentShop';
@@ -31,10 +31,12 @@ import type { SoilMediumId } from '../../lib/care/soilMedia';
 import { plantDisplayName, plantSecondaryName } from '../../lib/portfolio';
 import { genusCarePlans } from '../../services/plants/genusCarePlans';
 import { careHistory, leafHistory, type CareKind } from '../../services/plants/plantStore';
+import { growthJournal } from '../../services/plants/growthJournal';
 import { useNurserySearch } from '../../hooks/useNurserySearch';
 import { cancelWateringReminder, scheduleWateringReminder } from '../../services/notifications/wateringReminder';
 import ScheduleCard from '../../components/ScheduleCard';
 import LeafCard from '../../components/LeafCard';
+import GrowthCard from '../../components/GrowthCard';
 import CarePlanCard from '../../components/CarePlanCard';
 import SoilCard from '../../components/SoilCard';
 
@@ -124,9 +126,17 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
    * reads as "the edit didn't save". Home and Portfolio already reload on
    * focus for the same reason; this screen was the one place that didn't.
    */
+  /*
+   * The growth journal lives in its own storage key, not on the plant record,
+   * so it is read separately - and re-read on focus, because the journal screen
+   * is where photos are added and deleted and it hands nothing back.
+   */
+  const [growth, setGrowth] = useState(() => growthJournal.entriesFor(plantId));
+
   useFocusEffect(
     useCallback(() => {
       setPlant(plantRepo.loadLocal().plants.find((p) => p.id === plantId) ?? null);
+      setGrowth(growthJournal.entriesFor(plantId));
     }, [plantId])
   );
   const [watering, setWatering] = useState(false);
@@ -489,6 +499,17 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
             // the write, never before: a failed removal must not cost the user a
             // picture of a plant that is still in their library.
             plantPhotos.discard(plant.id);
+            /*
+             * The journal goes with the plant, files first-hand rather than
+             * left to the launch sweep: its entries are keyed by plant id, so
+             * once the record is gone nothing else will ever name them. Same
+             * order as above - the index is cleared after the files it points
+             * at, and both after the plant itself was actually removed.
+             */
+            for (const entry of growthJournal.entriesFor(plant.id)) {
+              growthPhotos.discard(entry.id);
+            }
+            growthJournal.discardPlant(plant.id);
             navigation.goBack();
           } finally {
             setRemoving(false);
@@ -726,6 +747,19 @@ export default function PlantDetailScreen({ navigation, route }: Props) {
             /* Absent, not disabled, when there is nothing to undo. */
             onUndo={leaves.length > 0 ? () => runLeaf(() => plantRepo.undoLeaf(plant.id)) : undefined}
             onHistory={() => navigation.navigate('WateringHistory', { plantId: plant.id, kind: 'leaf' })}
+          />
+
+          {/*
+            The photographs, last in the section. Everything above it is about
+            what the plant needs; this is the only thing here that is purely a
+            record, so it sits at the bottom where it cannot be mistaken for
+            something that is due.
+          */}
+          <GrowthCard
+            entries={growth}
+            plantName={plantName}
+            onAdd={() => navigation.navigate('GrowthJournal', { plantId: plant.id, add: true })}
+            onOpen={() => navigation.navigate('GrowthJournal', { plantId: plant.id })}
           />
         </View>
 

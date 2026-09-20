@@ -9,6 +9,7 @@ import { Theme, useTheme } from '../../theme/index';
 import { directionalIconStyle, iconRow } from '../../lib/i18n/rtl';
 import { plantRepo } from '../../services/plants/plantRepoInstance';
 import { careHistory, leafHistory, type CareKind } from '../../services/plants/plantStore';
+import { growthJournal } from '../../services/plants/growthJournal';
 import { leafDays, leafStamps } from '../../lib/care/leaves';
 import { dayKey, dayKeySet, monthView, shiftMonth, weekdayLabels } from '../../lib/care/calendar';
 import { copy, getLanguage, localeTag } from '../../services/language';
@@ -42,10 +43,10 @@ type Props = {
  * appeared and the day it finished opening. Collapsing those into one marker
  * would throw away the only thing the two-tap tracking buys.
  */
-type Filter = CareKind | 'leaf' | 'all';
-type Mark = CareKind | 'leafNew' | 'leafGrown';
+type Filter = CareKind | 'leaf' | 'photo' | 'all';
+type Mark = CareKind | 'leafNew' | 'leafGrown' | 'photo';
 
-const MARKS: Mark[] = [...CARE_KINDS, 'leafNew', 'leafGrown'];
+const MARKS: Mark[] = [...CARE_KINDS, 'leafNew', 'leafGrown', 'photo'];
 
 /* Which markers a filter draws. 'all' is everything, and the leaf chip is the
  * one row that expands to two. */
@@ -55,6 +56,9 @@ const MARKS_FOR: Record<Filter, Mark[]> = {
   repot: ['repot'],
   fertilizer: ['fertilizer'],
   leaf: ['leafNew', 'leafGrown'],
+  /* One chip, one marker - the journal is the opposite of the leaf case: an
+   * entry is a single moment with nothing to pair it to. */
+  photo: ['photo'],
 };
 
 interface FilterCopy {
@@ -69,8 +73,8 @@ interface FilterCopy {
   color: MarkColor;
 }
 
-type MarkColor = 'water' | 'repot' | 'feed' | 'growth';
-type MarkOnColor = 'onWater' | 'onRepot' | 'onFeed' | 'onGrowth';
+type MarkColor = 'water' | 'repot' | 'feed' | 'growth' | 'journal';
+type MarkOnColor = 'onWater' | 'onRepot' | 'onFeed' | 'onGrowth' | 'onJournal';
 
 interface MarkCopy {
   /* Legend and "recent" label. */
@@ -121,6 +125,14 @@ const FILTER_COPY: Record<Exclude<Filter, 'all'>, FilterCopy> = {
     noneThisMonth: copy.careHistory.leaf.noneThisMonth,
     color: 'growth',
   },
+  photo: {
+    short: copy.careHistory.photo.short,
+    title: copy.careHistory.photo.title,
+    empty: copy.careHistory.photo.empty,
+    logged: copy.careHistory.photo.logged,
+    noneThisMonth: copy.careHistory.photo.noneThisMonth,
+    color: 'journal',
+  },
 };
 
 const MARK_COPY: Record<Mark, MarkCopy> = {
@@ -150,6 +162,12 @@ const MARK_COPY: Record<Mark, MarkCopy> = {
     color: 'growth',
     onColor: 'onGrowth',
   },
+  photo: {
+    short: copy.careHistory.photo.one,
+    icon: 'camera',
+    color: 'journal',
+    onColor: 'onJournal',
+  },
 };
 
 export default function WateringHistoryScreen({ navigation, route }: Props) {
@@ -167,6 +185,12 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
   // reason the detail screen does: params are a snapshot of a record that may
   // have been watered or deleted since.
   const [plant] = useState(() => plantRepo.loadLocal().plants.find((p) => p.id === plantId) ?? null);
+  /*
+   * The journal is not on the plant record - it has its own storage key (see
+   * services/plants/growthStore.ts) - so it is read separately. Once, like the
+   * plant: this screen is read-only, so nothing it shows can change under it.
+   */
+  const [photos] = useState(() => growthJournal.entriesFor(plantId));
   const [view, setView] = useState(() => {
     const now = new Date();
     return monthView(now.getFullYear(), now.getMonth(), localeTag());
@@ -182,8 +206,10 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
     const stamps = plant ? leafStamps(leafHistory(plant)) : [];
     out.leafNew = stamps.filter((stamp) => stamp.stage === 'emerged').map((stamp) => stamp.at);
     out.leafGrown = stamps.filter((stamp) => stamp.stage === 'matured').map((stamp) => stamp.at);
+    /* One entry, one stamp: unlike a leaf, a photograph has no second end. */
+    out.photo = photos.map((entry) => entry.takenAt);
     return out;
-  }, [plant]);
+  }, [plant, photos]);
 
   const daySets = useMemo(() => {
     const out = {} as Record<Mark, Set<string>>;
@@ -194,6 +220,10 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
     const days = leafDays(plant ? leafHistory(plant) : []);
     out.leafNew = days.emerged;
     out.leafGrown = days.matured;
+    /* Local days, like everything else on this grid: a photo taken at 1am in
+     * Tel Aviv is the previous day in UTC, and the square has to match the day
+     * the user remembers taking it. `dayKeySet` owns that rule. */
+    out.photo = dayKeySet(histories.photo);
     return out;
   }, [histories, plant]);
 
@@ -302,7 +332,7 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
         {/* Filter, not navigation: every chip shows the same month of the same
             plant, so switching must never reset the month the user paged to. */}
         <View style={s.filterRow}>
-          {(['all', ...CARE_KINDS, 'leaf'] as Filter[]).map((f) => {
+          {(['all', ...CARE_KINDS, 'leaf', 'photo'] as Filter[]).map((f) => {
             const active = filter === f;
             const label = f === 'all' ? copy.careHistory.filterAll : FILTER_COPY[f].short;
             /* One leaf is one count, so the chip counts the leaves that
@@ -416,7 +446,13 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
                       accessible
                       accessibilityLabel={
                         `${cell.date.toLocaleDateString(localeTag(), { day: 'numeric', month: 'long' })}` +
-                        done.map((k) => copy.careHistory.doneSuffix(MARK_COPY[k].short)).join('') +
+                        done
+                          .map((k) =>
+                            k === 'photo'
+                              ? copy.careHistory.photoDoneSuffix
+                              : copy.careHistory.doneSuffix(MARK_COPY[k].short)
+                          )
+                          .join('') +
                         dueKinds.map((k) => copy.careHistory.dueSuffix(MARK_COPY[k].short)).join('') +
                         (isToday ? ', today' : '')
                       }
@@ -495,33 +531,67 @@ export default function WateringHistoryScreen({ navigation, route }: Props) {
               had care and this shows WHICH and WHEN - the kind and the time of
               day are the parts a grid square physically cannot hold.
             */}
-            {recent.map((entry) => (
-              <View key={`${entry.kind}-${entry.at}`} style={s.recentRow}>
-                <Ionicons
-                  name={MARK_COPY[entry.kind].icon}
-                  size={14}
-                  color={t.color[MARK_COPY[entry.kind].color]}
-                />
-                <Text style={s.recentText}>
-                  {new Date(entry.at).toLocaleDateString(localeTag(), {
-                    weekday: 'short',
-                    day: 'numeric',
-                    month: 'short',
-                  })}
-                </Text>
-                {/* The marker's own word, not the filter's: inside the leaf
-                    filter the two rows differ only by which end they are. */}
-                {(filter === 'all' || filter === 'leaf') && (
-                  <Text style={s.recentKind}>{MARK_COPY[entry.kind].short}</Text>
-                )}
-                <Text style={s.recentTime}>
-                  {new Date(entry.at).toLocaleTimeString(localeTag(), {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </Text>
-              </View>
-            ))}
+            {recent.map((entry) => {
+              const body = (
+                <>
+                  <Ionicons
+                    name={MARK_COPY[entry.kind].icon}
+                    size={14}
+                    color={t.color[MARK_COPY[entry.kind].color]}
+                  />
+                  <Text style={s.recentText}>
+                    {new Date(entry.at).toLocaleDateString(localeTag(), {
+                      weekday: 'short',
+                      day: 'numeric',
+                      month: 'short',
+                    })}
+                  </Text>
+                  {/* The marker's own word, not the filter's: inside the leaf
+                      filter the two rows differ only by which end they are. */}
+                  {(filter === 'all' || filter === 'leaf') && (
+                    <Text style={s.recentKind}>{MARK_COPY[entry.kind].short}</Text>
+                  )}
+                  <Text style={s.recentTime}>
+                    {new Date(entry.at).toLocaleTimeString(localeTag(), {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </Text>
+                </>
+              );
+
+              /*
+               * The photo rows are the only ones that lead anywhere. A watering
+               * is fully described by the row itself - there is nothing behind
+               * it to open - but behind a photo row is the photograph, and this
+               * screen cannot show it at grid scale. Care rows stay inert
+               * rather than gaining a tap that does nothing.
+               */
+              if (entry.kind !== 'photo') {
+                return (
+                  <View key={`${entry.kind}-${entry.at}`} style={s.recentRow}>
+                    {body}
+                  </View>
+                );
+              }
+              return (
+                <Pressable
+                  key={`${entry.kind}-${entry.at}`}
+                  style={({ pressed }) => [s.recentRow, pressed && { opacity: 0.6 }]}
+                  onPress={() => navigation.navigate('GrowthJournal', { plantId })}
+                  accessibilityRole="button"
+                  accessibilityLabel={copy.careHistory.photo.openJournal}
+                >
+                  {body}
+                  <Ionicons
+                    name="chevron-forward"
+                    size={14}
+                    color={t.color.textMuted}
+                    style={directionalIconStyle}
+                  />
+                </Pressable>
+              );
+            })}
           </View>
         )}
       </ScrollView>

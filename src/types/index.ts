@@ -204,9 +204,26 @@ export type RootStackParamList = {
   EditPlant: { plantId: string };
   /* `kind` is optional so the existing navigate({ plantId }) call sites keep
    * working and default to watering. */
-  /* `leaf` is not a care kind - it is new growth, which the same calendar
-   * draws as its own filter with its own two markers. See lib/leaves.ts. */
-  WateringHistory: { plantId: string; kind?: 'water' | 'repot' | 'fertilizer' | 'leaf' };
+  /* `leaf` and `photo` are not care kinds - one is new growth, the other a
+   * journal entry - but the same calendar draws both as their own filters. See
+   * lib/care/leaves.ts and lib/care/growth.ts. */
+  WateringHistory: {
+    plantId: string;
+    kind?: 'water' | 'repot' | 'fertilizer' | 'leaf' | 'photo';
+  };
+  /* The plant's photographs over time. Takes only the id, like PlantDetail:
+   * params are persisted and restored, and the journal is re-read on open so a
+   * restored screen cannot show a list of photos that have since been deleted. */
+  GrowthJournal: {
+    plantId: string;
+    /*
+     * Set when the user tapped "Add a photo" on the detail card, so the picker
+     * comes up on arrival rather than making them tap the same words twice. The
+     * screen clears it immediately: params are persisted and restored, and a
+     * restored screen must not open a camera nobody asked for.
+     */
+    add?: boolean;
+  };
   Nurseries: {
     plantName: string;
     lat: number;

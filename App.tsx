@@ -33,6 +33,7 @@ import NurseriesScreen from './src/screens/NurseriesScreen';
 import PlantDetailScreen from './src/screens/plants/PlantDetailScreen';
 import EditPlantScreen from './src/screens/plants/EditPlantScreen';
 import WateringHistoryScreen from './src/screens/plants/WateringHistoryScreen';
+import GrowthJournalScreen from './src/screens/plants/GrowthJournalScreen';
 import LoginScreen from './src/screens/auth/LoginScreen';
 import SignupScreen from './src/screens/auth/SignupScreen';
 import ForgotPasswordScreen from './src/screens/auth/ForgotPasswordScreen';
@@ -161,6 +162,7 @@ export default function App() {
               options={{ animation: 'slide_from_bottom' }}
             />
             <Stack.Screen name="WateringHistory" component={WateringHistoryScreen} />
+            <Stack.Screen name="GrowthJournal" component={GrowthJournalScreen} />
             <Stack.Screen name="Nurseries" component={NurseriesScreen} />
             <Stack.Screen name="Login" component={LoginScreen} options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="Signup" component={SignupScreen} options={{ animation: 'slide_from_bottom' }} />

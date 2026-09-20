@@ -2,6 +2,8 @@ import { supabase } from './supabase';
 import { plantRepo } from '../plants/plantRepoInstance';
 import { clearSignedUrlCache } from '../plants/supabasePlantCloud';
 import { plantPhotoMirror } from '../media/photoMirror';
+import { growthPhotos } from '../media/photos';
+import { growthJournal } from '../plants/growthJournal';
 import { photoSizes } from '../media/photoSizes';
 import { signAvatar, clearAvatarUrlCache } from './avatarStorage';
 import { isUniqueViolation } from '../../lib/authErrors';
@@ -189,6 +191,13 @@ export async function deleteAccount(): Promise<void> {
   // guest and cloud plants as one list, so a survivor of either key reads as
   // the app ignoring the deletion the user just confirmed.
   plantRepo.wipeAllLocal();
+  /*
+   * The growth journal and its photographs, which live only on this device and
+   * so are reachable by nothing else here - no server purge covers them. Index
+   * first, then an empty-keep-list sweep to take every file with it.
+   */
+  growthJournal.wipeAll();
+  growthPhotos.sweep([], { libraryReadable: true });
   clearSignedUrlCache();
   plantPhotoMirror.clear();
   photoSizes.clear();

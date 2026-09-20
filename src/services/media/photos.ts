@@ -1,5 +1,5 @@
 import { Directory, File, Paths } from 'expo-file-system';
-import { createPhotoStore, type PhotoDeps } from './photoStore';
+import { GROWTH_PHOTO_DIR_NAME, createPhotoStore, type PhotoDeps } from './photoStore';
 
 /*
  * The one place `expo-file-system` is bound to the photo store, mirroring
@@ -50,3 +50,16 @@ const deviceFs: PhotoDeps = {
 };
 
 export const plantPhotos = createPhotoStore(deviceFs);
+
+/*
+ * The growth journal's photographs (`lib/care/growth.ts`), in their own
+ * directory and swept against their own keep-list of ENTRY ids.
+ *
+ * LOCAL ONLY, on purpose and for v1 only. A plant's main photo is uploaded to
+ * Storage the moment its owner is signed in; a journal shot is not, so it lives
+ * in the document directory for every user and follows the phone rather than
+ * the account. That is the same deal `growthStore` makes for the index itself,
+ * and the two have to agree: an entry mirrored to the cloud whose file stayed
+ * here would render as a permanent broken image on every other device.
+ */
+export const growthPhotos = createPhotoStore(deviceFs, GROWTH_PHOTO_DIR_NAME);
