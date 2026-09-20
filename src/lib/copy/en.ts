@@ -897,6 +897,69 @@ export const en = {
     historyA11y: 'See the new-growth history',
     failTitle: 'That did not save',
   },
+  /*
+   * The growth journal: photographs of one plant over time.
+   *
+   * The copy never calls a journal photo a "progress" photo. Progress implies a
+   * direction, and a plant that dropped three leaves this month has a journal
+   * too - the point is that the user can SEE what happened, not that the app
+   * has graded it.
+   */
+  growthCard: {
+    title: 'Growth journal',
+    note: 'Photograph it now and then, and watch it change.',
+    empty: 'No photos yet. The first one is where the story starts.',
+    /* Assembled from the parts that are true, never from a template with
+     * blanks - see the same rule in leafCard. */
+    count: (n: number) => `${n} ${n === 1 ? 'photo' : 'photos'}`,
+    span: (n: number) => `over ${n} ${n === 1 ? 'day' : 'days'}`,
+    add: 'Add a photo',
+    addA11y: (name: string) => `Add a growth photo of ${name}`,
+    open: 'See all',
+    openA11y: 'Open the growth journal',
+    thumbA11y: (when: string) => `Growth photo from ${when}`,
+  },
+  growthJournal: {
+    title: 'Growth journal',
+    back: 'Plant',
+    backA11y: 'Back to the plant',
+    emptyTitle: 'Nothing here yet',
+    emptyBody: 'Add a photo whenever you notice something. In a month they read as one picture.',
+    add: 'Add a photo',
+    addA11y: 'Add a growth photo',
+    /* The picker. Camera first: the common case is standing in front of the
+     * plant, not going looking for an old shot. */
+    sourceTitle: 'Add a growth photo',
+    sourceCamera: 'Take a photo',
+    sourceLibrary: 'Choose from library',
+    cancel: 'Cancel',
+    cameraDenied: 'Camera access is off for PlantAI. Turn it on in Settings to take a photo.',
+    libraryDenied: 'Photo access is off for PlantAI. Turn it on in Settings to choose a photo.',
+    /* When the picture is gone but the entry is not - a file purged from the
+     * cache before its copy finished. The row still carries the date and the
+     * note, so it says what it is rather than drawing a grey rectangle. */
+    photoMissing: 'This photo could not be found on your phone.',
+    today: 'Today',
+    yesterday: 'Yesterday',
+    daysAgo: (n: number) => `${n} days ago`,
+    count: (n: number) => `${n} ${n === 1 ? 'photo' : 'photos'}`,
+    span: (n: number) => `over ${n} ${n === 1 ? 'day' : 'days'}`,
+    noteAdd: 'Add a note',
+    noteEdit: 'Edit note',
+    notePlaceholder: 'What changed?',
+    noteSave: 'Save',
+    noteCancel: 'Cancel',
+    noteA11y: 'Write a note about this photo',
+    remove: 'Delete',
+    removeA11y: 'Delete this photo',
+    removeTitle: 'Delete this photo?',
+    removeBody: 'The photo and its note go with it, and it cannot be undone.',
+    removeConfirm: 'Delete',
+    failTitle: 'That did not save',
+    /* The only way any of this fails: it is all local. No network line here,
+     * unlike the plant itself, because nothing is sent anywhere. */
+    failStorage: 'Your phone is out of space. Free some up and try again.',
+  },
   scheduleCard: {
     water: {
       title: 'Watering',

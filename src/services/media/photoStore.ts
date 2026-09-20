@@ -24,6 +24,18 @@
 
 export const PHOTO_DIR_NAME = 'plant-photos';
 
+/*
+ * The growth journal's photographs, in a directory of their own.
+ *
+ * NOT a naming preference. `sweep` deletes every file whose base name is not in
+ * the keep-list it was handed, and the two features hand it different lists: the
+ * portfolio sweeps against PLANT ids, the journal against ENTRY ids. Sharing one
+ * directory would mean each sweep deleting the other feature's photos, and the
+ * only defence would be remembering to merge both lists at every call site
+ * forever. Separate directories make that impossible to get wrong.
+ */
+export const GROWTH_PHOTO_DIR_NAME = 'growth-photos';
+
 /* Only extensions a plant photo can plausibly arrive with; anything else is a
  * guess, and a wrong guess in the filename is worse than the honest default. */
 const MAX_EXT_LEN = 5;
@@ -78,8 +90,13 @@ export interface SweepOptions {
   libraryReadable?: boolean;
 }
 
-export function createPhotoStore(deps: PhotoDeps) {
-  const dir = `${deps.documentDir.replace(/\/+$/, '')}/${PHOTO_DIR_NAME}/`;
+/*
+ * `dirName` is what keeps two independently-swept photo collections apart - see
+ * GROWTH_PHOTO_DIR_NAME. It defaults to the plant directory, so every existing
+ * caller and test is unchanged.
+ */
+export function createPhotoStore(deps: PhotoDeps, dirName: string = PHOTO_DIR_NAME) {
+  const dir = `${deps.documentDir.replace(/\/+$/, '')}/${dirName}/`;
 
   function fileNameFor(id: string, ext: string): string {
     return `${safeId(id)}.${ext}`;
@@ -117,7 +134,7 @@ export function createPhotoStore(deps: PhotoDeps) {
    * goes down the copy path below.
    */
   function relocate(uri: string): string | null {
-    if (typeof uri !== 'string' || !uri.includes(`/${PHOTO_DIR_NAME}/`)) return null;
+    if (typeof uri !== 'string' || !uri.includes(`/${dirName}/`)) return null;
     const name = uri.slice(uri.lastIndexOf('/') + 1);
     if (!name) return null;
     return `${dir}${name}`;

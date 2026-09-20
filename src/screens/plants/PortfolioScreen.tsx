@@ -19,8 +19,9 @@ import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../../types/index';
 import { Theme, useTheme } from '../../theme/index';
 import { plantRepo } from '../../services/plants/plantRepoInstance';
+import { growthJournal } from '../../services/plants/growthJournal';
 import { plantLibrary } from '../../services/plants/plantLibrary';
-import { plantPhotos } from '../../services/media/photos';
+import { growthPhotos, plantPhotos } from '../../services/media/photos';
 import { plantPhotoMirror } from '../../services/media/photoMirror';
 import { syncPhotoCache } from '../../services/media/photoCache';
 import { genusCarePlans } from '../../services/plants/genusCarePlans';
@@ -307,6 +308,33 @@ export default function PortfolioScreen({ navigation }: Props) {
      */
     if (library.plants.length > 0) {
       plantPhotoMirror.sweep(library.plants.map((p) => p.id), { libraryReadable: true });
+    }
+
+    /*
+     * The growth journal, swept for EVERY user rather than only guests: its
+     * photographs are local files whoever is signed in (see
+     * services/media/photos.ts), so the logged-in return below would otherwise
+     * leave a deleted plant's journal on the phone forever.
+     *
+     * Two steps, in this order. The prune forgets plants the library no longer
+     * holds; the sweep then deletes files no surviving entry claims, which is
+     * exactly the set the prune just orphaned plus anything left by a kill
+     * between a copy and its record. Both refuse to run against a library that
+     * failed to load - it reports zero plants, and acting on that would delete
+     * every photograph the user has.
+     *
+     * Guarded on a non-empty library on top of that, for the same reason the
+     * mirror sweep above is: a cloud library that has simply not been filled in
+     * yet is not corrupt, it is what a first launch after login looks like for
+     * the moment before `refreshFromCloud` lands. Nothing leaks by waiting -
+     * deleting a plant takes its journal and its files with it on the spot.
+     */
+    if (library.plants.length > 0) {
+      growthJournal.prune(
+        library.plants.map((p) => p.id),
+        { libraryReadable: true }
+      );
+      growthPhotos.sweep(growthJournal.allPhotoIds(), { libraryReadable: true });
     }
 
     // Photos for a logged-in user live in Supabase Storage, not the document
