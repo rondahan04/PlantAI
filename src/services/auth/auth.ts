@@ -5,6 +5,7 @@ import { plantPhotoMirror } from '../media/photoMirror';
 import { growthPhotos } from '../media/photos';
 import { growthJournal } from '../plants/growthJournal';
 import { photoSizes } from '../media/photoSizes';
+import { clearNurserySearchCache } from '../nurseryService';
 import { signAvatar, clearAvatarUrlCache } from './avatarStorage';
 import { isUniqueViolation } from '../../lib/authErrors';
 import type { Session } from '@supabase/supabase-js';
@@ -95,6 +96,10 @@ export async function signOut(): Promise<void> {
    * object paths. Not secret, but there is no reason for them to outlive it. */
   photoSizes.clear();
   clearAvatarUrlCache();
+  /* The nursery searches this account ran, now that they survive a relaunch.
+   * What someone went looking for is theirs, and the next person to sign in on
+   * this handset should not open the app to it. */
+  clearNurserySearchCache();
 }
 
 export async function requestPasswordReset(email: string): Promise<void> {

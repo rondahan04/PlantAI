@@ -140,7 +140,6 @@ export const he: Copy = {
       fungicide: 'קנו קוטל פטריות עכשיו!',
     },
     buyShopA11y: 'פתחו את החנות בדפדפן',
-    replaceOr: 'או להחליף בצמח בריא',
     replaceTitle: 'למצוא תחליף בריא',
     replaceDesc: (name: string) =>
       `הצמח הזה פגוע מכדי להציל. אפשר למצוא ${name} זהה ובריא במשתלות בסביבתכם.`,

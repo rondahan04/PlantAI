@@ -233,7 +233,20 @@ const deps: PipelineDeps = {
    * tokens to rank their answers with, which is what stops a three-word
    * cultivar name returning nothing from a search engine that ANDs every word.
    */
-  plan: (plantName) => planQuery(plantName, OPENAI_KEY!),
+  plan: async (plantName) => {
+    const planned = await planQuery(plantName, OPENAI_KEY!);
+    searchPlans.total += 1;
+    if (planned.degraded) {
+      searchPlans.degraded += 1;
+      /* The planning call is an OpenAI call, so a degraded plan IS an OpenAI
+       * failure - named here because it is the first place the app can tell,
+       * and because the scrape that follows will otherwise look healthy. */
+      recordFailure('query_plan', `no usable plan for "${plantName}" - searching untranslated`);
+    } else {
+      recordSuccess('query_plan');
+    }
+    return planned;
+  },
   /* One call for the whole search - the cross-nursery comparison is the point. */
   checkPrices: (query, candidates) => sanityCheckPrices(query, candidates, OPENAI_KEY!),
   /*
@@ -468,14 +481,66 @@ const nextRequestId = () => `r${(++requestSeq).toString(36)}`;
  * and the health-assessment step (PlantNet vs OpenAI/stub) - this splits it.
  */
 type Provider = 'plantnet_identify' | 'health_assessment' | 'nursery_scrape';
+/*
+ * Everything worth reporting on, which is wider than the three that have a
+ * lastSuccess stamp. `query_plan` earns its place because it is the OpenAI
+ * call whose failure is invisible downstream - the search carries on and
+ * simply stops matching anything.
+ */
+type Tracked = Provider | 'query_plan';
 const lastSuccess: Record<Provider, string | null> = {
   plantnet_identify: null,
   health_assessment: null,
   nursery_scrape: null,
 };
-function recordSuccess(provider: Provider): void {
-  lastSuccess[provider] = new Date().toISOString();
+function recordSuccess(provider: Tracked): void {
+  if (provider in lastSuccess) lastSuccess[provider as Provider] = new Date().toISOString();
+  const seen = providerFailures[provider];
+  if (seen) seen.consecutive = 0;
 }
+
+/*
+ * The other half, and the half that was missing.
+ *
+ * `lastSuccess` answers "when did this last work", which is not the same as
+ * "is it working now" - and the difference is exactly how an exhausted OpenAI
+ * account hid for a day. The scrape kept succeeding: it found shops, read
+ * them, stored them, and stamped nursery_scrape as fresh. Every OpenAI call
+ * inside it was returning 429 insufficient_quota, the query plan was silently
+ * falling back to English, and /health said ok: true throughout.
+ *
+ * So a failure is recorded with its reason, because "no credits remaining" and
+ * "connection refused" are the same outage to this code and completely
+ * different problems to whoever is reading.
+ */
+interface ProviderFailure {
+  at: string;
+  consecutive: number;
+  detail: string;
+}
+const providerFailures: Partial<Record<Tracked, ProviderFailure>> = {};
+
+function recordFailure(provider: Tracked, detail: string): void {
+  const prev = providerFailures[provider];
+  providerFailures[provider] = {
+    at: new Date().toISOString(),
+    consecutive: (prev?.consecutive ?? 0) + 1,
+    /* Truncated: this is a diagnostic line, not a log sink, and a provider that
+     * answers with a page of HTML should not be able to bloat /health. */
+    detail: detail.slice(0, 200),
+  };
+}
+
+/*
+ * Searches that ran without a usable query plan.
+ *
+ * Counted rather than flagged, because one is an anomaly and a hundred is an
+ * outage, and the shape of the number is what tells them apart. A degraded
+ * search asks Hebrew catalogues in Latin and matches nothing, so this counter
+ * rising while nursery_scrape looks healthy is the signature of the failure
+ * that prompted it.
+ */
+const searchPlans = { total: 0, degraded: 0 };
 
 // ─── Server ───────────────────────────────────────────────────────────────────
 
@@ -507,6 +572,13 @@ const server = http.createServer(async (req, res) => {
       gate: gate.stats(),
       jobs: jobs.stats(),
       lastSuccess,
+      /*
+       * Failures, beside the successes. `ok: true` above means the process is
+       * up; these say whether the things it depends on are.
+       */
+      lastFailure: providerFailures,
+      /* Searches that ran without a usable query plan - see searchPlans. */
+      searchPlans,
       // `cache.enabled: false` means every search is a live paid scrape. It is
       // the only failure here that costs money while looking perfectly healthy.
       cache: nurseryCache.stats(),

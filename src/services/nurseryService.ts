@@ -2,6 +2,8 @@ import { Nursery } from '../types';
 import { apiFetch, apiHeaders, readApiError } from '../lib/api';
 import { hasInlineResults } from '../lib/nursery/jobResponse';
 import { clampRadius, DEFAULT_RADIUS_M } from '../lib/nursery/radius';
+import { createSearchCache, searchCacheKey } from '../lib/nursery/searchCache';
+import Storage from 'expo-sqlite/kv-store';
 
 /*
  * Live nursery lookup.
@@ -278,15 +280,26 @@ interface CacheEntry {
 const cache = new Map<string, CacheEntry>();
 
 /*
- * The radius is part of the key, and leaving it out is not a missed
- * optimisation - it is wrong. "Search wider" asks a different question, and
- * without this it would be handed the 10km promise this map is still holding
- * and shown the same empty list it was trying to escape. The server's
- * searchKey has always included it; these two must agree on what "the same
- * search" means.
+ * One definition of "the same search", shared with the durable cache below so
+ * the two layers can never disagree - see lib/nursery/searchCache.ts for why
+ * the radius and the coordinate rounding are part of it.
  */
-const cacheKey = (plant: string, lat: number, lng: number, radiusM: number) =>
-  `${plant.trim().toLowerCase()}|${lat.toFixed(3)}|${lng.toFixed(3)}|${Math.round(radiusM)}`;
+const cacheKey = searchCacheKey;
+
+/*
+ * The durable half. The Map above dedupes what is in flight RIGHT NOW and dies
+ * with the process; this survives a relaunch, so the search a user ran
+ * yesterday paints immediately this morning instead of buying the scrape
+ * again. Both are consulted, in that order: an in-flight promise is a better
+ * answer than a stored one, because it is about to be newer.
+ */
+const disk = createSearchCache<Nursery[]>({
+  storage: {
+    getItem: (key) => Storage.getItemSync(key),
+    setItem: (key, value) => Storage.setItemSync(key, value),
+    removeItem: (key) => Storage.removeItemSync(key),
+  },
+});
 
 /*
  * Evict expired entries, then the oldest, so a long session with many distinct
@@ -326,17 +339,59 @@ export function fetchNearbyNurseries(
     return hit.promise;
   }
 
+  /*
+   * The stored answer, returned without touching the network - this is what
+   * makes the second search instant and the offline one possible at all. It is
+   * checked AFTER the in-flight map because a promise already running is about
+   * to be fresher than anything on disk, and BEFORE the request because the
+   * whole point is not to make one.
+   *
+   * `scrapedAt` is carried through rather than restamped: the screen shows the
+   * user when the stock was checked, and a week-old result must not claim to
+   * have been checked when this phone happened to store it.
+   */
+  if (!opts.force) {
+    const stored = disk.read(key);
+    if (stored) {
+      const search: NurserySearch = { nurseries: stored.results, scrapedAt: stored.scrapedAt };
+      const resolved = Promise.resolve(search);
+      cache.set(key, { at: now, promise: resolved });
+      return resolved;
+    }
+  }
+
   // `force` reaches the server too, not just this in-memory map: a retry that
   // skipped the local cache only to be handed the same week-old row from the
-  // durable one is not the refresh the user asked for.
+  // durable one is not the refresh the user asked for. It drops the stored
+  // copy for the same reason - a refresh that leaves yesterday's list on disk
+  // would serve it again on the next cold start.
+  if (opts.force) disk.invalidate(key);
+
   const promise = requestNurseries(plantName, userLat, userLng, opts.force === true, radiusM);
   // Evict on failure so a later call (retry) starts fresh instead of re-throwing
   // the same rejected promise.
   promise.catch(() => {
     if (cache.get(key)?.promise === promise) cache.delete(key);
   });
+  /*
+   * Store on success only, and never an empty list. "No nursery near you has
+   * this plant" is the one answer most worth retrying - stock arrives - and
+   * caching it for a day would hide the shop that got it in tomorrow.
+   */
+  promise
+    .then((search) => {
+      if (search.nurseries.length > 0) disk.write(key, search.nurseries, search.scrapedAt);
+    })
+    .catch(() => {});
   cache.set(key, { at: now, promise });
   return promise;
+}
+
+/* Every stored search, dropped. Called on sign-out: what someone looked for is
+ * theirs, and should not greet the next account on the same handset. */
+export function clearNurserySearchCache(): void {
+  cache.clear();
+  disk.clear();
 }
 
 /*

@@ -407,16 +407,18 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
           </Animated.View>
         )}
 
-        {/* Replace Section */}
+        {/*
+          Replacing the plant, offered ONLY when it cannot be saved.
+          The whole card used to render for every diagnosis and merely soften
+          its heading to "Or replace with a healthy one" - so a plant the model
+          had just called healthy was answered with somewhere to go and buy
+          another one. Treatment shops stay above for a plant worth treating,
+          and a saved plant can still be shopped for from its detail screen.
+        */}
+        {!diagnosis.canBeSaved && (
         <Animated.View style={[s.replaceCard, { opacity: fadeAnim }]}>
-          <Text style={s.replaceSectionTitle}>
-            {diagnosis.canBeSaved ? copy.diagnosis.replaceOr : copy.diagnosis.replaceTitle}
-          </Text>
-          {!diagnosis.canBeSaved && (
-            <Text style={s.replaceDesc}>
-              {copy.diagnosis.replaceDesc(diagnosis.plantName)}
-            </Text>
-          )}
+          <Text style={s.replaceSectionTitle}>{copy.diagnosis.replaceTitle}</Text>
+          <Text style={s.replaceDesc}>{copy.diagnosis.replaceDesc(diagnosis.plantName)}</Text>
 
           {/* Delivery toggle */}
           <View style={s.toggleRow}>
@@ -459,6 +461,7 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
             )}
           </Pressable>
         </Animated.View>
+        )}
 
         {/* Scan again */}
         <Pressable style={s.scanAgainBtn} onPress={() => navigation.navigate('Camera')} accessibilityRole="button">
