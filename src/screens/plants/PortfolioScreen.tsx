@@ -700,6 +700,15 @@ export default function PortfolioScreen({ navigation }: Props) {
               */}
               <View style={s.libHeader}>
                 {/*
+                  Avatar, greeting and both controls share one row; the title
+                  and the count get the line below to themselves. They used to
+                  sit in a flex:1 column BETWEEN the avatar and the buttons,
+                  which left "Portfolio" about 114pt to render 32pt ExtraBold
+                  in - so it wrapped after "Portfoli" and dropped the "o" onto
+                  its own line. Hebrew's longer title had the same problem.
+                */}
+                <View style={s.libHeaderTop}>
+                {/*
                   Leading edge, same as the dashboard greeting, and to Settings
                   for the same reason: here the face says whose library this is
                   rather than offering to change itself. The gear stays - an
@@ -714,15 +723,11 @@ export default function PortfolioScreen({ navigation }: Props) {
                   accessibilityLabel={copy.settings.profileSettings}
                   style={s.libHeaderAvatar}
                 />
-                <View style={s.libHeaderText}>
-                  <Text style={s.libEyebrow}>
-                    {profileName
-                      ? copy.portfolio.greetingNamed(profileName)
-                      : copy.portfolio.greetingAnonymous}
-                  </Text>
-                  <Text style={s.libHeaderTitle}>{copy.portfolio.title}</Text>
-                  <Text style={s.libHeaderCount}>{copy.home.plantCount(library.plants.length)}</Text>
-                </View>
+                <Text style={s.libEyebrow} numberOfLines={1}>
+                  {profileName
+                    ? copy.portfolio.greetingNamed(profileName)
+                    : copy.portfolio.greetingAnonymous}
+                </Text>
                 <Pressable
                   onPress={() => navigation.navigate('Settings')}
                   accessibilityRole="button"
@@ -748,6 +753,10 @@ export default function PortfolioScreen({ navigation }: Props) {
                   <Ionicons name="add" size={18} color={t.color.onPrimary} />
                   <Text style={s.addBtnText}>{copy.portfolio.addPlant}</Text>
                 </Pressable>
+                </View>
+
+                <Text style={s.libHeaderTitle}>{copy.portfolio.title}</Text>
+                <Text style={s.libHeaderCount}>{copy.home.plantCount(library.plants.length)}</Text>
               </View>
 
               {showImportBanner && (
@@ -1133,23 +1142,16 @@ function makeStyles(t: Theme) {
     // The extra bottom padding clears the floating Add plant button, so the
     // last card is scrollable out from under it rather than trapped beneath.
     libScroll: { paddingBottom: t.space['3xl'], paddingHorizontal: t.space.xl },
-    libHeader: {
-      flexDirection: 'row',
-      /* Centre, not flex-start: the buttons belong to the masthead as a whole.
-       * Pinned to the top they lined up with the eyebrow - the smallest line
-       * on the screen - and read as floating above the title rather than
-       * sitting beside it. */
-      alignItems: 'center',
-      gap: t.space.sm,
-      paddingTop: t.space.lg,
-      paddingBottom: t.space.lg,
-    },
-    libHeaderText: { flex: 1, marginEnd: t.space.sm },
-    /* Aligned to the eyebrow rather than the row, so the circle sits against
-     * the three lines of text instead of floating above them. */
-    libHeaderAvatar: { marginEnd: t.space.sm, marginTop: 2 },
-    libEyebrow: { ...t.type.eyebrow, color: t.color.textMuted, writingDirection: 'auto' },
-    libHeaderTitle: { ...t.type.display, color: t.color.foreground, marginTop: t.space.xs, writingDirection: 'auto' },
+    libHeader: { paddingTop: t.space.lg, paddingBottom: t.space.lg },
+    /* The controls ride with the eyebrow - the one line short enough to share
+     * a row with them - so the display title below is never competing with a
+     * button for width. */
+    libHeaderTop: { flexDirection: 'row', alignItems: 'center', gap: t.space.sm },
+    libHeaderAvatar: { marginEnd: t.space.sm },
+    /* flex: 1 so the eyebrow takes the slack and both controls sit hard
+     * against the trailing edge. */
+    libEyebrow: { ...t.type.eyebrow, color: t.color.textMuted, flex: 1, writingDirection: 'auto' },
+    libHeaderTitle: { ...t.type.display, color: t.color.foreground, marginTop: t.space.sm, writingDirection: 'auto' },
     libHeaderCount: { ...t.type.caption, color: t.color.textSecondary, marginTop: 2, writingDirection: 'auto' },
     iconBtn: {
       width: 40,
