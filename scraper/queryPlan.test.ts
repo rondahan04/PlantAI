@@ -299,3 +299,43 @@ test('a strong row next to a merely-plausible one is NOT decisive', () => {
   assert.equal(ranked.length, 2);
   assert.equal(isDecisive(ranked), false);
 });
+
+// --- the degraded flag -------------------------------------------------------
+
+/* A plan built from a real planning answer is not degraded, and its ladder
+ * carries the Hebrew the shops actually file under. */
+test('a planned search is not degraded', () => {
+  const plan = buildQueryPlan({
+    original: 'Monstera Deliciosa',
+    hebrew: 'מונסטרה דליסיוסה',
+    latin: 'Monstera deliciosa',
+    altSpellings: ['מונסטרה דלסיוסה'],
+  });
+  assert.equal(plan.degraded, false);
+  assert.ok(plan.terms.includes('מונסטרה דליסיוסה'));
+  assert.ok(plan.terms.includes('מונסטרה דלסיוסה'), 'the alternate spelling is its own rung');
+});
+
+/*
+ * The failure this flag exists to make visible: al-haderech returns 20 products
+ * for "מונסטרה" and zero for "Monstera deliciosa", so an untranslated plan does
+ * not search slightly worse - it matches nothing, and every shop is then
+ * reported as not stocking a plant it has.
+ */
+test('the untranslated fallback is marked degraded', () => {
+  const plan = buildQueryPlan({
+    original: 'Monstera Deliciosa',
+    hebrew: 'Monstera Deliciosa',
+    latin: 'Monstera Deliciosa',
+    degraded: true,
+  });
+  assert.equal(plan.degraded, true);
+  assert.deepEqual(plan.terms, ['Monstera Deliciosa', 'Monstera']);
+});
+
+/* A user who typed Hebrew already has the vocabulary the shops use. That plan
+ * has no alternates but is not degraded, and must not be reported as one. */
+test('a Hebrew query with no alternates is not degraded', () => {
+  const plan = buildQueryPlan({ original: 'מונסטרה', hebrew: 'מונסטרה' });
+  assert.equal(plan.degraded, false);
+});

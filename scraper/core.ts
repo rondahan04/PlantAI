@@ -356,6 +356,19 @@ export interface ScrapeOpts {
    */
   rescue?: boolean;
   attempt?: number;
+  /*
+   * This host has repeatedly refused to be read by Tavily. Flips the lead to
+   * Firecrawl for this read - see tavilyLeads. Absent for an unknown host,
+   * which is the common case and keeps Tavily in front.
+   */
+  tavilyHostile?: boolean;
+  /*
+   * Called with whether TAVILY specifically produced a usable read, when Tavily
+   * led. `scrapeUrl` otherwise hides which provider answered - and "the page
+   * was read" and "Tavily can read this host" are different facts, only the
+   * second of which decides who leads next time.
+   */
+  onTavily?: (ok: boolean) => void;
 }
 
 async function firecrawlScrape(
@@ -516,8 +529,68 @@ export async function resolveScrape(opts: {
  * do. A shop that serves its grid in the first byte - most of them - never pays
  * a Firecrawl slot at all.
  */
-export function tavilyLeads(opts: { waitFor?: number; tavilyKey?: string }): boolean {
-  return Boolean(opts.tavilyKey);
+export function tavilyLeads(opts: {
+  waitFor?: number;
+  tavilyKey?: string;
+  tavilyHostile?: boolean;
+}): boolean {
+  /*
+   * ...with one exception, learned the hard way. A host Tavily cannot fetch at
+   * all - plantit.co.il answers it "Failed to fetch url" every time, while
+   * Firecrawl reads the same page perfectly - gets NOTHING out of leading with
+   * Tavily. It fails, and then the rescue has to win a slot in a ten-a-minute
+   * window that a 24-shop fan-out has usually already spent. That shop showed
+   * "Couldn't check this shop" on every search, with lastReadableAt null,
+   * forever.
+   *
+   * So a host that has failed Tavily repeatedly is led by Firecrawl instead.
+   * Tavily stays as ITS fallback, which costs nothing when Firecrawl succeeds
+   * and is the correct order for a site only one of them can read.
+   */
+  return Boolean(opts.tavilyKey) && !opts.tavilyHostile;
+}
+
+/*
+ * How many consecutive Tavily failures before Firecrawl takes the lead for a
+ * host, and how long that verdict stands.
+ *
+ * Two, not one: a single failure is as often a blip - a timeout, a shop
+ * briefly down - as a standing fact about the host, and demoting Tavily on a
+ * blip spends a scarce Firecrawl slot on a site that never needed one. Two in
+ * a row is a pattern.
+ *
+ * The verdict expires so a shop that fixes its edge configuration is not
+ * condemned to the slow reader for the rest of the index's life. A week is
+ * long enough that the retry is rare and short enough to be self-healing.
+ */
+export const TAVILY_HOSTILE_AT = 2;
+export const TAVILY_HOSTILE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+/* Whether this host's record says Tavily should stand aside. Pure, so the
+ * decision is testable without a network or a disk. */
+export function tavilyHostile(
+  entry: { tavilyFails?: number; tavilyAt?: number } | undefined,
+  now: number
+): boolean {
+  if (!entry?.tavilyFails || entry.tavilyFails < TAVILY_HOSTILE_AT) return false;
+  const at = entry.tavilyAt ?? 0;
+  return now - at < TAVILY_HOSTILE_TTL_MS;
+}
+
+/*
+ * Fold one read's outcome into the host's Tavily record.
+ *
+ * A success RESETS the counter rather than decrementing it: the question is
+ * "can Tavily read this host", and one clean read answers yes whatever came
+ * before. Returns the fields to merge, so the caller owns persistence.
+ */
+export function noteTavilyRead(
+  entry: { tavilyFails?: number; tavilyAt?: number } | undefined,
+  ok: boolean,
+  now: number
+): { tavilyFails: number; tavilyAt: number } {
+  if (ok) return { tavilyFails: 0, tavilyAt: now };
+  return { tavilyFails: (entry?.tavilyFails ?? 0) + 1, tavilyAt: now };
 }
 
 /*
@@ -544,13 +617,26 @@ export async function scrapeUrl(
   firecrawlKey: string,
   opts: ScrapeOpts & { tavilyKey?: string } = {}
 ): Promise<string> {
-  const { tavilyKey, ...fcOpts } = opts;
+  const { tavilyKey, tavilyHostile: _hostile, onTavily, ...fcOpts } = opts;
   if (tavilyLeads(opts)) {
     const rescueOk = opts.rescue !== false && firecrawlReady();
     return resolveScrape({
       url,
       fallbackKey: rescueOk ? firecrawlKey : undefined,
-      primary: (u) => tavilyExtract(u, tavilyKey!),
+      /* Reporting sits here rather than in resolveScrape, which is provider-
+       * agnostic on purpose. An unreadable wall counts as a failure, not a
+       * read: it is what a bot screen looks like, and it is exactly the case
+       * Firecrawl exists to get past. */
+      primary: async (u) => {
+        try {
+          const md = await tavilyExtract(u, tavilyKey!);
+          onTavily?.(Boolean(md) && !looksUnreadable(md));
+          return md;
+        } catch (err) {
+          onTavily?.(false);
+          throw err;
+        }
+      },
       fallback: (u, k) => firecrawlScrape(u, k, fcOpts),
     });
   }
@@ -2598,11 +2684,20 @@ export async function planQuery(
   now: () => number = Date.now
 ): Promise<QueryPlan> {
   const query = (name || '').trim();
+  /*
+   * The fallback plan: the user's own string as every rung.
+   *
+   * Marked `degraded` unless the query was ALREADY Hebrew, in which case this
+   * is a perfectly good plan that simply has no alternates - the shops file in
+   * Hebrew and so did the user. It is the Latin query reaching Hebrew
+   * catalogues that matches nothing, and that is the case worth reporting.
+   */
   const bare = () =>
     buildQueryPlan({
       original: query,
       hebrew: query,
       latin: hasHebrew(query) ? '' : query,
+      degraded: !hasHebrew(query),
     });
   if (!query || !openaiKey) return bare();
 
@@ -2906,6 +3001,14 @@ export type HostPlatforms = Record<
      */
     api?: ApiRoute;
     apiAt?: number;
+    /*
+     * Consecutive failed Tavily reads, and when the count last moved. Persisted
+     * beside the platform because it is the same kind of fact - something about
+     * this host that does not change between searches and is expensive to
+     * rediscover. See tavilyHostile / noteTavilyRead.
+     */
+    tavilyFails?: number;
+    tavilyAt?: number;
   }
 >;
 
@@ -3055,6 +3158,35 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
    * the search URL we built no longer exists - so the next search for this host
    * re-identifies instead of failing the same way for 30 days.
    */
+  /*
+   * Who should read this host first, and remembering the answer.
+   *
+   * Both sit beside rememberHost because they are the same kind of memory: a
+   * standing fact about a host, learned once and worth keeping across searches
+   * and across process restarts. Without the persistence the verdict would be
+   * relearned on every cold start - and the API host sleeps between requests,
+   * so in practice that means never learning it at all.
+   */
+  function hostileFor(host: string): boolean {
+    return tavilyHostile(persisted[host], now());
+  }
+
+  function noteTavily(host: string, ok: boolean): void {
+    if (!opts.hostsFile) return;
+    const entry = persisted[host];
+    const next = noteTavilyRead(entry, ok, now());
+    /* A host with no platform record yet still gets one, so the very first
+     * failures are counted rather than thrown away waiting for identification
+     * to succeed - which, for a host nobody can read, it never will. */
+    persisted[host] = {
+      ...entry,
+      platform: entry?.platform ?? 'unknown',
+      at: entry?.at ?? now(),
+      ...next,
+    };
+    saveHostPlatforms(opts.hostsFile, persisted);
+  }
+
   function forgetHost(host: string): void {
     platformCache.delete(host);
     hostTemplates.delete(host);
@@ -3576,6 +3708,8 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
           waitFor: quickWait,
           maxAge: SEARCH_MAX_AGE_MS,
           tavilyKey: opts.tavilyKey,
+          tavilyHostile: hostileFor(host),
+          onTavily: (ok) => noteTavily(host, ok),
         });
       } catch {
         /* the careful read below is the retry */
@@ -3602,6 +3736,8 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
           waitFor: RENDER_WAIT_MS,
           maxAge: 0,
           tavilyKey: opts.tavilyKey,
+          tavilyHostile: hostileFor(host),
+          onTavily: (ok) => noteTavily(host, ok),
         });
       }
       const { html, status } = await htmlPromise;
@@ -3677,6 +3813,8 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
           waitFor: 0,
           maxAge: SEARCH_MAX_AGE_MS,
           tavilyKey: opts.tavilyKey,
+          tavilyHostile: hostileFor(host),
+          onTavily: (ok) => noteTavily(host, ok),
         });
       } catch {
         continue;

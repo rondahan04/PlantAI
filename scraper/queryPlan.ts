@@ -88,6 +88,22 @@ export interface QueryPlan {
    * folded token is not a string any shop's search box will match - לשונ is not
    * לשון - so the ladder has to send these instead. */
   altNames: string[];
+  /*
+   * True when the planning call did not answer and this plan is the fallback -
+   * the user's own string, untranslated, sent as every rung.
+   *
+   * This is not a cosmetic flag. Israeli nurseries file plants in Hebrew:
+   * al-haderech returns 20 products for "מונסטרה" and ZERO for "Monstera
+   * deliciosa". So a degraded plan does not search slightly worse, it searches
+   * a Hebrew catalogue in Latin and matches nothing - and the shop is then
+   * reported as not stocking a plant sitting on its shelf. Measured on
+   * 2026-09-21: eleven shops read cleanly and every one came back no_match,
+   * because the OpenAI account was out of credit and nothing said so.
+   *
+   * Carried out to the job so /health can report it, rather than being
+   * swallowed here.
+   */
+  degraded: boolean;
 }
 
 // --- normalization -----------------------------------------------------------
@@ -206,6 +222,8 @@ export function buildQueryPlan(opts: {
   latin?: string;
   /* Alternate transliterations from the planning call, tried after the genus. */
   altSpellings?: string[];
+  /* Set by the caller's fallback path - see QueryPlan.degraded. */
+  degraded?: boolean;
 }): QueryPlan {
   const original = (opts.original || '').trim();
   const hebrew = (opts.hebrew || '').trim() || original;
@@ -266,7 +284,17 @@ export function buildQueryPlan(opts: {
     .filter((t) => t.core.length > 0)
     .filter((t) => !asksForCultivar || t.cultivar.length > 0);
 
-  return { original, hebrew, latin, terms, hebrewTokens, latinTokens, altTokens, altNames };
+  return {
+    original,
+    hebrew,
+    latin,
+    terms,
+    hebrewTokens,
+    latinTokens,
+    altTokens,
+    altNames,
+    degraded: opts.degraded === true,
+  };
 }
 
 /* The rung to send first when only one request is affordable. The genus is what

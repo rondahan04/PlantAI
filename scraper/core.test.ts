@@ -47,6 +47,11 @@ import {
   snapPricesToStructured,
   planQuery,
   clearPlanCache,
+  tavilyHostile,
+  noteTavilyRead,
+  TAVILY_HOSTILE_AT,
+  TAVILY_HOSTILE_TTL_MS,
+
 } from './core.ts';
 import { clearSitemapCache } from './sitemapCatalogue.ts';
 import type { ScrapeFn, ClassifyFn, Plant, VerificationReport } from './core.ts';
@@ -2490,4 +2495,43 @@ test('a sitemap that names no candidate leaves the shop reported as unread', asy
   );
   assert.equal(out.funnel.stage, 'no_markdown', 'still "we could not read this shop"');
   assert.deepEqual(out.plants, []);
+});
+
+// --- who leads a read, per host ---------------------------------------------
+
+test('tavilyLeads keeps Tavily in front for an ordinary host', () => {
+  assert.equal(tavilyLeads({ tavilyKey: 'k' }), true);
+  assert.equal(tavilyLeads({ tavilyKey: '' }), false, 'no key, no lead');
+});
+
+/* plantit.co.il answers Tavily "Failed to fetch url" every time while Firecrawl
+ * reads the same page - leading with Tavily there only burns the rescue. */
+test('tavilyLeads stands Tavily down for a host it cannot read', () => {
+  assert.equal(tavilyLeads({ tavilyKey: 'k', tavilyHostile: true }), false);
+});
+
+test('one failure is a blip, two in a row is a pattern', () => {
+  const now = 1_000;
+  assert.equal(tavilyHostile({ tavilyFails: 1, tavilyAt: now }, now), false);
+  assert.equal(tavilyHostile({ tavilyFails: TAVILY_HOSTILE_AT, tavilyAt: now }, now), true);
+  assert.equal(tavilyHostile(undefined, now), false, 'an unknown host is not hostile');
+});
+
+/* A shop that fixes its edge config must not be condemned to the slow reader
+ * for the rest of the index's life. */
+test('a hostile verdict expires', () => {
+  const at = 1_000;
+  assert.equal(tavilyHostile({ tavilyFails: 5, tavilyAt: at }, at + TAVILY_HOSTILE_TTL_MS - 1), true);
+  assert.equal(tavilyHostile({ tavilyFails: 5, tavilyAt: at }, at + TAVILY_HOSTILE_TTL_MS + 1), false);
+});
+
+test('noteTavilyRead counts failures and a success clears them outright', () => {
+  const now = 5_000;
+  assert.deepEqual(noteTavilyRead(undefined, false, now), { tavilyFails: 1, tavilyAt: now });
+  assert.deepEqual(noteTavilyRead({ tavilyFails: 1 }, false, now), { tavilyFails: 2, tavilyAt: now });
+  assert.deepEqual(
+    noteTavilyRead({ tavilyFails: 9 }, true, now),
+    { tavilyFails: 0, tavilyAt: now },
+    'one clean read answers the question whatever came before'
+  );
 });

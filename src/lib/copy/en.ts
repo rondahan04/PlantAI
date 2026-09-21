@@ -182,7 +182,6 @@ export const en = {
       fungicide: 'Get Fungicide now!',
     },
     buyShopA11y: 'Open the shop in your browser',
-    replaceOr: 'Or replace with a healthy one',
     replaceTitle: 'Find a healthy replacement',
     replaceDesc: (name: string) =>
       `This plant is too damaged to save. Find an identical, healthy ${name} at nurseries near you.`,
