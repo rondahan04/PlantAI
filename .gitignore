@@ -85,6 +85,14 @@ docs/superpowers/
 # not built from, and a 680 KB PDF has no business in a source tree.
 PlantAI-kanban-board-annotated.pdf
 
+# Long-form notes and write-ups. Local only: the repository carries the code
+# and the API docs site, and these went stale faster than anyone reread them.
+docs/BUILD-NOTES.md
+docs/DESIGN-SYSTEM.md
+docs/RETRIEVAL.md
+docs/RUNBOOK.md
+docs/SCRAPE-ACCURACY-PLAN.md
+
 # graphify knowledge-graph output - regenerated on demand, not source
 graphify-out/
 

@@ -13,8 +13,6 @@ a mirrored English one.
 |---|---|
 | **API** | https://plantai-api-eev0.onrender.com - Render, deployed from `main` |
 | **API docs** | https://plantai-api-docs.vercel.app - [`docs/api-site`](docs/api-site), Vercel. Deployed by hand: `cd docs/api-site && vercel --prod`. `main` does not publish it. |
-| **Build notes** | [`docs/BUILD-NOTES.md`](docs/BUILD-NOTES.md) |
-| **Runbook** | [`docs/RUNBOOK.md`](docs/RUNBOOK.md) |
 
 ## Run it
 
@@ -101,7 +99,7 @@ scraper/               nursery search - platform detection, retrieval, prices
 scripts/               offline metrics and one-off tooling
 dashboard/             local scraper test dashboard (npm run dashboard)
 data/                  nursery URL lists the server reads at runtime
-docs/                  runbook, retrieval and accuracy write-ups, design system
+docs/api-site/         the published API docs site
 supabase/migrations/   schema, applied to the live project
 ```
 
@@ -138,8 +136,8 @@ npm run price:score       # price extraction: recall and quiet
 npm run retrieval:score   # retrieval: did we find the plant at all
 ```
 
-[`docs/SCRAPE-ACCURACY-PLAN.md`](docs/SCRAPE-ACCURACY-PLAN.md) and
-[`docs/RETRIEVAL.md`](docs/RETRIEVAL.md) explain what those numbers mean.
+Both print the per-row table they scored - host, query, verdict - above the
+summary, so a number is always readable next to the rows that produced it.
 `npm run dashboard` drives the scraper by hand against a live shop.
 
 ## Deployment
