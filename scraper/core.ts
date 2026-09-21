@@ -791,6 +791,45 @@ const BUILTIN_TEMPLATES: Record<string, string> = {
   wix: '{origin}/search?q={query}',
 };
 
+/*
+ * Name the platform from the search URL that actually worked.
+ *
+ * The probe path exists for hosts we could not identify, and it ends by
+ * remembering the URL that answered - but it remembered it as `unknown`, which
+ * threw away the more useful half of what it had just learned. A site whose
+ * search lives at `/?s=…&post_type=product` IS WooCommerce; nothing else uses
+ * that shape. Recording it as such means the next search skips identification
+ * and the probe fan entirely and goes straight to one request.
+ *
+ * Measured 2026-09-21: yarokis.co.il and getzler.co.il each took 21-25s per
+ * search on the probe path, both having won with the WooCommerce URL, and both
+ * were stored as `unknown` so they paid it again on every search.
+ *
+ * Returns null when no builtin template matches, which is the honest answer
+ * for a shop with a search URL we have not seen before.
+ */
+export function platformFromSearchUrl(url: string): string | null {
+  let path: string;
+  try {
+    const u = new URL(url);
+    path = `${u.pathname}${u.search}`;
+  } catch {
+    return null;
+  }
+  /*
+   * WooCommerce only, and deliberately.
+   *
+   * `post_type=product` is Woo's and nobody else's, so naming it costs
+   * nothing. Shopify and Wix share `/search?q=` byte for byte, and guessing
+   * between them is not a harmless coin flip: the platform decides the render
+   * wait (searchWaitFor) and whether /products.json is worth probing, so
+   * calling a client-rendered Wix shop "shopify" would read it as served and
+   * find an empty shell. An honest 'unknown' keeps the learned template, which
+   * is the half that actually saves the requests.
+   */
+  return path.includes('post_type=product') ? 'woo' : null;
+}
+
 /* Normalize the many names an LLM or site uses down to our canonical slugs. */
 const PLATFORM_ALIASES: Record<string, string> = {
   woocommerce: 'woo',
@@ -3833,7 +3872,11 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
       const score = scoreMarkdown(md, query);
       if (score > best.score) best = { md, platform, picked: u, score };
       if (score >= PROBE_CONFIDENT_SCORE) {
-        rememberTemplate(host, u, origin, query, platform);
+        /* Learn WHAT this shop is, not just where its search lives - see
+         * platformFromSearchUrl. A named platform skips the whole probe path
+         * next time; 'unknown' pays for it again on every search. */
+        const named = platform !== 'unknown' ? platform : platformFromSearchUrl(u);
+        rememberTemplate(host, u, origin, query, named ?? platform);
         break;
       }
     }

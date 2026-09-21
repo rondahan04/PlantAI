@@ -51,7 +51,7 @@ import {
   noteTavilyRead,
   TAVILY_HOSTILE_AT,
   TAVILY_HOSTILE_TTL_MS,
-
+  platformFromSearchUrl,
 } from './core.ts';
 import { clearSitemapCache } from './sitemapCatalogue.ts';
 import type { ScrapeFn, ClassifyFn, Plant, VerificationReport } from './core.ts';
@@ -2534,4 +2534,30 @@ test('noteTavilyRead counts failures and a success clears them outright', () => 
     { tavilyFails: 0, tavilyAt: now },
     'one clean read answers the question whatever came before'
   );
+});
+
+// --- naming a platform from the URL its search actually answered on ---------
+
+/* yarokis and getzler both won with the WooCommerce URL and were both stored
+ * as 'unknown', so both paid the 21-25s probe path on every single search. */
+test('platformFromSearchUrl names WooCommerce by its discriminator', () => {
+  assert.equal(
+    platformFromSearchUrl('https://yarokis.co.il/?s=%D7%90&post_type=product'),
+    'woo'
+  );
+});
+
+/* Shopify and Wix share this URL byte for byte, and the platform decides the
+ * render wait - so guessing would read a client-rendered Wix shop as served
+ * and find an empty shell. The learned template still saves the requests. */
+test('platformFromSearchUrl refuses to guess between Shopify and Wix', () => {
+  assert.equal(platformFromSearchUrl('https://shop.example/search?q=monstera'), null);
+});
+
+/* A search URL we have not seen before is honestly unknown - guessing here
+ * would write a wrong template to disk for thirty days. */
+test('platformFromSearchUrl returns null rather than guessing', () => {
+  assert.equal(platformFromSearchUrl('https://shop.example/catalogsearch/result/?q=x'), null);
+  assert.equal(platformFromSearchUrl('not a url'), null);
+  assert.equal(platformFromSearchUrl('https://shop.example/'), null);
 });
