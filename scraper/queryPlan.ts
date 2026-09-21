@@ -413,9 +413,78 @@ function hits(
  *   minus foreign cultivar words, which is what separates Regal Shield from
  *   Zebrina without asking a model anything.
  */
+/*
+ * Words that mark a DIFFERENT, dearer plant rather than a spelling of this one.
+ *
+ * A variegated cultivar is not the plant someone asked for at a slightly
+ * different price - it is a different plant at a different order of price.
+ * al-haderech lists "מבצע אלוקסיה ריגל שילד אלבו ע' 6" at ₪1499.90 against a
+ * plain Regal Shield's ₪50-150, and that title carries EVERY token of the
+ * query plus one: אלבו. The proportional rule scored it 0.80 and the middle
+ * band is adjudicated by a model - so with the OpenAI account out of credit it
+ * went straight out to the user as an exact match at ten times the price.
+ *
+ * Folded spellings, because these arrive transliterated by ear like everything
+ * else: אלבו / אלבא, וריגטה / וריאגטה / ורייגטה. `normalizeHebrew` collapses
+ * most of that; the list carries what it does not.
+ *
+ * Only ever a penalty for a word the QUERY did not ask for. Someone searching
+ * for a variegated plant says so, and then these are the tokens that matter
+ * most - which is why this is a set difference and not a blocklist.
+ */
+const VARIEGATION_TOKENS = new Set(
+  [
+    /*
+     * Only words that mean VARIEGATION and nothing else.
+     *
+     * Two near-misses are deliberately absent. 'מנטה' / 'mint' names a herb far
+     * more often than it names Monstera 'Mint', and 'alba' / 'aurea' are
+     * ordinary species epithets - Salvia alba is not a variegated Salvia. Both
+     * were in an earlier draft of this list and both cost real retrieval:
+     * national-shipper recall fell from 100% to 80% on the labelled fixtures.
+     * A false reject here hides a plant a shop genuinely stocks, which is the
+     * exact failure the ranker exists to prevent.
+     */
+    'אלבו',
+    'וריגטה',
+    'וריאגטה',
+    'וריגטד',
+    'albo',
+    'variegata',
+    'variegated',
+    'variegate',
+  ].map(normalizeHebrew)
+);
+
+/* Whether a title advertises a variegated cultivar the query never asked for.
+ * Exported for the tests, and because "is this the same plant" is a question
+ * worth being able to ask on its own. */
+export function unaskedVariegation(title: string, plan: QueryPlan): boolean {
+  const asked = new Set(
+    [
+      ...plan.hebrewTokens.core,
+      ...plan.hebrewTokens.cultivar,
+      ...plan.latinTokens.core,
+      ...plan.latinTokens.cultivar,
+    ].map(normalizeHebrew)
+  );
+  return canonical(title).some(
+    (t) => VARIEGATION_TOKENS.has(normalizeHebrew(t)) && !asked.has(normalizeHebrew(t))
+  );
+}
+
 export function scoreCandidate(title: string, plan: QueryPlan): number {
   const titleTokens = canonical(title);
   if (titleTokens.length === 0) return 0;
+
+  /*
+   * Rejected outright, not merely marked down. Scoring this proportionally is
+   * what put a ₪1499.90 Albo in front of someone who asked for a ₪90 plant:
+   * the title genuinely does contain every word they typed, so every
+   * token-counting rule rates it highly. The only honest answer is that it is
+   * a different plant.
+   */
+  if (unaskedVariegation(title, plan)) return 0;
 
   /*
    * Score against every name the plant is sold under and keep the best.

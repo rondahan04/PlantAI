@@ -2428,11 +2428,7 @@
       "bodyFile": "a4a3ea7d00a2d23a.json",
       "bytes": 7640,
       "truth": {
-        "listed": true,
-        "productNames": [
-          "מבצע אלוקסיה ריגל שילד אלבו ע&#8217; 6"
-        ],
-        "price": 1499.9
+        "listed": false
       }
     },
     {
@@ -2447,11 +2443,7 @@
       "bodyFile": "b15145593fef193b.json",
       "bytes": 401608,
       "truth": {
-        "listed": true,
-        "productNames": [
-          "מבצע אלוקסיה ריגל שילד אלבו ע&#8217; 6"
-        ],
-        "price": 1499.9
+        "listed": false
       }
     },
     {
