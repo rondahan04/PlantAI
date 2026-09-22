@@ -77,19 +77,20 @@ export default function DiagnosisScreen({ navigation, route }: Props) {
     /*
      * Warm the treatment searches too, not just the replacement one. The
      * scrape now persists server-side for a week, so this is the moment that
-     * makes "where do I buy Confidor" instant tomorrow, or next Tuesday -
+     * makes "where do I buy insecticidal soap" instant tomorrow, or next Tuesday -
      * which is when people actually go looking for it, long after this
      * screen is gone.
      *
      * URGENT treatments only. Every scrape is a paid job, and urgency is the
      * diagnosis's own statement about what the user will act on; warming the
      * optional "wipe it down" advice would double the bill for the case
-     * nobody rushes to buy.
+     * nobody rushes to buy. A product with a shop link is skipped too: its
+     * button opens the shop, so a warmed search would never be shown.
      */
     for (const treatment of diagnosis.treatments) {
       if (!treatment.urgent) continue;
       const product = treatmentProduct(treatment);
-      if (product) prefetch(product);
+      if (product && !shopFor(product)) prefetch(product);
     }
   }, [prefetch, diagnosis.plantName, diagnosis.treatments]);
 

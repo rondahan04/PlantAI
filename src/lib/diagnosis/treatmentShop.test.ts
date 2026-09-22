@@ -5,6 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  CONFIDOR_SHOP_URL,
   FUNGICIDE_SHOP_URL,
   NEEM_SHOP_URL,
   NUTRIENT_SHOP_URL,
@@ -47,6 +48,12 @@ test('neem goes to its own product page', () => {
   }
 });
 
+test('confidor goes to its own product page', () => {
+  for (const p of ['Confidor', 'confidor soil drench', 'Imidacloprid']) {
+    assert.deepEqual(shopFor(p), { id: 'confidor', url: CONFIDOR_SHOP_URL }, p);
+  }
+});
+
 test('fungicides go to their own product page', () => {
   for (const p of ['copper fungicide', 'Fungicide', 'systemic fungicide']) {
     assert.deepEqual(shopFor(p), { id: 'fungicide', url: FUNGICIDE_SHOP_URL }, p);
@@ -62,7 +69,6 @@ test('everything without a named supplier keeps the nursery search', () => {
   for (const p of [
     'insecticidal soap',
     'systemic insecticide',
-    'Confidor',
     'sphagnum moss',
     'potting mix',
     'perlite',
@@ -87,6 +93,7 @@ test('the supplier links are https', () => {
   assert.match(NUTRIENT_SHOP_URL, /^https:\/\/hydroshop\.co\.il\//);
   assert.match(NEEM_SHOP_URL, /^https:\/\/hydroshop\.co\.il\//);
   assert.match(FUNGICIDE_SHOP_URL, /^https:\/\/www\.gadot-garden\.com\//);
+  assert.match(CONFIDOR_SHOP_URL, /^https:\/\/rootine\.co\.il\//);
 });
 
 /*
@@ -95,7 +102,7 @@ test('the supplier links are https', () => {
  * would attribute every user's tap to that one stale click.
  */
 test('no tracking parameters are shipped', () => {
-  for (const url of [NUTRIENT_SHOP_URL, NEEM_SHOP_URL, FUNGICIDE_SHOP_URL]) {
+  for (const url of [NUTRIENT_SHOP_URL, NEEM_SHOP_URL, FUNGICIDE_SHOP_URL, CONFIDOR_SHOP_URL]) {
     assert.doesNotMatch(url, /gclid|gbraid|utm_|gad_source/, url);
   }
 });

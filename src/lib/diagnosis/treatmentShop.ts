@@ -24,7 +24,7 @@
  * The suppliers.
  *
  * Plain constants rather than a config file or a remote lookup: there are
- * three, they change about never, and a dead link is something a test should
+ * only a few, they change about never, and a dead link is something a test should
  * catch at build time rather than a user find on a shelf.
  *
  * NO TRACKING PARAMETERS. Two of these were copied out of a browser after a
@@ -43,6 +43,9 @@ export const NEEM_SHOP_URL = 'https://hydroshop.co.il/products/%d7%a0%d7%99%d7%9
 
 /* Kligrin, a systemic fungicide for houseplants. */
 export const FUNGICIDE_SHOP_URL = 'https://www.gadot-garden.com/product/%D7%A7%D7%9C%D7%99%D7%92%D7%A8%D7%99%D7%9F/';
+
+export const CONFIDOR_SHOP_URL =
+  'https://rootine.co.il/products/%D7%A7%D7%95%D7%A0%D7%A4%D7%99%D7%93%D7%95%D7%A8-0-5-%D7%9C%D7%99%D7%98%D7%A8';
 
 /*
  * What counts as a nutrient. Covers the names the model actually reaches for:
@@ -85,6 +88,8 @@ const NEEM_TERMS = ['neem', 'neemgard', 'azadirachtin'];
  */
 const FUNGICIDE_TERMS = ['fungicide', 'fungicidal'];
 
+const CONFIDOR_TERMS = ['confidor', 'imidacloprid'];
+
 /*
  * Checked in order, most specific first. Nothing overlaps today, but the order
  * is what keeps that true when a term is added: a product matching two groups
@@ -96,9 +101,10 @@ const FUNGICIDE_TERMS = ['fungicide', 'fungicidal'];
  * sentence when a link changes - "Get Aroid Fertilizer now!" on a neem oil
  * card is a worse bug than a broken link, because it looks fine.
  */
-export type ShopId = 'nutrient' | 'neem' | 'fungicide';
+export type ShopId = 'confidor' | 'nutrient' | 'neem' | 'fungicide';
 
 const SUPPLIERS: { id: ShopId; terms: string[]; url: string }[] = [
+  { id: 'confidor', terms: CONFIDOR_TERMS, url: CONFIDOR_SHOP_URL },
   { id: 'neem', terms: NEEM_TERMS, url: NEEM_SHOP_URL },
   { id: 'fungicide', terms: FUNGICIDE_TERMS, url: FUNGICIDE_SHOP_URL },
   { id: 'nutrient', terms: NUTRIENT_TERMS, url: NUTRIENT_SHOP_URL },

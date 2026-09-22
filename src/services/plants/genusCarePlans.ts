@@ -29,17 +29,22 @@ const deviceStorage: CacheStorage = {
  * back to the local per-medium multipliers in soilMedia.ts, and the plant has
  * already been saved by the time this call happens, so the cost of getting
  * this number wrong is a round of generic advice, never lost data.
+ *
+ * Hebrew gets 90s. The same eight plans written in Hebrew measured 71-77
+ * seconds on gpt-5.6-terra, so at 45s every Hebrew user got the generic advice.
  */
 const TIMEOUT_MS = 45_000;
+const HEBREW_TIMEOUT_MS = 90_000;
 
 async function fetchPlan(genus: string, family: string): Promise<unknown> {
+  const lang = getLanguage();
   let res: Response;
   try {
     res = await apiFetch('/api/care-plan', {
       method: 'POST',
       headers: apiHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ genus, family, lang: getLanguage() }),
-      timeoutMs: TIMEOUT_MS,
+      body: JSON.stringify({ genus, family, lang }),
+      timeoutMs: lang === 'he' ? HEBREW_TIMEOUT_MS : TIMEOUT_MS,
     });
   } catch (err: unknown) {
     // AbortError (our timeout) and a genuine network failure both land here as
