@@ -4,7 +4,7 @@
  * hermetic unit tests: real network functions are the defaults wired in by
  * callers (see server/index.ts).
  */
-import { env, hostOf, type PipelineResult, type Plant } from './core.ts';
+import { env, hostOf, PRICED_CATALOGUE_MIN, type PipelineResult, type Plant } from './core.ts';
 import { type DiscoveredNursery } from './places.ts';
 import type { StructuredProduct } from './structuredPrice.ts';
 import type { QueryPlan } from './queryPlan.ts';
@@ -57,6 +57,15 @@ export interface NurseryResult {
   /* How many listings matched, so the client can say "from ₪39 · 28 matches". */
   matchCount?: number;
   /*
+   * The matching listings themselves, cheapest in stock first, up to MAX_OFFERS.
+   *
+   * `plantPrice` is one number, and at a shop selling the plant in three pot
+   * sizes it answered "how much?" with the smallest pot and hid the rest. The
+   * user shopping for delivery is comparing exactly these rows across shops, so
+   * they travel: name, price and the page to buy it on.
+   */
+  offers?: Offer[];
+  /*
    * A final LLM pass judged this price not to belong to this product (a phone
    * number, a shipping threshold, a decimal slip). The client hides the number
    * rather than showing one it does not trust - a wrong price is worse than no
@@ -81,6 +90,16 @@ export interface NurseryResult {
   fromCache?: boolean;
   shipsToHome: boolean; // national fallback (Deliver tab) vs local (Pick Up tab)
 }
+
+export interface Offer {
+  name: string;
+  price: string; // '₪XX', as plantPrice
+  url?: string;
+  inStock: boolean;
+}
+
+/* Enough to compare pot sizes; a shop listing 28 cultivars links out for the rest. */
+export const MAX_OFFERS = 5;
 
 /*
  * What actually happened at this nursery. Three outcomes, because the user only
@@ -155,6 +174,26 @@ const SITE_BUDGET_MS = Number(env('NURSERY_SITE_BUDGET_MS')) || 45_000;
 const TAIL_QUORUM = 0.7;
 const TAIL_GRACE_MS = Number(env('NURSERY_TAIL_GRACE_MS')) || 10_000;
 
+/* Fewer priced Pick Up rows than this and the search looks further out. */
+export const MIN_PRICED_PICKUP = 3;
+/* The outer ring is read for its NEW shops only, nearest first, and this many. */
+const WIDEN_MAX_SITES = 12;
+/* A shop out in a wider ring gets this long, not the full SITE_BUDGET_MS. */
+const RING_SITE_BUDGET_MS = 20_000;
+
+/* The rings the app offers (src/lib/nursery/radius.ts): 10km, 25km, 50km. */
+function nextRing(radiusM: number): number | null {
+  if (radiusM < 25_000) return 25_000;
+  if (radiusM < 50_000) return 50_000;
+  return null;
+}
+
+/* Will the app show this row's price? Mirrors showsPrice in
+ * src/lib/nursery/availability.ts, which the server cannot import. */
+function showsPrice(n: NurseryResult): boolean {
+  return Boolean(n.hasPlant && !n.priceSuspect && n.plantPrice && n.plantPrice !== '-');
+}
+
 /*
  * The shared clock for one search's fan-out. `finished` is called as each site
  * settles; when enough have, the remainder are given `graceMs` and no more.
@@ -196,16 +235,6 @@ function createPacer(
 
 export type Pacer = ReturnType<typeof createPacer>;
 
-/*
- * How many prices a page must state before we will call it a catalogue.
- *
- * Not 1. Nearly every Israeli shop carries a free-delivery threshold in its
- * header ("משלוחים חינם בקנייה מעל 350 ₪"), so one price is what a page with no
- * catalogue on it looks like - that single banner is the entire price count on
- * mashtela-urbanit's search results. A real grid prices every card it shows.
- */
-const PRICED_CATALOGUE_MIN = 3;
-
 export interface PipelineDeps {
   /* Override the per-site ceiling; tests set it small. */
   siteBudgetMs?: number;
@@ -218,7 +247,9 @@ export interface PipelineDeps {
     /* A QueryPlan when the caller built one; a plain string still means "type
      * this into the shop's search box". */
     query: string | QueryPlan,
-    host: string
+    host: string,
+    /* `jsonOnly` - see SearchOpts in scraper/core.ts. */
+    opts?: { jsonOnly?: boolean }
   ) => Promise<{
     md: string;
     platform: string;
@@ -315,6 +346,9 @@ export interface PipelineDeps {
     query: string
   ) => Promise<{ results: CachedShopResult; scrapedAt: number } | null>;
   writeShopCache?: (host: string, query: string, row: CachedShopResult) => Promise<void>;
+  /* Look further out, a ring at a time, when too few nearby shops price the
+   * plant. On unless set false; see runNurserySearch step 3. */
+  widen?: boolean;
 }
 
 /*
@@ -337,6 +371,7 @@ export type CachedShopResult = Pick<
   | 'productUrl'
   | 'productName'
   | 'matchCount'
+  | 'offers'
   | 'priceSuspect'
   | 'priceNote'
   | 'priceStated'
@@ -352,6 +387,7 @@ const SHOP_FIELDS = [
   'productUrl',
   'productName',
   'matchCount',
+  'offers',
   'priceSuspect',
   'priceNote',
   'priceStated',
@@ -376,7 +412,16 @@ function shelfOf(row: NurseryResult): CachedShopResult {
  * check a shop that is, by then, answering perfectly well.
  */
 function worthCaching(row: NurseryResult): boolean {
-  return row.outcome === 'found' || row.outcome === 'not_sold';
+  if (row.outcome === 'found' || row.outcome === 'not_sold') return true;
+  /*
+   * "This nursery does not sell online" is a reading too - we opened its site
+   * and there is no shop on it - and it is the one that costs the most to
+   * repeat: an unnamed platform pays identification, three probe URLs and a
+   * rendered read, on every search, out of a Firecrawl window of ten a minute
+   * that a shipper's rescue also needs. A brochure does not grow a checkout
+   * overnight.
+   */
+  return row.outcome === 'not_found' && row.availability?.kind === 'no_catalogue';
 }
 
 const R_KM = 6371;
@@ -418,6 +463,30 @@ export function cheapestMatch(plants: Plant[]): Plant {
   const byPrice = (a: Plant, b: Plant) => parsePrice(a.price) - parsePrice(b.price);
   const inStock = plants.filter((p) => p.availability !== 'out_of_stock');
   return [...(inStock.length ? inStock : plants)].sort(byPrice)[0];
+}
+
+/*
+ * Every matching listing worth showing, in the order cheapestMatch would pick
+ * them: in stock before sold out, then cheapest first. The first offer is
+ * therefore the one `plantPrice` quotes. One row per listing - a shop's page
+ * can link the same product twice, once from its picture.
+ */
+export function offersFrom(plants: Plant[]): Offer[] {
+  const soldOut = (p: Plant) => (p.availability === 'out_of_stock' ? 1 : 0);
+  const seen = new Set<string>();
+  return [...plants]
+    .sort((a, b) => soldOut(a) - soldOut(b) || parsePrice(a.price) - parsePrice(b.price))
+    .filter((p) => {
+      const key = p.url || p.name;
+      return seen.has(key) ? false : (seen.add(key), true);
+    })
+    .slice(0, MAX_OFFERS)
+    .map((p) => ({
+      name: p.name,
+      price: p.price,
+      ...(p.url ? { url: p.url } : {}),
+      inStock: p.availability !== 'out_of_stock',
+    }));
 }
 
 /* Scrape one nursery for the plant and fold the scraper output into the
@@ -537,6 +606,9 @@ async function scrapeOne(
       const cached = await deps.readShopCache(host, cacheTerm);
       if (cached) {
         noteSite(host, 'cached');
+        clearTimeout(timer);
+        /* Settled, as far as the fan-out's quorum is concerned - see createPacer. */
+        pacer?.finished();
         return { ...base, ...cached.results, fromCache: true };
       }
     } catch {
@@ -663,6 +735,7 @@ async function scrapeOne(
         productUrl: best.url,
         productName: best.name,
         matchCount: plants.length,
+        offers: offersFrom(plants),
       };
     }
     /*
@@ -840,10 +913,21 @@ export async function runNurserySearch(
   const natUrls = deps.nationalUrls.filter((u) => !localHosts.has(hostOf(u)));
 
   /*
-   * One clock for the whole fan-out, so a shop that has stopped answering costs
+   * One clock for the local fan-out, so a shop that has stopped answering costs
    * the search a grace period rather than the full per-site ceiling.
+   *
+   * It counts only the shops that are actually READ. A contact-only place
+   * returns before it ever reaches the clock, and counting it made a quorum the
+   * fan-out could never reach: ten phone-only nurseries beside thirteen shops
+   * and four shippers asked for eighteen finishes out of seventeen possible, so
+   * the grace period never started and every search waited out the full
+   * ceiling on its slowest shop.
+   *
+   * The shippers are not on it at all. They ARE the Deliver tab - four rows, and
+   * a user who opens it wants all four - so one that is slow to answer is waited
+   * for, within its own ceiling, rather than cut off with the local tail.
    */
-  const pacer = createPacer(discovered.length + natUrls.length, {
+  const pacer = createPacer(discovered.filter((n) => n.website).length, {
     graceMs: deps.tailGraceMs,
   });
 
@@ -869,14 +953,75 @@ export async function runNurserySearch(
             input,
             deps,
             true,
-            searchTerm,
-            pacer
+            searchTerm
           ).then((r) => logShopOutcome(host, true, startedAt, r));
         })
       ),
     ]);
   } finally {
     pacer.cancel();
+  }
+
+  /*
+   * 3. Too few shops nearby could price it: look further out, a ring at a time.
+   *
+   * The Pick Up tab exists to compare prices, and two rows is not a comparison.
+   * The radius the user chose is where we START - it bounds the first answer,
+   * not the only one - so when fewer than MIN_PRICED_PICKUP local shops showed a
+   * price, the next ring is asked for the shops it adds, and the ones that price
+   * the plant join the list with their real distance on the card. Shops out
+   * there that do NOT have it are left out: a row twenty kilometres away saying
+   * "not found" is not something anyone drives to.
+   */
+  const known = new Set(
+    [...discovered.map((n) => n.website), ...deps.nationalUrls].filter(Boolean).map(hostOf)
+  );
+  /* A shop in a wider ring gets a shorter leash than the first fan-out: it is a
+   * bonus, and a dead one out there must not hold the search to the ceiling. */
+  const ringDeps: PipelineDeps = {
+    ...deps,
+    siteBudgetMs: Math.min(deps.siteBudgetMs ?? SITE_BUDGET_MS, RING_SITE_BUDGET_MS),
+    /* Storefront JSON only: a ring shop is kept only if it prices the plant,
+     * and the shops that price reliably without a model are the JSON ones. A
+     * page scrape out here spends the provider window the first fan-out and
+     * the shippers' rescues depend on. */
+    search: (website, query, host) => deps.search(website, query, host, { jsonOnly: true }),
+  };
+  for (
+    let ring = nextRing(radiusM);
+    ring !== null && deps.widen !== false && local.filter(showsPrice).length < MIN_PRICED_PICKUP;
+    ring = nextRing(ring)
+  ) {
+    let outer: DiscoveredNursery[] = [];
+    try {
+      outer = (await deps.discover(input.lat, input.lng, ring))
+        .filter((n) => n.website && !known.has(hostOf(n.website)))
+        .sort(
+          (a, b) =>
+            haversineKm(input.lat, input.lng, a.lat, a.lng) -
+            haversineKm(input.lat, input.lng, b.lat, b.lng)
+        )
+        .slice(0, WIDEN_MAX_SITES);
+    } catch {
+      /* the wider ring is a bonus; failing to find it costs nothing we had */
+    }
+    for (const n of outer) known.add(hostOf(n.website));
+    if (outer.length === 0) continue;
+
+    const ringPacer = createPacer(outer.length, { graceMs: deps.tailGraceMs });
+    try {
+      const further = await Promise.all(
+        outer.map((n) => {
+          const startedAt = Date.now();
+          return scrapeOne(n, input, ringDeps, false, searchTerm, ringPacer).then((r) =>
+            logShopOutcome(hostOf(n.website), false, startedAt, r)
+          );
+        })
+      );
+      local = [...local, ...further.filter(showsPrice)];
+    } finally {
+      ringPacer.cancel();
+    }
   }
 
   // 4. Dedup by id, sort: in-stock first, then by distance.
@@ -965,7 +1110,14 @@ async function verifyPrices(
      * do not trust the figure we read, and showing a price we would be
      * embarrassed by is worse than sending the user to the product page to look.
      */
-    out[i] = { ...out[i], plantPrice: '-', priceSuspect: true, priceNote: v.reason };
+    const flagged = out[i].plantPrice;
+    out[i] = {
+      ...out[i],
+      plantPrice: '-',
+      priceSuspect: true,
+      priceNote: v.reason,
+      offers: out[i].offers?.filter((o) => o.price !== flagged),
+    };
   });
   return out;
 }

@@ -125,6 +125,13 @@ export interface Treatment {
   productLabel?: string;
 }
 
+export interface NurseryOffer {
+  name: string;
+  price: string; // '₪XX'
+  url?: string;
+  inStock: boolean;
+}
+
 export interface Nursery {
   id: string;
   name: string;
@@ -140,7 +147,9 @@ export interface Nursery {
   availabilityNote?: string;
   /*
    * found     - a real listing. Shown.
-   * not_sold  - we read their catalogue, the plant is not in it. HIDDEN.
+   * not_sold  - we read their catalogue, the plant is not in it. Hidden from
+   *             Pick Up; a shipper is still listed on Deliver Today, which is
+   *             four shops the user wants to see checked.
    * not_found - we could not read the shop. Shown as "didn't find the product".
    */
   outcome?: 'found' | 'not_sold' | 'not_found';
@@ -149,6 +158,9 @@ export interface Nursery {
   /* Which listing plantPrice belongs to, and how many matched. */
   productName?: string;
   matchCount?: number;
+  /* The matching listings themselves - pot sizes, cultivars - cheapest in
+   * stock first. offers[0] is the one plantPrice quotes. */
+  offers?: NurseryOffer[];
   /* A final LLM pass did not trust this price, so plantPrice is '-'. */
   priceSuspect?: boolean;
   priceNote?: string;

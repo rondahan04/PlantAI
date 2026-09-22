@@ -39,7 +39,7 @@ function makeDeps(over: Partial<PipelineDeps> = {}): PipelineDeps {
     extract: async () => ({
       plants: [{ name: 'Monstera', price: '₪175', availability: 'in_stock' }],
       report: { is_valid: true, confidence_score: 90, feedback: '', corrected_output: [] },
-      engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+      engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
       funnel: funnel(),
     }),
     scrapeHome: async () => 'homepage text',
@@ -238,7 +238,7 @@ test('in-stock nurseries sort before estimate-only ones', async () => {
           : {
               plants: [{ name: 'Monstera', price: '₪150', availability: 'in_stock' }],
               report: { is_valid: true, confidence_score: 90, feedback: '', corrected_output: [] },
-              engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+              engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
               funnel: funnel(),
             };
       },
@@ -413,7 +413,7 @@ test('the quoted listing carries its own product link and match count', async ()
           { name: 'cheap', price: '₪39', availability: 'in_stock', url: 'https://x.co.il/products/cheap' },
         ],
         report: { is_valid: true, confidence_score: 100, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
         funnel: funnel(),
       }),
     })
@@ -437,7 +437,7 @@ test('a price the final check rejects is hidden, but the nursery stays', async (
       extract: async () => ({
         plants: [{ name: 'Monstera', price: '₪0521234567', availability: 'in_stock' }],
         report: { is_valid: true, confidence_score: 100, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
         funnel: funnel(),
       }),
       checkPrices: async () => [{ plausible: false, reason: 'that is a phone number' }],
@@ -537,7 +537,7 @@ test('onSiteRead reports the stage the site actually reached', async () => {
       extract: async () => ({
         plants: [],
         report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
         // The distinction that matters: we never read this shop's catalogue.
         funnel: funnel({ stage: 'no_excerpt' }),
       }),
@@ -590,7 +590,7 @@ test('a searched shop whose page carries no prices is not called not_sold', asyn
       extract: async () => ({
         plants: [],
         report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna' as const, verifier: 'gpt-5.6-luna' as const },
+        engines: { extractor: 'gpt-5.6-terra' as const, verifier: 'gpt-5.6-terra' as const },
         /* Names on the page, but nothing priced. */
         funnel: funnel({ stage: 'no_match', prices: 0 }),
       }),
@@ -613,7 +613,7 @@ test('a searched shop whose page prices its products still reports not_sold', as
       extract: async () => ({
         plants: [],
         report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna' as const, verifier: 'gpt-5.6-luna' as const },
+        engines: { extractor: 'gpt-5.6-terra' as const, verifier: 'gpt-5.6-terra' as const },
         funnel: funnel({ stage: 'no_match', prices: 12 }),
       }),
     })
@@ -637,7 +637,7 @@ test('a structured catalogue read is priced evidence even with no page markdown'
       extract: async () => ({
         plants: [],
         report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna' as const, verifier: 'gpt-5.6-luna' as const },
+        engines: { extractor: 'gpt-5.6-terra' as const, verifier: 'gpt-5.6-terra' as const },
         funnel: funnel({ stage: 'no_match', prices: 0 }),
       }),
     })
@@ -656,7 +656,7 @@ test('a shop that answered nothing is no_search, even when the stage looks reada
       extract: async () => ({
         plants: [],
         report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna' as const, verifier: 'gpt-5.6-luna' as const },
+        engines: { extractor: 'gpt-5.6-terra' as const, verifier: 'gpt-5.6-terra' as const },
         funnel: funnel({ stage: 'no_match' }),
       }),
       onSiteRead: (host, stage) => seen.push([host, stage]),
@@ -676,7 +676,7 @@ test('a shop that answered and lacks the plant stays no_match', async () => {
       extract: async () => ({
         plants: [],
         report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna' as const, verifier: 'gpt-5.6-luna' as const },
+        engines: { extractor: 'gpt-5.6-terra' as const, verifier: 'gpt-5.6-terra' as const },
         funnel: funnel({ stage: 'no_match' }),
       }),
       onSiteRead: (host, stage) => seen.push([host, stage]),
@@ -732,7 +732,7 @@ test('a listing with no stock statement keeps the shop, and does not claim it is
       extract: async () => ({
         plants: [{ name: 'Monstera deliciosa', price: '₪175', availability: 'unknown' }],
         report: { is_valid: true, confidence_score: 92, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
         funnel: funnel({ stage: 'ok', extracted: 1, kept: 1 }),
       }),
     })
@@ -762,7 +762,7 @@ test('an out-of-stock listing is not laundered into "unknown"', async () => {
       extract: async () => ({
         plants: [{ name: 'Monstera', price: '₪175', availability: 'out_of_stock' }],
         report: { is_valid: true, confidence_score: 90, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
         funnel: funnel({ stage: 'ok', extracted: 1, kept: 1 }),
       }),
     })
@@ -851,7 +851,7 @@ test('a price on a listing with no stock statement is still checked', async () =
       extract: async () => ({
         plants: [{ name: 'Monstera', price: '₪350', availability: 'unknown' }],
         report: { is_valid: true, confidence_score: 100, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
         funnel: funnel(),
       }),
       checkPrices: async (_q, candidates) => {
@@ -913,7 +913,7 @@ test('a search mixing published and read prices checks only the read ones', asyn
             : { name: 'Monstera', price: '₪350', availability: 'in_stock' },
         ],
         report: { is_valid: true, confidence_score: 100, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
         funnel: funnel(),
       }),
       checkPrices: async (_q, candidates) => {
@@ -1100,7 +1100,7 @@ test('what is cached is the verified row, not the one before the price check', a
       extract: async () => ({
         plants: [{ name: 'Monstera', price: '₪0521234567', availability: 'in_stock' }],
         report: { is_valid: true, confidence_score: 100, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
         funnel: funnel(),
       }),
       checkPrices: async () => [{ plausible: false, reason: 'that is a phone number' }],
@@ -1111,4 +1111,314 @@ test('what is cached is the verified row, not the one before the price check', a
   );
   await new Promise((r) => setImmediate(r));
   assert.equal(stored?.plantPrice, '-');
+});
+
+// --- the Deliver tab waits for every shipper ----------------------------------
+
+/*
+ * The shippers ARE the Deliver tab. Cutting one off with the local tail left a
+ * four-row tab at three, and "couldn't check this shop" on a shipper that was
+ * merely slower than the Pick Up fan-out - its rescue path goes through a
+ * rate-limited reader, which is exactly the shop most likely to be slow.
+ */
+test('a slow shipper is waited for; a slow local shop still gets only the grace period', async () => {
+  const after = (ms: number, value: any) => new Promise((resolve) => setTimeout(() => resolve(value), ms));
+  const page = (website: string) => ({ md: '# מונסטרה\n₪175', platform: 'woo', picked: `${website}?s=x` });
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      siteBudgetMs: 60_000,
+      tailGraceMs: 30,
+      widen: false,
+      nationalUrls: ['https://slow-shipper.example/'],
+      discover: async () => [
+        { name: 'A', website: 'https://a.example/', lat: 32.1, lng: 34.8, address: '' },
+        { name: 'B', website: 'https://b.example/', lat: 32.2, lng: 34.9, address: '' },
+        { name: 'C', website: 'https://c.example/', lat: 32.2, lng: 34.9, address: '' },
+        { name: 'Slow', website: 'https://slow-local.example/', lat: 32.3, lng: 34.9, address: '' },
+      ],
+      search: async (website) =>
+        (website.includes('slow') ? await after(200, page(website)) : page(website)) as any,
+    })
+  );
+  const shipper = out.find((n) => n.id === 'slow-shipper.example');
+  assert.equal(shipper?.outcome, 'found', 'the shipper was waited for');
+  assert.equal(shipper?.plantPrice, '₪175');
+  const local = out.find((n) => n.id === 'slow-local.example');
+  assert.equal(local?.outcome, 'not_found', 'the local straggler was cut at the grace period');
+});
+
+/*
+ * Ten phone-only nurseries beside a handful of shops: counting the phone-only
+ * places made the quorum unreachable, so the grace period never started and a
+ * dead shop held the whole search to the ceiling.
+ */
+test('contact-only places do not hold the grace period hostage', async () => {
+  const never = new Promise<never>(() => {});
+  const phoneOnly = Array.from({ length: 10 }, (_, i) => ({
+    name: `Phone ${i}`,
+    website: '',
+    lat: 32.1,
+    lng: 34.8,
+    address: '',
+  }));
+  const started = Date.now();
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      siteBudgetMs: 60_000,
+      tailGraceMs: 30,
+      widen: false,
+      nationalUrls: [],
+      discover: async () => [
+        ...phoneOnly,
+        { name: 'A', website: 'https://a.example/', lat: 32.1, lng: 34.8, address: '' },
+        { name: 'B', website: 'https://b.example/', lat: 32.2, lng: 34.9, address: '' },
+        { name: 'Dead', website: 'https://dead.example/', lat: 32.3, lng: 34.9, address: '' },
+      ],
+      search: async (website) =>
+        website.includes('dead')
+          ? ((await never) as never)
+          : { md: '# מונסטרה\n₪175', platform: 'woo', picked: `${website}?s=x` },
+    })
+  );
+  assert.ok(Date.now() - started < 5000, 'the grace period fired');
+  assert.equal(out.find((n) => n.id === 'dead.example')?.outcome, 'not_found');
+});
+
+// --- every price a shop has for it --------------------------------------------
+
+test('a found shop carries its listings, in stock and cheapest first', async () => {
+  const out = await runNurserySearch(
+    { plantName: 'מונסטרה', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      widen: false,
+      extract: async () => ({
+        plants: [
+          { name: 'מונסטרה ע׳ 17', price: '₪79', availability: 'in_stock', url: 'https://gh.example/p/17' },
+          { name: 'מונסטרה ע׳ 12', price: '₪39', availability: 'in_stock', url: 'https://gh.example/p/12' },
+          { name: 'מונסטרה ע׳ 9', price: '₪29', availability: 'out_of_stock', url: 'https://gh.example/p/9' },
+          { name: 'מונסטרה ע׳ 12', price: '₪39', availability: 'in_stock', url: 'https://gh.example/p/12' },
+        ],
+        report: { is_valid: true, confidence_score: 90, feedback: '', corrected_output: [] },
+        engines: { extractor: 'none', verifier: 'none' },
+        funnel: funnel(),
+      }),
+    })
+  );
+  const n = out[0];
+  assert.equal(n.plantPrice, '₪39', 'the quote is the cheapest IN STOCK');
+  assert.deepEqual(
+    n.offers?.map((o) => [o.price, o.inStock]),
+    [
+      ['₪39', true],
+      ['₪79', true],
+      ['₪29', false],
+    ]
+  );
+  assert.equal(n.offers?.[0].url, 'https://gh.example/p/12');
+});
+
+test('a listing count past the cap still shows only the first few', async () => {
+  const many = Array.from({ length: 12 }, (_, i) => ({
+    name: `מונסטרה ${i}`,
+    price: `₪${100 + i}`,
+    availability: 'in_stock' as const,
+    url: `https://gh.example/p/${i}`,
+  }));
+  const out = await runNurserySearch(
+    { plantName: 'מונסטרה', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      widen: false,
+      extract: async () => ({
+        plants: many,
+        report: { is_valid: true, confidence_score: 90, feedback: '', corrected_output: [] },
+        engines: { extractor: 'none', verifier: 'none' },
+        funnel: funnel(),
+      }),
+    })
+  );
+  assert.equal(out[0].offers?.length, 5);
+  assert.equal(out[0].matchCount, 12);
+});
+
+test('a price the final check refused leaves the offers too', async () => {
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      widen: false,
+      checkPrices: async (_q, candidates) => candidates.map(() => ({ plausible: false, reason: 'phone number' })),
+    })
+  );
+  assert.equal(out[0].priceSuspect, true);
+  assert.deepEqual(out[0].offers, []);
+});
+
+// --- at least three prices to compare -----------------------------------------
+
+/*
+ * Two priced rows is not a comparison. The radius the user chose is where the
+ * search starts; when it comes back short, the next ring is read for the shops
+ * it adds, and the ones that price the plant join the list.
+ */
+test('too few priced shops nearby: the next ring is read, and its priced shops join', async () => {
+  const radii: number[] = [];
+  const inner = [
+    { name: 'A', website: 'https://a.example/', lat: 32.09, lng: 34.78, address: '' },
+    { name: 'Empty', website: 'https://empty.example/', lat: 32.09, lng: 34.78, address: '' },
+  ];
+  const outer = [
+    ...inner,
+    { name: 'Far priced', website: 'https://far.example/', lat: 32.2, lng: 34.9, address: '' },
+    { name: 'Far empty', website: 'https://far-empty.example/', lat: 32.2, lng: 34.9, address: '' },
+    { name: 'Farther priced', website: 'https://farther.example/', lat: 32.25, lng: 34.95, address: '' },
+  ];
+  const searched: string[] = [];
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818, radiusM: 10_000 },
+    makeDeps({
+      nationalUrls: [],
+      discover: async (_lat, _lng, radiusM) => {
+        radii.push(radiusM);
+        return radiusM > 10_000 ? outer : inner;
+      },
+      search: async (website) => {
+        searched.push(website);
+        return { md: 'x', platform: 'woo', picked: website };
+      },
+      extract: async ({ site }) => ({
+        plants: site.includes('empty') ? [] : [{ name: 'Monstera', price: '₪90', availability: 'in_stock' }],
+        report: { is_valid: true, confidence_score: 90, feedback: '', corrected_output: [] },
+        engines: { extractor: 'none', verifier: 'none' },
+        funnel: funnel({ stage: site.includes('empty') ? 'no_match' : 'ok', prices: 10 }),
+      }),
+    })
+  );
+  assert.deepEqual(radii, [10_000, 25_000]);
+  const ids = out.map((n) => n.id).sort();
+  assert.deepEqual(ids, ['a.example', 'empty.example', 'far.example', 'farther.example']);
+  assert.equal(searched.filter((w) => w.includes('//a.example')).length, 1, 'a shop already read is not read again');
+});
+
+test('enough priced shops nearby: nothing further is read', async () => {
+  const radii: number[] = [];
+  await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818, radiusM: 10_000 },
+    makeDeps({
+      nationalUrls: [],
+      discover: async (_lat, _lng, radiusM) => {
+        radii.push(radiusM);
+        return ['a', 'b', 'c'].map((x) => ({
+          name: x,
+          website: `https://${x}.example/`,
+          lat: 32.09,
+          lng: 34.78,
+          address: '',
+        }));
+      },
+    })
+  );
+  assert.deepEqual(radii, [10_000]);
+});
+
+test('at the widest ring there is nowhere further to look', async () => {
+  const radii: number[] = [];
+  await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818, radiusM: 50_000 },
+    makeDeps({
+      nationalUrls: [],
+      discover: async (_lat, _lng, radiusM) => {
+        radii.push(radiusM);
+        return [];
+      },
+      readFallbackUrls: () => [],
+    })
+  );
+  assert.deepEqual(radii, [50_000]);
+});
+
+test('a ring that adds no prices is followed by the next one, up to the widest', async () => {
+  const radii: number[] = [];
+  const at = (x: string, lat: number) => ({ name: x, website: `https://${x}.example/`, lat, lng: 34.78, address: '' });
+  const out = await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818, radiusM: 10_000 },
+    makeDeps({
+      nationalUrls: [],
+      discover: async (_lat, _lng, radiusM) => {
+        radii.push(radiusM);
+        if (radiusM === 10_000) return [at('near', 32.09)];
+        if (radiusM === 25_000) return [at('near', 32.09), at('mid-empty', 32.2)];
+        return [at('near', 32.09), at('mid-empty', 32.2), at('far-a', 32.4), at('far-b', 32.45)];
+      },
+      extract: async ({ site }) => ({
+        plants: site.includes('empty') ? [] : [{ name: 'Monstera', price: '₪90', availability: 'in_stock' }],
+        report: { is_valid: true, confidence_score: 90, feedback: '', corrected_output: [] },
+        engines: { extractor: 'none', verifier: 'none' },
+        funnel: funnel({ stage: site.includes('empty') ? 'no_match' : 'ok', prices: 10 }),
+      }),
+    })
+  );
+  assert.deepEqual(radii, [10_000, 25_000, 50_000]);
+  assert.deepEqual(out.map((n) => n.id).sort(), ['far-a.example', 'far-b.example', 'near.example']);
+});
+
+/*
+ * A nursery website with no shop on it is a reading, like "not stocked", and
+ * the costliest one to repeat - an unnamed platform pays a full probe and a
+ * rendered read every search, from the same ten-a-minute window a shipper's
+ * rescue needs.
+ */
+test('"this nursery does not sell online" is cached; "we could not read it" is not', async () => {
+  const written: { host: string; kind?: string }[] = [];
+  await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818 },
+    makeDeps({
+      widen: false,
+      nationalUrls: [],
+      discover: async () => [
+        { name: 'Brochure', website: 'https://brochure.example/', lat: 32.1, lng: 34.8, address: '' },
+        { name: 'Down', website: 'https://down.example/', lat: 32.2, lng: 34.9, address: '' },
+      ],
+      search: async (website) => {
+        if (website.includes('down')) throw new Error('ECONNREFUSED');
+        return { md: 'about us, call us', platform: 'unknown', picked: website, storefront: false };
+      },
+      extract: async () => ({
+        plants: [],
+        report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
+        engines: { extractor: 'none', verifier: 'none' },
+        funnel: funnel({ stage: 'no_match', prices: 0 }),
+      }),
+      writeShopCache: async (host, _q, row) => {
+        written.push({ host, kind: row.availability?.kind });
+      },
+    })
+  );
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(written, [{ host: 'brochure.example', kind: 'no_catalogue' }]);
+});
+
+test('a shop in a wider ring is asked for its storefront JSON only', async () => {
+  const asked: { website: string; jsonOnly?: boolean }[] = [];
+  await runNurserySearch(
+    { plantName: 'monstera', lat: 32.0853, lng: 34.7818, radiusM: 10_000 },
+    makeDeps({
+      nationalUrls: [],
+      discover: async (_lat, _lng, radiusM) =>
+        radiusM === 10_000
+          ? [{ name: 'Near', website: 'https://near.example/', lat: 32.09, lng: 34.78, address: '' }]
+          : [{ name: 'Far', website: 'https://far.example/', lat: 32.3, lng: 34.9, address: '' }],
+      search: async (website, _q, _h, opts) => {
+        asked.push({ website, jsonOnly: opts?.jsonOnly });
+        return { md: 'x', platform: 'woo', picked: website };
+      },
+    })
+  );
+  assert.deepEqual(
+    asked.map((a) => [a.website, a.jsonOnly === true]),
+    [
+      ['https://near.example/', false],
+      ['https://far.example/', true],
+    ]
+  );
 });

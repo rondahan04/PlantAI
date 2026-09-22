@@ -85,6 +85,7 @@ export const en = {
     notFound: "Didn't find the product",
     couldNotCheck: "Couldn't check this shop",
     noOnlineShop: 'No online shop - call to check',
+    notSold: 'Not in their online shop right now',
     estimate: (bandLabel: string, confidence: number) => `${bandLabel} · ${confidence}%`,
     /* We found the product and its price; the page never stated stock. Says
      * what we know first - "Listed" is the evidence - and is honest about the
@@ -489,6 +490,10 @@ export const en = {
     order: 'Order',
     unavailable: 'Unavailable',
     visitStore: 'Visit Store',
+    /* The listings under a shop's name: the pot sizes and cultivars it matched,
+     * and a link standing for the rest. */
+    moreListings: (n: number) => `+${n} more at this shop`,
+    soldOutPrice: (price: string) => `${price} · sold out`,
     noContact: 'No website or phone number available for this nursery.',
     pillA11y: (text: string, detail: string) => `${text}. ${detail}`,
     pillHint: 'Shows why',

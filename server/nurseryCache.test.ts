@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createNurseryCache, searchKey, DEFAULT_TTL_MS } from './nurseryCache.ts';
+import { createNurseryCache, searchKey, DEFAULT_TTL_MS, CACHE_VERSION } from './nurseryCache.ts';
 
 const PARTS = { query: 'Confidor', lat: 32.08531, lng: 34.78177, radiusM: 10000 };
 
@@ -174,4 +174,13 @@ test('a failed write is an error and never counts as a store', async () => {
   await c.put(PARTS, [{ id: 'a' }]);
   assert.equal(c.stats().stores, 0);
   assert.equal(c.stats().errors, 1);
+});
+
+/*
+ * A deploy that changes what a search answers must not serve what the last one
+ * stored - the week-old row would show a shop as unreadable after the fix that
+ * reads it. The version is in the key, so an old row is never looked up.
+ */
+test('the cache key carries the scraper version', () => {
+  assert.match(searchKey(PARTS), new RegExp(`^${CACHE_VERSION}\\|`));
 });

@@ -113,7 +113,7 @@ test("the free-shipping banner is not a catalogue price, so the page is still fo
 const okExtract = async () => ({
   plants: [{ name: 'מונסטרה', price: '49 ₪', availability: 'unknown' as const }],
   report: { is_valid: true, confidence_score: 90, feedback: '', corrected_output: [] },
-  engines: { extractor: 'gpt-5.6-luna' as const, verifier: 'none' as const },
+  engines: { extractor: 'gpt-5.6-terra' as const, verifier: 'none' as const },
   funnel: { stage: 'ok' as const, mdChars: 0, excerptChars: 0, extracted: 1, kept: 1, prices: 1 },
 });
 
@@ -181,7 +181,7 @@ test('a product page the extractor cannot price yields no row rather than a bare
     extract: async () => ({
       plants: [],
       report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
-      engines: { extractor: 'gpt-5.6-luna' as const, verifier: 'none' as const },
+      engines: { extractor: 'gpt-5.6-terra' as const, verifier: 'none' as const },
       funnel: { stage: 'no_match' as const, mdChars: 0, excerptChars: 0, extracted: 0, kept: 0, prices: 0 },
     }),
   });
@@ -225,7 +225,7 @@ test('two variants both priced come back cheapest-comparable, not merged', async
         { name: 'מונסטרה', price: prices[opts.url ?? ''] ?? '0 ₪', availability: 'unknown' as const },
       ],
       report: { is_valid: true, confidence_score: 90, feedback: '', corrected_output: [] },
-      engines: { extractor: 'gpt-5.6-luna' as const, verifier: 'none' as const },
+      engines: { extractor: 'gpt-5.6-terra' as const, verifier: 'none' as const },
       funnel: { stage: 'ok' as const, mdChars: 0, excerptChars: 0, extracted: 1, kept: 1, prices: 1 },
     }),
   });

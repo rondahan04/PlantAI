@@ -323,7 +323,7 @@ export function openAiCarePlan(apiKey: string): CarePlanDeps {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({
-          model: 'gpt-5.6-luna',
+          model: 'gpt-5.6-terra',
           messages: [{ role: 'user', content: prompt }],
           response_format: { type: 'json_object' },
           max_completion_tokens: 6000,

@@ -6,6 +6,9 @@ import {
   isWorthShowing,
   showsPrice,
   byPickupOrder,
+  byDeliveryOrder,
+  visibleOffers,
+  VISIBLE_OFFERS,
   priceOf,
   LIKELY_AT_OR_ABOVE,
   MAYBE_AT_OR_ABOVE,
@@ -241,4 +244,51 @@ test('a listed plant with no stock statement reads as listed, not as in stock', 
 test('a stock-unknown shop is still worth showing', () => {
   // It was being removed from the results entirely. That was the bug.
   assert.equal(isWorthShowing({ outcome: 'found' }), true);
+});
+
+// --- Deliver Today: every shipper, and every price it has ---------------------
+
+/*
+ * Deliver Today is four shops. One that was searched and does not carry the
+ * plant used to vanish from it, which read as a search that broke - so it stays,
+ * and says what we know.
+ */
+test('a shipper that does not carry the plant says so, instead of vanishing', () => {
+  const badge = availabilityBadge(
+    base({
+      shipsToHome: true,
+      outcome: 'not_sold',
+      availability: { kind: 'estimate', detail: 'The shop was searched and this plant was not listed.' },
+    })
+  );
+  assert.equal(badge.text, EN_AVAILABILITY_COPY.notSold);
+  assert.equal(badge.tone, 'unknown');
+  assert.equal(badge.hasDetail, true);
+});
+
+test('Deliver Today order: priced cheapest first, then unpriced, then not carried', () => {
+  const rows = [
+    base({ name: 'not carried', outcome: 'not_sold' }),
+    base({ name: 'unreadable', outcome: 'not_found' }),
+    base({ name: 'dear', hasPlant: true, plantPrice: '₪99.90', outcome: 'found' }),
+    base({ name: 'cheap', hasPlant: true, plantPrice: '₪39', outcome: 'found' }),
+    base({ name: 'suspect', hasPlant: true, plantPrice: '-', priceSuspect: true, outcome: 'found' }),
+  ];
+  assert.deepEqual(
+    [...rows].sort(byDeliveryOrder).map((n) => n.name),
+    ['cheap', 'dear', 'suspect', 'unreadable', 'not carried']
+  );
+});
+
+test('a card draws its first few listings and counts the rest', () => {
+  const offers = Array.from({ length: 5 }, (_, i) => ({ name: `מונסטרה ${i}`, price: `₪${40 + i}`, inStock: true }));
+  const { shown, more } = visibleOffers(base({ offers, matchCount: 28 }));
+  assert.equal(shown.length, VISIBLE_OFFERS);
+  assert.equal(more, 28 - VISIBLE_OFFERS);
+});
+
+test('a card from an older server, with no listings, draws none', () => {
+  const { shown, more } = visibleOffers(base({ matchCount: 3 }));
+  assert.equal(shown.length, 0);
+  assert.equal(more, 3);
 });
