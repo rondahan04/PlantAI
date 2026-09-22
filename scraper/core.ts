@@ -1594,7 +1594,7 @@ const NAME_LIKE_RE = /[A-Za-z֐-׿]{2,}/;
 
 /* Call the OpenAI model in JSON mode and return the parsed object. Throws on
  * non-2xx or unparseable content so callers can decide how to degrade. */
-export const OPENAI_MODEL = 'gpt-5.6-luna';
+export const OPENAI_MODEL = 'gpt-5.6-terra';
 
 /*
  * `max_completion_tokens` is a budget for reasoning AND the answer, and the
@@ -3065,7 +3065,7 @@ The Hebrew name must start with the genus.
 Plant name: ${query}`;
 
   try {
-    // 1500: gpt-5.6-luna spends completion tokens on hidden reasoning first, so
+    // 1500: gpt-5.6-terra spends completion tokens on hidden reasoning first, so
     // a tight cap returns empty content and the search silently runs in English
     // against Hebrew catalogues, which matches nothing.
     const out = await classify(prompt, openaiKey, 1500);
@@ -3122,7 +3122,7 @@ Return ONLY JSON: { "confidence": <0-100>, "reasoning": "<short, one sentence>" 
 Scale: 0 = clearly does not sell this type; 50 = general nursery, could plausibly have it; 85+ = the text strongly implies or names it.
 Website text:\n${excerpt}`;
   try {
-    // 1500: gpt-5.6-luna spends completion tokens on hidden reasoning first, so a
+    // 1500: gpt-5.6-terra spends completion tokens on hidden reasoning first, so a
     // tight cap (200/500) returns empty content → JSON.parse fails → false
     // "unavailable". 1500 reliably clears reasoning + the tiny JSON output.
     const out = await classify(prompt, openaiKey, 1500);

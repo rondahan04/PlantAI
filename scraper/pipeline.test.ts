@@ -39,7 +39,7 @@ function makeDeps(over: Partial<PipelineDeps> = {}): PipelineDeps {
     extract: async () => ({
       plants: [{ name: 'Monstera', price: '₪175', availability: 'in_stock' }],
       report: { is_valid: true, confidence_score: 90, feedback: '', corrected_output: [] },
-      engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+      engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
       funnel: funnel(),
     }),
     scrapeHome: async () => 'homepage text',
@@ -238,7 +238,7 @@ test('in-stock nurseries sort before estimate-only ones', async () => {
           : {
               plants: [{ name: 'Monstera', price: '₪150', availability: 'in_stock' }],
               report: { is_valid: true, confidence_score: 90, feedback: '', corrected_output: [] },
-              engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+              engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
               funnel: funnel(),
             };
       },
@@ -413,7 +413,7 @@ test('the quoted listing carries its own product link and match count', async ()
           { name: 'cheap', price: '₪39', availability: 'in_stock', url: 'https://x.co.il/products/cheap' },
         ],
         report: { is_valid: true, confidence_score: 100, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
         funnel: funnel(),
       }),
     })
@@ -437,7 +437,7 @@ test('a price the final check rejects is hidden, but the nursery stays', async (
       extract: async () => ({
         plants: [{ name: 'Monstera', price: '₪0521234567', availability: 'in_stock' }],
         report: { is_valid: true, confidence_score: 100, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
         funnel: funnel(),
       }),
       checkPrices: async () => [{ plausible: false, reason: 'that is a phone number' }],
@@ -537,7 +537,7 @@ test('onSiteRead reports the stage the site actually reached', async () => {
       extract: async () => ({
         plants: [],
         report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
         // The distinction that matters: we never read this shop's catalogue.
         funnel: funnel({ stage: 'no_excerpt' }),
       }),
@@ -590,7 +590,7 @@ test('a searched shop whose page carries no prices is not called not_sold', asyn
       extract: async () => ({
         plants: [],
         report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna' as const, verifier: 'gpt-5.6-luna' as const },
+        engines: { extractor: 'gpt-5.6-terra' as const, verifier: 'gpt-5.6-terra' as const },
         /* Names on the page, but nothing priced. */
         funnel: funnel({ stage: 'no_match', prices: 0 }),
       }),
@@ -613,7 +613,7 @@ test('a searched shop whose page prices its products still reports not_sold', as
       extract: async () => ({
         plants: [],
         report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna' as const, verifier: 'gpt-5.6-luna' as const },
+        engines: { extractor: 'gpt-5.6-terra' as const, verifier: 'gpt-5.6-terra' as const },
         funnel: funnel({ stage: 'no_match', prices: 12 }),
       }),
     })
@@ -637,7 +637,7 @@ test('a structured catalogue read is priced evidence even with no page markdown'
       extract: async () => ({
         plants: [],
         report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna' as const, verifier: 'gpt-5.6-luna' as const },
+        engines: { extractor: 'gpt-5.6-terra' as const, verifier: 'gpt-5.6-terra' as const },
         funnel: funnel({ stage: 'no_match', prices: 0 }),
       }),
     })
@@ -656,7 +656,7 @@ test('a shop that answered nothing is no_search, even when the stage looks reada
       extract: async () => ({
         plants: [],
         report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna' as const, verifier: 'gpt-5.6-luna' as const },
+        engines: { extractor: 'gpt-5.6-terra' as const, verifier: 'gpt-5.6-terra' as const },
         funnel: funnel({ stage: 'no_match' }),
       }),
       onSiteRead: (host, stage) => seen.push([host, stage]),
@@ -676,7 +676,7 @@ test('a shop that answered and lacks the plant stays no_match', async () => {
       extract: async () => ({
         plants: [],
         report: { is_valid: true, confidence_score: 0, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna' as const, verifier: 'gpt-5.6-luna' as const },
+        engines: { extractor: 'gpt-5.6-terra' as const, verifier: 'gpt-5.6-terra' as const },
         funnel: funnel({ stage: 'no_match' }),
       }),
       onSiteRead: (host, stage) => seen.push([host, stage]),
@@ -732,7 +732,7 @@ test('a listing with no stock statement keeps the shop, and does not claim it is
       extract: async () => ({
         plants: [{ name: 'Monstera deliciosa', price: '₪175', availability: 'unknown' }],
         report: { is_valid: true, confidence_score: 92, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
         funnel: funnel({ stage: 'ok', extracted: 1, kept: 1 }),
       }),
     })
@@ -762,7 +762,7 @@ test('an out-of-stock listing is not laundered into "unknown"', async () => {
       extract: async () => ({
         plants: [{ name: 'Monstera', price: '₪175', availability: 'out_of_stock' }],
         report: { is_valid: true, confidence_score: 90, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
         funnel: funnel({ stage: 'ok', extracted: 1, kept: 1 }),
       }),
     })
@@ -851,7 +851,7 @@ test('a price on a listing with no stock statement is still checked', async () =
       extract: async () => ({
         plants: [{ name: 'Monstera', price: '₪350', availability: 'unknown' }],
         report: { is_valid: true, confidence_score: 100, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
         funnel: funnel(),
       }),
       checkPrices: async (_q, candidates) => {
@@ -913,7 +913,7 @@ test('a search mixing published and read prices checks only the read ones', asyn
             : { name: 'Monstera', price: '₪350', availability: 'in_stock' },
         ],
         report: { is_valid: true, confidence_score: 100, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
         funnel: funnel(),
       }),
       checkPrices: async (_q, candidates) => {
@@ -1100,7 +1100,7 @@ test('what is cached is the verified row, not the one before the price check', a
       extract: async () => ({
         plants: [{ name: 'Monstera', price: '₪0521234567', availability: 'in_stock' }],
         report: { is_valid: true, confidence_score: 100, feedback: '', corrected_output: [] },
-        engines: { extractor: 'gpt-5.6-luna', verifier: 'gpt-5.6-luna' },
+        engines: { extractor: 'gpt-5.6-terra', verifier: 'gpt-5.6-terra' },
         funnel: funnel(),
       }),
       checkPrices: async () => [{ plausible: false, reason: 'that is a phone number' }],
