@@ -22,10 +22,12 @@ import * as fs from 'fs';
 import {
   extractStructuredProducts,
   formatPrice,
+  parsePriceNumber,
   type StructuredProduct,
 } from './structuredPrice.ts';
 import {
-  probeApiRoute,
+  probeApiRouteDetailed,
+  refusedStatus,
   routeForPlatform,
   shopifyCatalogue,
   wooStoreSearch,
@@ -163,7 +165,7 @@ export function createLimiter(max: number) {
  */
 let firecrawlLimiter: ReturnType<typeof createLimiter> | null = null;
 let firecrawlRate: ReturnType<typeof createRateLimiter> | null = null;
-function firecrawlLimit<T>(fn: () => Promise<T>): Promise<T> {
+function firecrawlLimit<T>(fn: () => Promise<T>, lane: FirecrawlLane = 'page'): Promise<T> {
   firecrawlLimiter ??= createLimiter(
     Number(env('FIRECRAWL_MAX_CONCURRENCY')) || DEFAULT_MAX_CONCURRENCY
   );
@@ -172,7 +174,29 @@ function firecrawlLimit<T>(fn: () => Promise<T>): Promise<T> {
   );
   // Rate token first, then a concurrency slot: a request waiting for its turn
   // in the minute window must not sit in a slot another request could use.
-  return firecrawlRate.take().then(() => firecrawlLimiter!(fn));
+  return firecrawlRate.take(reserveFor(lane)).then(() => firecrawlLimiter!(fn));
+}
+
+/*
+ * Two lanes into one ten-a-minute window.
+ *
+ * A PAGE read - identification, a probe, a render - is one of many ways into a
+ * shop, and most of them go to shops with nothing to sell online. A RESCUE of a
+ * storefront JSON read is the only way into a shop that refuses us, and the
+ * shops that do are shippers: a whole Deliver-tab row. First come, first served
+ * let a search's brochure probes spend the window seconds before a shipper
+ * asked, and the shipper went out as "couldn't check" on every search after the
+ * first (measured: 10 of 14 back-to-back searches).
+ *
+ * So page reads may fill the window only up to a reserve, which the rescue lane
+ * alone may spend. The reserve is small because it is usually unused, and an
+ * unused reserve is capacity page reads are refused.
+ */
+export type FirecrawlLane = 'page' | 'rescue';
+const FIRECRAWL_RESCUE_RESERVE = 3;
+
+function reserveFor(lane: FirecrawlLane): number {
+  return lane === 'rescue' ? 0 : Number(env('FIRECRAWL_RESCUE_RESERVE') ?? FIRECRAWL_RESCUE_RESERVE);
 }
 
 /*
@@ -216,15 +240,21 @@ export function createRateLimiter(
     while (sent.length && t - sent[0] >= WINDOW) sent.shift();
   };
   return {
-    /* ms a take() would spend waiting right now; 0 when a token is free. */
-    waitEstimateMs(): number {
+    /*
+     * ms a take() would spend waiting right now; 0 when a token is free.
+     * `reserve` tokens are left for someone else: the caller may only use the
+     * window up to perMinute - reserve (see FirecrawlLane).
+     */
+    waitEstimateMs(reserve = 0): number {
       const t = now();
       expire(t);
       const hold = Math.max(0, heldUntil - t);
-      if (sent.length < perMinute) return hold;
-      return Math.max(hold, sent[0] + WINDOW - t);
+      const cap = Math.max(1, perMinute - reserve);
+      if (sent.length < cap) return hold;
+      return Math.max(hold, sent[sent.length - cap] + WINDOW - t);
     },
-    async take(): Promise<void> {
+    async take(reserve = 0): Promise<void> {
+      const cap = Math.max(1, perMinute - reserve);
       for (;;) {
         const t = now();
         expire(t);
@@ -233,11 +263,11 @@ export function createRateLimiter(
           await wait(holdMs);
           continue;
         }
-        if (sent.length < perMinute) {
+        if (sent.length < cap) {
           sent.push(t);
           return;
         }
-        await wait(sent[0] + WINDOW - t);
+        await wait(sent[sent.length - cap] + WINDOW - t);
       }
     },
     holdUntil(ts: number): void {
@@ -251,8 +281,8 @@ export function createRateLimiter(
 }
 
 /* How long the next Firecrawl request would queue for the minute window. */
-function firecrawlWaitMs(): number {
-  return firecrawlRate?.waitEstimateMs() ?? 0;
+function firecrawlWaitMs(lane: FirecrawlLane = 'page'): number {
+  return firecrawlRate?.waitEstimateMs(reserveFor(lane)) ?? 0;
 }
 
 /*
@@ -433,6 +463,98 @@ async function firecrawlScrape(
 }
 
 /*
+ * How long the JSON rescue may queue for a Firecrawl slot. Longer than a page
+ * rescue's FIRECRAWL_RESCUE_BUDGET_MS on purpose: this read replaces a whole
+ * shop - a shipper, usually - with one request, and the page reads competing for
+ * the same window are mostly for shops that have nothing to sell online.
+ */
+export const JSON_RESCUE_BUDGET_MS = 20_000;
+
+/*
+ * A plain GET of `url`, made by Firecrawl's fetcher instead of ours, and handed
+ * back shaped like fetch's Response - so the storefront JSON readers can use it
+ * as a drop-in second way to the same endpoint.
+ *
+ * WHY. Some shops sit behind Cloudflare rules that let a home connection
+ * through and refuse datacenter addresses, and the API host lives in a
+ * datacenter. plantit.co.il - a shipper, one of four rows the Deliver tab has -
+ * answered its Store API to a laptop in 460ms and to Tavily's fetchers not at
+ * all ("Failed to fetch url"); production reported it unreadable on every
+ * search. Firecrawl reads it: HTTP 200 and the JSON.
+ *
+ * `rawHtml`, not markdown, which would mangle JSON outright. Even rawHtml is
+ * the body as a PAGE - tags inside strings get stripped - which is why the Woo
+ * reads ask for no HTML-bearing fields at all (WOO_FIELDS). `maxAge` lets a
+ * repeat search inside the hour reuse Firecrawl's copy. It takes a slot in the
+ * same ten-a-minute window as every other Firecrawl read, and gives up rather
+ * than queueing past JSON_RESCUE_BUDGET_MS.
+ */
+export function firecrawlRawFetch(firecrawlKey: string): typeof fetch {
+  return (async (input: string | URL | Request) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    if (!firecrawlReady(JSON_RESCUE_BUDGET_MS, 'rescue')) return new Response(null, { status: 429 });
+    let res: Response;
+    try {
+      res = await firecrawlLimit(
+        () =>
+          fetch('https://api.firecrawl.dev/v1/scrape', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${firecrawlKey}` },
+            body: JSON.stringify({
+              url,
+              formats: ['rawHtml'],
+              onlyMainContent: false,
+              waitFor: 0,
+              maxAge: SEARCH_MAX_AGE_MS,
+              timeout: FIRECRAWL_TIMEOUT_MS,
+            }),
+            signal: AbortSignal.timeout(FIRECRAWL_TIMEOUT_MS),
+          }),
+        'rescue'
+      );
+    } catch {
+      /* Firecrawl never answered. 504 reads as "refused" to the JSON readers,
+       * exactly like the direct read that sent us here. */
+      return new Response(null, { status: 504 });
+    }
+    if (!res.ok) {
+      if (res.status === 429) {
+        const body = await res.text().catch(() => '');
+        const waitMs = rateLimitWaitMs(res.headers.get('retry-after'), body);
+        if (waitMs !== null) firecrawlRate?.holdUntil(Date.now() + Math.min(waitMs, 65_000));
+      }
+      return new Response(null, { status: res.status });
+    }
+    const data: any = await res.json().catch(() => null);
+    const raw = String(data?.data?.rawHtml ?? '');
+    const status = Number(data?.data?.metadata?.statusCode) || (raw ? 200 : 502);
+    return new Response(unwrapBrowserJson(raw), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    });
+  }) as typeof fetch;
+}
+
+/*
+ * A browser shown a JSON URL paints it inside <pre> in a generated page, and a
+ * fetcher that drives one may hand that page back. The JSON is the text of the
+ * <pre>; anything else is returned untouched for the caller's parse to judge.
+ */
+export function unwrapBrowserJson(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith('<')) return trimmed;
+  const pre = /<pre[^>]*>([\s\S]*?)<\/pre>/i.exec(trimmed);
+  if (!pre) return trimmed;
+  return pre[1]
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&#x27;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .trim();
+}
+
+/*
  * Fallback scrape provider: Tavily Extract (https://api.tavily.com/extract).
  * URL in, markdown out - a direct analog of Firecrawl scrape. `extract_depth`
  * defaults to 'advanced' because Tavily is only ever reached after Firecrawl
@@ -603,8 +725,8 @@ export function noteTavilyRead(
 export const FIRECRAWL_RESCUE_BUDGET_MS = 10_000;
 
 /* True when Firecrawl can answer soon enough to be worth asking. */
-function firecrawlReady(budgetMs = FIRECRAWL_RESCUE_BUDGET_MS): boolean {
-  return firecrawlWaitMs() <= budgetMs;
+function firecrawlReady(budgetMs = FIRECRAWL_RESCUE_BUDGET_MS, lane: FirecrawlLane = 'page'): boolean {
+  return firecrawlWaitMs(lane) <= budgetMs;
 }
 
 /*
@@ -1504,12 +1626,42 @@ export const OPENAI_MODEL = 'gpt-5.6-luna';
  */
 export type Effort = 'none' | 'low' | 'medium' | 'high' | 'xhigh';
 
+/*
+ * An account that has run out of credit says so on every call, and a search
+ * makes a dozen of them - the plan, then an extraction per HTML shop, then the
+ * price check. Each one waited a full round trip to hear the same refusal, and
+ * the plan's refusal sits in series in front of the whole fan-out.
+ *
+ * So a quota refusal is remembered for a few minutes and every caller hears it
+ * at once. Only the ACCOUNT-level answers trip it (no credit, bad key): a 429
+ * for going too fast, or a 500, is about one request and says nothing about the
+ * next one. Short enough that topping the account up is noticed within minutes
+ * without a restart.
+ */
+export const OPENAI_OUTAGE_MS = 5 * 60 * 1000;
+let openaiOutageUntil = 0;
+let openaiOutageReason = '';
+
+/* Exported for the tests, which must not inherit an outage from the test before. */
+export function resetOpenAIOutage(): void {
+  openaiOutageUntil = 0;
+  openaiOutageReason = '';
+}
+
+function accountRefused(status: number, body: string): boolean {
+  if (status === 401) return true;
+  return status === 429 && /insufficient_quota|credit_balance_exhausted|billing/i.test(body);
+}
+
 export async function callOpenAIJson(
   prompt: string,
   openaiKey: string,
   maxTokens = 1200,
   effort?: Effort
 ): Promise<any> {
+  if (Date.now() < openaiOutageUntil) {
+    throw new Error(`OpenAI unavailable: ${openaiOutageReason}`);
+  }
   const attempt = async (cap: number) => {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -1524,6 +1676,10 @@ export async function callOpenAIJson(
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
+      if (accountRefused(res.status, body)) {
+        openaiOutageUntil = Date.now() + OPENAI_OUTAGE_MS;
+        openaiOutageReason = `${res.status} ${body.slice(0, 120)}`;
+      }
       throw new Error(`OpenAI ${res.status} ${body.slice(0, 200)}`);
     }
     const data: any = await res.json();
@@ -1963,6 +2119,33 @@ async function adjudicate(
   return [...sure.map((s) => s.plant), ...kept.map((k) => k.plant)];
 }
 
+/*
+ * How many prices a page must state before we will call it a catalogue.
+ *
+ * Not 1. Nearly every Israeli shop carries a free-delivery threshold in its
+ * header ("משלוחים חינם בקנייה מעל 350 ₪"), so one price is what a page with no
+ * catalogue on it looks like - that single banner is the entire price count on
+ * mashtela-urbanit's search results. A real grid prices every card it shows.
+ *
+ * Lives here, not in pipeline.ts, because extraction now needs the same line:
+ * without a model it is how a brochure is told apart from a grid.
+ */
+export const PRICED_CATALOGUE_MIN = 3;
+
+/* Whether the page states this price, in any of the ways shops write one:
+ * "49.90", "49.9", "1,499.90". Digits only - currency and spacing vary. */
+export function priceOnPage(price: string, page: string): boolean {
+  const n = parsePriceNumber(price);
+  if (n === null) return false;
+  const text = page.replace(/,/g, '');
+  const forms = new Set([String(n), n.toFixed(2), Number.isInteger(n) ? `${n}.00` : n.toFixed(1)]);
+  for (const form of forms) {
+    const at = new RegExp(`(^|[^0-9.])${form.replace('.', '\\.')}(?![0-9])`);
+    if (at.test(text)) return true;
+  }
+  return false;
+}
+
 export async function extractAndVerifyPlants(
   opts: {
     markdown: string;
@@ -2196,13 +2379,26 @@ export async function extractAndVerifyPlants(
    *     stock come from the shop's own JSON, so asking a model to read them
    *     back could only introduce error. Both passes are skipped.
    */
-  if (opts.catalogueRead) {
-    if (structured.length === 0) {
-      return (
-        (await followForPrices()) ??
-        empty('no_match', 'the shop catalogue was read and this plant was not in it')
-      );
-    }
+  if (opts.catalogueRead && structured.length === 0) {
+    return (
+      (await followForPrices()) ??
+      empty('no_match', 'the shop catalogue was read and this plant was not in it')
+    );
+  }
+  /*
+   * Rows from the shop's own JSON are settled by ranking whether or not the
+   * shelf came back WHOLE.
+   *
+   * This used to sit inside `catalogueRead`, so a shelf cut short - a Woo search
+   * past its page cap, a Shopify catalogue past its page limit, a later page
+   * that timed out - fell through to the extraction pass below, which spent two
+   * model calls re-reading names and prices we already held in their own
+   * fields. With the model unavailable that pass threw, and a shipper holding
+   * twenty priced Monsteras in hand was reported as a shop we could not read.
+   * A truncated shelf still cannot prove ABSENCE - which is all `catalogueRead`
+   * ever had to guard - but what it does hold, it holds exactly.
+   */
+  if (opts.products && structured.length > 0) {
     if (opts.decisive) {
       /*
        * Decisive means ranking identified THE product - not that every row it
@@ -2376,10 +2572,38 @@ export async function extractAndVerifyPlants(
       ? empty('no_excerpt', 'no product/price lines matched in the scraped markdown')
       : empty('no_markdown', 'scrape returned no markdown');
   }
-  if (!openaiKey) return empty('no_markdown', 'no OpenAI key available');
+  /*
+   * From here the model is this page's only reader: no storefront JSON, and no
+   * product markup that ranking could settle. When it cannot answer - no key,
+   * no credit, a timeout - the shop used to leave as a thrown error, which the
+   * app shows as "couldn't check this shop" whatever the page said.
+   *
+   * Most such pages say something without it. A page that states (almost) no
+   * prices is a brochure or a nav shell: exactly the page the model would have
+   * answered `no_match` for, and the pipeline then tells the user to phone them.
+   * The product-page and sitemap rescues need no model on the pages that carry
+   * their own markup, so they are still worth asking. Only a priced page the
+   * model was needed to pair up is honestly "we could not read it".
+   */
+  const withoutModel = async (reason: string): Promise<PipelineResult> => {
+    const rescued = (await followForPrices()) ?? (await sitemapForPrices());
+    if (rescued) return rescued;
+    const prices = countPrices(excerpt || markdown);
+    return prices < PRICED_CATALOGUE_MIN
+      ? empty('no_match', `${reason} - the page states no prices, so it is not a catalogue`)
+      : empty('no_excerpt', `${reason} - the page lists ${prices} prices we could not pair without it`);
+  };
+
+  if (!openaiKey) return withoutModel('no OpenAI key available');
 
   // --- Extraction pass -----------------------------------------------------
-  const extracted = await extract(excerpt, query, site, openaiKey);
+  let extracted: Plant[];
+  try {
+    extracted = await extract(excerpt, query, site, openaiKey);
+  } catch (err: any) {
+    console.log(`   [${site}] ⚠️  extraction unavailable (${String(err?.message).slice(0, 80)})`);
+    return withoutModel('the model could not read this page');
+  }
 
   // Nothing to audit. The auditor's only job is to cross-check extracted rows
   // against the source; with zero rows it can only ever confirm the empty list,
@@ -2415,7 +2639,38 @@ export async function extractAndVerifyPlants(
   }
 
   // --- Verification pass ----------------------------------------------------
-  const report = await verify(excerpt, extracted, query, site, openaiKey);
+  /*
+   * An audit that cannot run is not a verdict against the rows. They are kept
+   * on the one check that needs no model - the page states that exact price -
+   * which is the hallucination the auditor exists to catch.
+   */
+  let report: VerificationReport;
+  try {
+    report = await verify(excerpt, extracted, query, site, openaiKey);
+  } catch (err: any) {
+    const stated = extracted.filter((p) => priceOnPage(p.price, excerpt));
+    report = {
+      is_valid: true,
+      confidence_score: 50,
+      feedback: `audit unavailable (${String(err?.message).slice(0, 80)}) - kept ${stated.length} row(s) whose price the page states`,
+      corrected_output: stated,
+    };
+    if (stated.length === 0) {
+      return {
+        plants: [],
+        report,
+        engines: { extractor: OPENAI_MODEL, verifier: 'none' },
+        funnel: {
+          stage: 'rejected',
+          mdChars: markdown.length,
+          excerptChars: excerpt.length,
+          extracted: extracted.length,
+          kept: 0,
+          prices: countPrices(excerpt || markdown),
+        },
+      };
+    }
+  }
   /*
    * Honour an explicit rejection. The old rule was "empty corrected_output →
    * fall back to `extracted`", which quietly handed back the exact rows the
@@ -2933,6 +3188,19 @@ export interface SearchResult {
   storefront?: boolean;
 }
 
+export interface SearchOpts {
+  /*
+   * Read this shop's storefront JSON or nothing: no identification, no page
+   * scrape. For the shops a search reads as a BONUS - the wider rings of the
+   * Pick Up widening - where a shop with no JSON would spend provider reads and
+   * seconds the user is waiting on, to add a row that is only added if priced.
+   */
+  jsonOnly?: boolean;
+}
+
+/* apiSearch's answer for a shop whose JSON route exists and refused us. */
+const REFUSED = Symbol('api-refused');
+
 export interface SearcherOpts {
   openaiKey?: string;
   learnedFile?: string;
@@ -2983,6 +3251,14 @@ export interface SearcherOpts {
    * flipped.
    */
   apiEnabled?: boolean;
+  /*
+   * A second way to reach a shop's storefront JSON, for the shops that turn a
+   * datacenter away (see `refused` in scraper/platformApi.ts). Defaults to a
+   * Firecrawl read of the same URL - but only when `fetchApi` was NOT injected,
+   * so a test that stubs the shops can never reach Firecrawl by the back door.
+   * Pass one explicitly to exercise the rescue offline.
+   */
+  rescueFetch?: typeof fetch;
 }
 
 /*
@@ -3048,6 +3324,12 @@ export type HostPlatforms = Record<
      */
     tavilyFails?: number;
     tavilyAt?: number;
+    /*
+     * The storefront JSON only answered through the rescue path last time, so
+     * lead with it - a refusal costs a round trip on every search otherwise.
+     * Same lifetime as `api`.
+     */
+    apiVia?: 'rescue';
   }
 >;
 
@@ -3096,6 +3378,10 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
   const hostTemplates = new Map<string, string>();
   /* Which storefront JSON route each host exposes; see HostPlatforms.api. */
   const apiRouteCache = new Map<string, { route: ApiRoute; at: number }>();
+  /* Hosts whose JSON only answers through the rescue path; see apiVia. */
+  const viaRescue = new Set<string>();
+  const rescueApi: typeof fetch | undefined =
+    opts.rescueFetch ?? (!opts.fetchApi && firecrawlKey ? firecrawlRawFetch(firecrawlKey) : undefined);
   /*
    * Distilled Shopify catalogues, and the in-flight fetches for them.
    *
@@ -3134,6 +3420,7 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
      */
     const apiFresh = entry.api && entry.apiAt !== undefined && now() - entry.apiAt < HOST_API_TTL_MS;
     if (apiFresh) apiRouteCache.set(host, { route: entry.api!, at: entry.apiAt! });
+    if (apiFresh && entry.apiVia === 'rescue') viaRescue.add(host);
 
     if (fresh && known) {
       platformCache.set(host, entry.platform);
@@ -3284,6 +3571,32 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
   }
 
   /*
+   * The two ways to a host's JSON, in the order this host has earned: straight
+   * to the shop first, unless the shop has been refusing us and the rescue is
+   * what answered - then the rescue leads and the direct read is the fallback,
+   * so a shop that lifts its block is noticed on the next search.
+   */
+  function routeFetch(host: string): { fetchImpl?: typeof fetch; rescue?: typeof fetch } {
+    const direct = opts.fetchApi;
+    if (!rescueApi) return { fetchImpl: direct };
+    return viaRescue.has(host)
+      ? { fetchImpl: rescueApi, rescue: direct ?? fetch }
+      : { fetchImpl: direct, rescue: rescueApi };
+  }
+
+  /* `rescued` means the SECOND way answered, so it flips the order for next time. */
+  function noteRescue(host: string, rescued: boolean | undefined): void {
+    if (!rescued) return;
+    const nowVia = !viaRescue.has(host);
+    if (nowVia) viaRescue.add(host);
+    else viaRescue.delete(host);
+    if (!opts.hostsFile || !persisted[host]) return;
+    const { apiVia: _old, ...rest } = persisted[host];
+    persisted[host] = nowVia ? { ...rest, apiVia: 'rescue' } : rest;
+    saveHostPlatforms(opts.hostsFile, persisted);
+  }
+
+  /*
    * Which JSON route this host exposes.
    *
    * A remembered platform implies a route for free, so the common case costs
@@ -3311,14 +3624,19 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
         return implied;
       }
     }
-    const route = await probeApiRoute(origin, { fetchImpl: opts.fetchApi });
+    const { route, definitive, rescued } = await probeApiRouteDetailed(origin, routeFetch(host));
     /*
      * A probe answered by the shop itself outranks whatever known-hosts.json
      * says. peer-nursery.co.il was remembered as Shopify for a month while
      * serving a working WooCommerce Store API; this is the line that would have
      * corrected it on first contact instead of never.
+     *
+     * A probe the shop never ANSWERED is not remembered at all: a timeout or a
+     * bot wall is not the shop saying it has no JSON, and a week of skipping
+     * the route on that evidence is the failure. The next search asks again.
      */
-    rememberApiRoute(host, route);
+    if (definitive) rememberApiRoute(host, route);
+    noteRescue(host, rescued);
     if (route === 'woo-store') rememberHost(host, 'woo');
     if (route === 'shopify-json') rememberHost(host, 'shopify');
     return route;
@@ -3377,7 +3695,7 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
     plan: QueryPlan,
     platform: string,
     reprobe = false
-  ): Promise<SearchResult | null> {
+  ): Promise<SearchResult | null | typeof REFUSED> {
     const route = await resolveApiRoute(origin, host, platform, reprobe);
     if (route === 'none') return null;
 
@@ -3392,7 +3710,7 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
      * WooCommerce Store API answers the same question in under one. The probe
      * corrects known-hosts.json on the way past, so it happens once.
      */
-    const giveUp = async (): Promise<SearchResult | null> => {
+    const giveUp = async (): Promise<SearchResult | null | typeof REFUSED> => {
       if (reprobe || !routeForPlatform(platform)) return null;
       return apiSearch(origin, host, plan, platform, true);
     };
@@ -3435,11 +3753,24 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
       let asked = false;
       let everyRungComplete = true;
       for (const term of terms) {
-        const res = await wooStoreSearch(origin, term, { fetchImpl: opts.fetchApi });
+        const res = await wooStoreSearch(origin, term, routeFetch(host));
+        noteRescue(host, res.rescued);
         picked = `${origin}/?s=${encodeURIComponent(term)}&post_type=product`;
-        // The route is broken. Ask the shop what it really is before falling
-        // all the way back to a scrape.
-        if (res.status === 0 || res.status >= 400) return giveUp();
+        /*
+         * A shop that REFUSED us - a bot wall, a timeout, a 5xx, and the rescue
+         * path could not get past it either - has a Store API; it is just not
+         * answering us right now. Re-probing it asks the same wall twice more,
+         * and the page scrape after that is worse: the shop refuses Tavily and
+         * our direct read the same way, so it pays Firecrawl reads out of a
+         * ten-a-minute window (thirty-four of them, for one such shop, across
+         * fourteen measured searches) to arrive at the same nothing, while a
+         * shipper's rescue waits behind them. Say we could not check it, now.
+         *
+         * A 404 or 410 is different: the route is not there, the platform we
+         * remembered is probably wrong, and the probe is how that gets fixed.
+         */
+        if (refusedStatus(res.status)) return REFUSED;
+        if (res.status >= 400) return giveUp();
         /*
          * The server applied the query, so an empty answer here is evidence -
          * we read their catalogue and this plant was not in it. Unless the
@@ -3494,7 +3825,8 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
      * means exactly what it did: type this into the shop's search box.
      */
     query: string | QueryPlan,
-    host: string
+    host: string,
+    searchOpts: SearchOpts = {}
   ): Promise<SearchResult> {
     const plan: QueryPlan =
       typeof query === 'string' ? buildQueryPlan({ original: query, hebrew: query }) : query;
@@ -3532,10 +3864,24 @@ export function createSearcher(firecrawlKey: string, opts: SearcherOpts = {}) {
     if (opts.apiEnabled) {
       try {
         const viaApi = await apiSearch(origin, host, plan, cachedPlatform(host) ?? 'unknown');
+        if (viaApi === REFUSED) {
+          /* `answered: false`, because it did not: nothing downstream may read
+           * this empty result as a shop that does not stock the plant. */
+          return { md: '', platform: cachedPlatform(host) ?? 'unknown', picked: null, answered: false };
+        }
         if (viaApi) return viaApi;
       } catch {
         /* the HTML path below is the fallback, and it is the one we had before */
       }
+    }
+
+    /*
+     * The caller wants the cheap answer or none - see `jsonOnly`. A shop with no
+     * storefront JSON is not scraped; it is reported as unread, which is what it
+     * is.
+     */
+    if (searchOpts.jsonOnly) {
+      return { md: '', platform: cachedPlatform(host) ?? 'unknown', picked: null, answered: false };
     }
 
     /* No JSON route, so the page has to be read - and reading it needs to know

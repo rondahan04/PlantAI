@@ -164,9 +164,30 @@ export function normalizeHebrew(s: string): string {
 const SIZE_WORDS =
   /(?:ליטר|ליטרים|לטר|סמ|ס"מ|מ"ר|קוטר|גובה|עציצ|עציץ|אדנית|כד|שתיל|שתילים|מבצע|חדש|גדול|קטנ|קטן|בינוני|בייבי|ענק|מארז|יחידה|pot|cm|mm|litre|liter|size|small|medium|large|baby|new|sale)/gi;
 
+/*
+ * A size word is dropped when it is the WHOLE word - optionally behind a
+ * one-letter prefix ("לעציץ", "בליטר") and in front of a plural, feminine or
+ * construct ending ("עציצים", "גדולה", "שתילי זיתים").
+ *
+ * It used to be cut out of the middle of any word it appeared in, which left
+ * debris the ranker then scored: "לעציצים" became the token "ים", "כדור" (a
+ * ball) became "ור", "ענקית" became "ית" - each a foreign "cultivar word" that
+ * cost a correct listing 0.2 - and the Latin "Pothos" lost its "pot" and became
+ * "hos". A Hebrew letter or two glued on by grammar is part of the size word; a
+ * different word that happens to contain one is not.
+ */
+const SIZE_WORD_WHOLE = new RegExp(
+  `^[והבלמשכ]?(?:${SIZE_WORDS.source.slice(3, -1)})(?:ים|ות|ה|ית|י|s)?$`,
+  'i'
+);
+
 export function stripSizeTokens(s: string): string {
   return (s || '')
-    .replace(SIZE_WORDS, ' ')
+    /* Size units written straight onto the number: "10ליטר", "15ס"מ". */
+    .replace(/(\d)(?=[^\d\s.,])/g, '$1 ')
+    .split(/\s+/)
+    .filter((word) => !SIZE_WORD_WHOLE.test(word.replace(/^[^\p{L}\d"]+|[^\p{L}\d"]+$/gu, '')))
+    .join(' ')
     /* Bare numbers, including decimals: a size that lost its unit is still a
      * size. Latin cultivar names never carry digits. */
     .replace(/\d+(?:[.,]\d+)?/g, ' ')
@@ -396,10 +417,45 @@ function hits(
   token: string,
   titleTokens: string[],
   titleJoined: string,
-  fuzzy = false
+  fuzzy = false,
+  /* The token names WHAT the product is (genus, or a product word like דשן),
+   * as opposed to which cultivar. See wordHit. */
+  core = false
 ): boolean {
-  if (titleTokens.includes(token) || titleJoined.includes(token)) return true;
+  if (titleTokens.includes(token)) return true;
+  if (core && token.length <= SHORT_CORE_MAX) {
+    if (titleTokens.some((t) => wordHit(t, token))) return true;
+  } else if (titleJoined.includes(token)) {
+    return true;
+  }
   return fuzzy && titleTokens.some((t) => nearlyEqual(t, token));
+}
+
+/*
+ * A SHORT core word has to be the word, not a few letters of another one.
+ *
+ * "Inside a longer word" is the right rule for a genus like מונסטרה, which no
+ * other Hebrew word contains, and the wrong one for three letters. A search for
+ * fertilizer, "דשן", matched decogarden's potting soil "אדמה דשנית" (fertile
+ * soil), and neem, "נים", matched every "צמח פנים" (indoor plant) on the shelf
+ * - the cheapest of which would then be quoted as the fertilizer. Both are the
+ * product word with letters glued on that Hebrew grammar does not glue on.
+ *
+ * What it DOES glue on is allowed: a one- or two-letter prefix (ו ה ב ל מ ש כ -
+ * "לדשן", "והנים") and a plural ending ("דשנים", "זיתים"). Tokens arrive folded
+ * by normalizeHebrew, so the plural ending is ימ, not ים.
+ */
+const SHORT_CORE_MAX = 4;
+const HEBREW_PREFIX_RE = /^(?:[והבלמשכ]|[ו][הבלמשכ]|[ש][הבלמ]|[מלבכ][ה]|כש)?$/;
+const PLURAL_SUFFIX_RE = /^(?:ימ|ות|s|es)?$/;
+
+function wordHit(titleToken: string, token: string): boolean {
+  for (let at = titleToken.indexOf(token); at >= 0; at = titleToken.indexOf(token, at + 1)) {
+    const before = titleToken.slice(0, at);
+    const after = titleToken.slice(at + token.length);
+    if (HEBREW_PREFIX_RE.test(before) && PLURAL_SUFFIX_RE.test(after)) return true;
+  }
+  return false;
 }
 
 /*
@@ -506,10 +562,62 @@ export function scoreCandidate(title: string, plan: QueryPlan): number {
   return best;
 }
 
+/*
+ * A product FOR the plant, rather than the plant.
+ *
+ * Every nursery sells the plant's accessories under the plant's name: "דשן
+ * סחלבים" (orchid fertilizer), "אדמה לסחלבים" (orchid soil), "מקל קוקוס
+ * למונסטרה" (a monstera pole). A genus-only query scores any title carrying the
+ * genus as an exact match - which is right for "מונסטרה מאנקי" and wrong for
+ * all of those, and cheapestMatch then quotes the ₪28 fertilizer as the price of
+ * an orchid. Measured on 2026-09-21: every shipper answered "סחלב" that way.
+ *
+ * Hebrew marks both constructions in the word itself, which is what this reads:
+ *   ל-            "for": לסחלבים, למונסטרה
+ *   plural after another Hebrew word - the construct "X of orchids": דשן סחלבים
+ * A plant's own listing names it in the singular, first or after a brand:
+ * "סחלב פלנופסיס", "FLOWER | דשן", "עץ זית". The first place the product word
+ * appears is the one that decides.
+ *
+ * The construct rule cannot tell "fertilizer of orchids" from "a kit of
+ * fertilizers" ("ערכת דשנים") - only a reader of Hebrew can. Such a title is
+ * demoted, not dropped: it stays a candidate the adjudicating model is asked
+ * about, and a shop that also lists the product plainly is settled by that
+ * listing. Quoting orchid fertilizer as the price of an orchid, on every
+ * shipper, was the worse failure.
+ */
+const ACCESSORY_SCORE = 0.3;
+const FOR_PREFIX_RE = /^ו?ל$/;
+const HEBREW_WORD_RE = /[֐-׿]/;
+
+function accessoryOf(titleTokens: string[], core: string[]): boolean {
+  for (let i = 0; i < titleTokens.length; i++) {
+    const token = titleTokens[i];
+    for (const word of core) {
+      const at = token.indexOf(word);
+      /* Only where the word stands as a word: "פנים" holds נים and is not it. */
+      if (at < 0 || !HEBREW_PREFIX_RE.test(token.slice(0, at))) continue;
+      const before = token.slice(0, at);
+      const after = token.slice(at + word.length);
+      if (FOR_PREFIX_RE.test(before)) return true;
+      const plural = before === '' && (after === 'ימ' || after === 'ות');
+      return plural && titleTokens.slice(0, i).some((w) => HEBREW_WORD_RE.test(w));
+    }
+  }
+  return false;
+}
+
 function scoreAgainst(titleTokens: string[], tokens: QueryTokens): number {
+  const score = scoreTokens(titleTokens, tokens);
+  /* Below WEAK_MATCH, above the candidate floor: never shown on ranking alone,
+   * still put to the adjudicating model, which can tell an orchid from its soil. */
+  return score > 0 && accessoryOf(titleTokens, tokens.core) ? Math.min(score, ACCESSORY_SCORE) : score;
+}
+
+function scoreTokens(titleTokens: string[], tokens: QueryTokens): number {
   const joined = titleTokens.join(' ');
 
-  const coreHit = tokens.core.some((t) => hits(t, titleTokens, joined));
+  const coreHit = tokens.core.some((t) => hits(t, titleTokens, joined, false, true));
   if (!coreHit) return 0;
 
   if (tokens.cultivar.length === 0) {

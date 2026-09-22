@@ -14,7 +14,14 @@ import { fetchNearbyNurseries } from '../services/nurseryService';
 import { stockAgeLabel } from '../lib/care/freshness';
 import { waMeLink } from '../lib/nursery/whatsapp';
 import StatusView from '../components/StatusView';
-import { availabilityBadge, byPickupOrder, isWorthShowing } from '../lib/nursery/availability';
+import {
+  availabilityBadge,
+  byDeliveryOrder,
+  byPickupOrder,
+  isWorthShowing,
+  showsPrice,
+  visibleOffers,
+} from '../lib/nursery/availability';
 import { DEFAULT_RADIUS_M, nextRadius, radiusKm } from '../lib/nursery/radius';
 import { nurseryLogo } from '../lib/nursery/nurseryLogos';
 
@@ -126,6 +133,46 @@ function AvailabilityPill({ nursery }: { nursery: Nursery }) {
   );
 }
 
+/*
+ * Every listing the shop matched, under its name: the pot sizes and cultivars,
+ * each with its own price and its own page. A single number answered "how
+ * much?" with the smallest pot and hid the rest, and on Deliver Today the rest
+ * is exactly what someone comparing four shops wants to see.
+ */
+function OfferList({ nursery, s }: { nursery: Nursery; s: Styles }) {
+  const { shown, more } = visibleOffers(nursery);
+  if (shown.length === 0) return null;
+  const open = (url?: string) => {
+    const target = url || nursery.productUrl || nursery.website;
+    if (target) Linking.openURL(target);
+  };
+  return (
+    <View style={s.offerList}>
+      {shown.map((offer, i) => (
+        <Pressable
+          key={`${offer.url ?? offer.name}-${i}`}
+          style={({ pressed }) => [s.offerRow, pressed && { opacity: 0.6 }]}
+          onPress={() => open(offer.url)}
+          accessibilityRole="link"
+          accessibilityLabel={`${offer.name}, ${offer.inStock ? offer.price : copy.nurseries.soldOutPrice(offer.price)}`}
+        >
+          <Text style={[s.offerName, !offer.inStock && s.offerSoldOut]} numberOfLines={1}>
+            {offer.name}
+          </Text>
+          <Text style={[s.offerPrice, !offer.inStock && s.offerSoldOut]}>
+            {offer.inStock ? offer.price : copy.nurseries.soldOutPrice(offer.price)}
+          </Text>
+        </Pressable>
+      ))}
+      {more > 0 && (
+        <Pressable onPress={() => open(nursery.website)} accessibilityRole="link" hitSlop={6}>
+          <Text style={s.offerMore}>{copy.nurseries.moreListings(more)}</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 function NurseryCard({
   nursery,
   mode,
@@ -206,11 +253,15 @@ function NurseryCard({
               </>
             )}
           </View>
-          {nursery.inStockKnown ? (
+          {nursery.inStockKnown || showsPrice(nursery) ? (
             /*
              * A price we did not trust is shown as "See price" rather than as a
              * number - the shop does stock the plant, we just would not stand
              * behind the figure we read, and a wrong price is worse than none.
+             *
+             * A listing whose page never stated stock still has a price, and it
+             * is shown: the pill already says the stock is unknown, and hiding
+             * the one number we are sure of helped nobody.
              */
             <View style={[s.priceTag, nursery.priceSuspect && s.priceTagMuted]}>
               <Text style={[s.priceText, nursery.priceSuspect && s.priceTextMuted]}>
@@ -237,6 +288,8 @@ function NurseryCard({
             the tap rather than clipping mid-word inside the pill. */}
         <AvailabilityPill nursery={nursery} />
 
+        <OfferList nursery={nursery} s={s} />
+
         <View style={s.actionRow}>
           {!!nursery.phone && (
             <Pressable style={s.actionSecondary} onPress={onCall} accessibilityRole="button" accessibilityLabel={copy.nurseries.callA11y}>
@@ -259,9 +312,11 @@ function NurseryCard({
           >
             <Text style={s.actionPrimaryText}>
               {mode === 'delivery'
-                ? isAvailable
-                  ? copy.nurseries.order
-                  : copy.nurseries.unavailable
+                ? !isAvailable
+                  ? copy.nurseries.unavailable
+                  : nursery.hasPlant
+                    ? copy.nurseries.order
+                    : copy.nurseries.visitStore
                 : copy.nurseries.visitStore}
             </Text>
           </Pressable>
@@ -342,7 +397,16 @@ export default function NurseriesScreen({ navigation, route }: Props) {
    * showed local shops that cannot deliver. Delivery is the ship-to-home
    * nurseries; Pick Up is the ones with a real location you can drive to.
    */
-  const deliveryList = useMemo(() => worthShowing.filter(isDeliverable), [worthShowing]);
+  /*
+   * Deliver Today lists EVERY shipper, including one we searched that does not
+   * carry the product. There are four of them and they are the whole tab: a
+   * shop quietly missing from it reads as a search that broke, not as a shop
+   * without the plant. Priced first, cheapest first - see byDeliveryOrder.
+   */
+  const deliveryList = useMemo(
+    () => nurseries.filter(isDeliverable).sort(byDeliveryOrder),
+    [nurseries]
+  );
   /*
    * Pick Up leads with the shops that show a price. The server already sorts
    * in-stock first, but by `hasPlant` - which stays true for a `priceSuspect`
@@ -693,6 +757,21 @@ function makeStyles(t: Theme) {
     cardLogo: { backgroundColor: t.color.surface },
     ruledOutNote: { ...t.type.caption, color: t.color.textMuted, textAlign: 'center', marginTop: t.space.lg },
     infoPillText: { ...t.type.label, fontWeight: '500', fontSize: 13, color: t.color.primary, flex: 1 },
+    offerList: { marginTop: -t.space.xs, marginBottom: t.space.md, gap: t.space.xs },
+    offerRow: {
+      ...iconRow,
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: t.space.md,
+      minHeight: 32,
+      paddingHorizontal: t.space.md,
+      borderRadius: t.radius.md,
+      backgroundColor: t.color.surfaceMuted,
+    },
+    offerName: { ...t.type.label, fontWeight: '400', fontSize: 13, color: t.color.foreground, flex: 1, writingDirection: 'auto' },
+    offerPrice: { ...t.type.label, fontWeight: '700', fontSize: 13, color: t.color.primary },
+    offerSoldOut: { color: t.color.textMuted, fontWeight: '400' },
+    offerMore: { ...t.type.caption, color: t.color.primary, paddingHorizontal: t.space.md, paddingVertical: t.space.xs },
     actionRow: { flexDirection: 'row', gap: t.space.sm },
     actionSecondary: {
       flex: 1,

@@ -29,7 +29,7 @@ export interface CacheStorage {
  * bug that only shows up on upgraded installs, which is the hardest place to
  * see it.
  */
-export const CACHE_KEY_PREFIX = 'plantai.nurserysearch.v1.';
+export const CACHE_KEY_PREFIX = 'plantai.nurserysearch.v2.';
 const INDEX_KEY = `${CACHE_KEY_PREFIX}index`;
 
 /*

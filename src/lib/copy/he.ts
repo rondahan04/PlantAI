@@ -58,6 +58,7 @@ export const he: Copy = {
     notFound: 'לא מצאנו את המוצר',
     couldNotCheck: 'לא הצלחנו לבדוק במשתלה הזו',
     noOnlineShop: 'אין חנות אונליין - התקשרו לבדוק',
+    notSold: 'לא נמצא כרגע בחנות האונליין שלהם',
     estimate: (bandLabel: string, confidence: number) => `${bandLabel} · ${confidence}%`,
     stockUnknown: 'מופיע בקטלוג · המלאי לא צוין',
     unknown: 'זמינות לא ידועה',
@@ -415,6 +416,10 @@ export const he: Copy = {
     order: 'להזמין',
     unavailable: 'לא זמין',
     visitStore: 'לבקר בחנות',
+    /* The listings under a shop's name: the pot sizes and cultivars it matched,
+     * and a link standing for the rest. */
+    moreListings: (n: number) => (n === 1 ? 'עוד מוצר אחד בחנות' : `עוד ${n} מוצרים בחנות`),
+    soldOutPrice: (price: string) => `${price} · אזל`,
     noContact: 'אין אתר או מספר טלפון זמין למשתלה הזו.',
     pillA11y: (text: string, detail: string) => `${text}. ${detail}`,
     pillHint: 'מציג למה',

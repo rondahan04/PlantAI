@@ -339,3 +339,94 @@ test('a Hebrew query with no alternates is not degraded', () => {
   const plan = buildQueryPlan({ original: 'מונסטרה', hebrew: 'מונסטרה' });
   assert.equal(plan.degraded, false);
 });
+
+// --- short product words ----------------------------------------------------
+
+/*
+ * Three-letter product words are where "the token appears inside the title"
+ * stops meaning "the title is that product". Both titles below are real: the
+ * first from decogarden, which a fertilizer search quoted as the cheapest
+ * fertilizer; the second is every indoor plant a neem search would have found.
+ */
+test('a short product word does not match inside another word', () => {
+  const fertilizer = buildQueryPlan({ original: 'דשן', hebrew: 'דשן' });
+  assert.equal(scoreCandidate('תערובת גן שתילה אדמה דשנית', fertilizer), 0);
+  assert.equal(scoreCandidate('מצע לסחלבים – תערובת סחלבים דשנית', fertilizer), 0);
+
+  const neem = buildQueryPlan({ original: 'נים', hebrew: 'נים' });
+  assert.equal(scoreCandidate('פוטוס - צמח פנים קל לגידול', neem), 0);
+  assert.equal(scoreCandidate('שמן נים אורגני 250 מ"ל', neem), 1);
+});
+
+test('a short product word still matches with a prefix or a plural ending', () => {
+  const fertilizer = buildQueryPlan({ original: 'דשן', hebrew: 'דשן' });
+  assert.equal(scoreCandidate('דשן 20 20 20', fertilizer), 1);
+  assert.equal(scoreCandidate('טיפות דשן ממריץ לסחלבים', fertilizer), 1);
+  assert.equal(scoreCandidate('דשנים אורגניים לגינה', fertilizer), 1);
+  assert.equal(scoreCandidate('הדשן המומלץ לגינה', fertilizer), 1);
+
+  const olive = buildQueryPlan({ original: 'זית', hebrew: 'זית' });
+  assert.equal(scoreCandidate('עץ זית סורי', olive), 1);
+  assert.equal(scoreCandidate('שתילי זיתים', olive), 1);
+});
+
+test('a long genus still matches inside a longer word, as it always has', () => {
+  assert.equal(scoreCandidate('המונסטרה הגדולה', MONSTERA), 1);
+});
+
+// --- a product FOR the plant is not the plant ----------------------------------
+
+/*
+ * Every one of these is a real title, and every shipper quoted one of them as
+ * the price of an orchid on 2026-09-21 - the fertilizer is cheaper than the
+ * plant, so cheapestMatch picked it.
+ */
+test('an accessory named for the plant is not the plant', () => {
+  const orchid = buildQueryPlan({ original: 'סחלב', hebrew: 'סחלב' });
+  for (const title of [
+    'דשן סחלבים – flower',
+    'FLOWER | דשן סחלבים',
+    'אדמה לסחלבים דשנית 10 ליטר',
+    'אדמה מצע שתילה לסחלב 10 ליטר',
+  ]) {
+    const score = scoreCandidate(title, orchid);
+    assert.ok(score > 0 && score < WEAK_MATCH, `${title} scored ${score}`);
+  }
+  assert.ok(scoreCandidate('מקל קוקוס למונסטרה', MONSTERA) < WEAK_MATCH);
+});
+
+test('the plant itself still scores as the plant', () => {
+  const orchid = buildQueryPlan({ original: 'סחלב', hebrew: 'סחלב' });
+  assert.equal(scoreCandidate('סחלב פלנופסיס לבן', orchid), 1);
+  assert.equal(scoreCandidate('מבצע סחלב פלנופסיס 2 ענפים', orchid), 1);
+  const olive = buildQueryPlan({ original: 'זית', hebrew: 'זית' });
+  assert.equal(scoreCandidate('עץ זית סורי', olive), 1);
+  /* A fertilizer FOR orchids is exactly a fertilizer. */
+  const fertilizer = buildQueryPlan({ original: 'דשן', hebrew: 'דשן' });
+  assert.equal(scoreCandidate('טיפות דשן ממריץ לסחלבים', fertilizer), 1);
+  assert.equal(scoreCandidate('FLOWER | דשן סחלבים', fertilizer), 1);
+});
+
+test('with the real plant on the shelf, ranking settles it without a model', () => {
+  const orchid = buildQueryPlan({ original: 'סחלב', hebrew: 'סחלב' });
+  const ranked = rankCandidates(
+    [product('דשן סחלבים – flower', 28), product('סחלב פלנופסיס לבן', 89)],
+    orchid
+  );
+  assert.equal(isDecisive(ranked), true);
+  assert.equal(ranked[0].name, 'סחלב פלנופסיס לבן');
+});
+
+/*
+ * Size words used to be cut out of the middle of whatever word held them, and
+ * the debris was scored as cultivar words: "לעציצים" left "ים", "ענקית" left
+ * "ית", "Pothos" lost its "pot".
+ */
+test('a size word is dropped whole, and a word that merely contains one is kept', () => {
+  assert.deepEqual(canonical('אדמה לעציצים'), canonical('אדמה'));
+  assert.deepEqual(canonical('מונסטרה ענקית'), canonical('מונסטרה'));
+  assert.deepEqual(canonical('Pothos Marble Queen'), ['pothos', 'marble', 'queen']);
+  assert.deepEqual(canonical('כדור דשא'), canonical('כדור דשא'));
+  assert.ok(canonical('כדור דשא').includes(normalizeHebrew('כדור')));
+  assert.deepEqual(canonical('15ס"מ מונסטרה'), canonical('מונסטרה'));
+});

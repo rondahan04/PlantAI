@@ -43,8 +43,23 @@ export interface SearchParts {
  * definition, so the two layers can never disagree about what "the same
  * search" means.
  */
+/*
+ * Which generation of scraper wrote a row. Part of every key, so a deploy that
+ * changes what a search ANSWERS never serves what the previous one stored:
+ * rows written under another version are simply never looked up again, and age
+ * out of the table on their own.
+ *
+ * v2 (2026-09-21): shops that the model used to fail on are now read honestly,
+ * the Deliver tab keeps every shipper, and results carry `offers`. A week-old
+ * v1 row would show a shipper as "couldn't check" after the fix that reads it.
+ *
+ * Bump it with any change that would make yesterday's answer wrong today.
+ */
+export const CACHE_VERSION = 'v2';
+
 export function searchKey(parts: SearchParts): string {
   return [
+    CACHE_VERSION,
     parts.query.trim().toLowerCase(),
     parts.lat.toFixed(3),
     parts.lng.toFixed(3),
@@ -64,7 +79,7 @@ export function searchKey(parts: SearchParts): string {
  * user's search warms every overlapping search after it.
  */
 function shopKey(host: string, query: string): string {
-  return `${host.trim().toLowerCase()}|${query.trim().toLowerCase()}`;
+  return `${CACHE_VERSION}|${host.trim().toLowerCase()}|${query.trim().toLowerCase()}`;
 }
 
 export interface NurseryCacheConfig {

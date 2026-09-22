@@ -30,6 +30,9 @@ import {
   hasHebrew,
   sanityCheckPrices,
   callOpenAIJson,
+  resetOpenAIOutage,
+  priceOnPage,
+  unwrapBrowserJson,
   searchWaitFor,
   loadHostPlatforms,
   RENDER_WAIT_MS,
@@ -1020,6 +1023,132 @@ test('extractAndVerifyPlants: no excerpt and no key both short-circuit before an
   assert.match(noKey.report.feedback, /no OpenAI key/);
 });
 
+// --- extraction without a model ----------------------------------------------
+
+/* The model refusing the way an account out of credit does. */
+const modelDown = {
+  extract: async (): Promise<Plant[]> => {
+    throw new Error('OpenAI 429 insufficient_quota');
+  },
+  verify: async (): Promise<VerificationReport> => {
+    throw new Error('OpenAI 429 insufficient_quota');
+  },
+  judge: async (): Promise<any[]> => {
+    throw new Error('OpenAI 429 insufficient_quota');
+  },
+};
+
+const jsonRow = (name: string, price: number): StructuredProduct => ({
+  name,
+  price,
+  currency: 'ILS',
+  availability: 'in_stock',
+  url: `https://shop.co.il/product/${price}`,
+  source: 'api',
+});
+
+/*
+ * A shelf cut short is still the shop's own JSON. It went to the extraction
+ * pass because it was not `catalogueRead`, and with the model out of credit a
+ * shipper holding priced Monsteras in hand came back as a thrown error.
+ */
+test('extractAndVerifyPlants: a truncated shelf is settled by ranking, with no model', async () => {
+  const plan = buildQueryPlan({ original: 'מונסטרה', hebrew: 'מונסטרה' });
+  const res = await extractAndVerifyPlants(
+    {
+      markdown: '',
+      query: 'מונסטרה',
+      site: 'rootine.co.il',
+      openaiKey: 'k',
+      products: [jsonRow('מונסטרה דליסיוסה', 46.8), jsonRow('מונסטרה אדנסוני', 60)],
+      catalogueRead: false,
+      decisive: true,
+      plan,
+    },
+    modelDown
+  );
+  assert.equal(res.funnel.stage, 'ok');
+  assert.equal(res.plants.length, 2);
+  assert.equal(res.engines.extractor, 'none');
+});
+
+test('extractAndVerifyPlants: an undecided truncated shelf falls back to the ranking bar', async () => {
+  const plan = buildQueryPlan({ original: 'מונסטרה דליסיוסה', hebrew: 'מונסטרה דליסיוסה' });
+  const res = await extractAndVerifyPlants(
+    {
+      markdown: '',
+      query: 'מונסטרה דליסיוסה',
+      site: 'x.co.il',
+      openaiKey: 'k',
+      products: [jsonRow('מונסטרה', 39), jsonRow('מונסטרה מאנקי', 54)],
+      catalogueRead: false,
+      decisive: false,
+      plan,
+    },
+    modelDown
+  );
+  /* Plain "מונסטרה" (0.5) clears WEAK_MATCH; the adansonii (0.3) does not. */
+  assert.deepEqual(res.plants.map((p) => p.name), ['מונסטרה']);
+});
+
+/*
+ * getzler.co.il, yarokis.co.il: a nursery's website with a search box and not
+ * one price on it. The model would have answered "nothing here"; without it the
+ * shop was reported as a failed read. It is a shop you phone.
+ */
+test('extractAndVerifyPlants: without the model, a priceless page is not a catalogue', async () => {
+  const brochure = '# Search Result for מונסטרה\n\n## Nothing Found.\n\nטלפון: 09-741-9424\n\n[צור קשר](https://getzler.co.il/contact/)\n';
+  const res = await extractAndVerifyPlants(
+    { markdown: brochure + '₪', query: 'מונסטרה', site: 'getzler.co.il', openaiKey: 'k' },
+    modelDown
+  );
+  assert.equal(res.funnel.stage, 'no_match');
+  assert.match(res.report.feedback, /not a catalogue/);
+});
+
+test('extractAndVerifyPlants: without the model, a priced page we cannot pair is an honest miss', async () => {
+  const grid = [1, 2, 3, 4]
+    .map((i) => `[צמח ${i}](https://x.co.il/product/${i})\n₪${i}9\n`)
+    .join('\n');
+  const res = await extractAndVerifyPlants(
+    { markdown: grid, query: 'מונסטרה', site: 'x.co.il', openaiKey: 'k' },
+    modelDown
+  );
+  assert.equal(res.funnel.stage, 'no_excerpt');
+  assert.equal(res.plants.length, 0);
+});
+
+test('extractAndVerifyPlants: with no key at all, the same honest answer', async () => {
+  const res = await extractAndVerifyPlants({ markdown: PRICED_MD, query: 'q', site: 's' });
+  /* One price on the page - a banner's worth - is not a catalogue. */
+  assert.equal(res.funnel.stage, 'no_match');
+  assert.match(res.report.feedback, /no OpenAI key/);
+});
+
+test('extractAndVerifyPlants: an audit that cannot run keeps rows whose price the page states', async () => {
+  const page = '##### [מרווה](https://x.co.il/products/sage)\n₪49\n##### [רוזמרין](https://x.co.il/products/r)\n₪35\n';
+  const res = await extractAndVerifyPlants(
+    { markdown: page, query: 'מרווה', site: 'x.co.il', openaiKey: 'k' },
+    {
+      extract: async () => [
+        { name: 'מרווה', price: '₪49', availability: 'in_stock' },
+        { name: 'מרווה ענקית', price: '₪999', availability: 'in_stock' },
+      ],
+      verify: modelDown.verify,
+    }
+  );
+  assert.deepEqual(res.plants.map((p) => p.price), ['₪49']);
+});
+
+test('priceOnPage: matches the number however the shop wrote it', () => {
+  assert.equal(priceOnPage('₪49.90', 'מחיר: 49.90 ש"ח'), true);
+  assert.equal(priceOnPage('₪49.9', 'מחיר: 49.90 ש"ח'), true);
+  assert.equal(priceOnPage('₪1,499.90', '₪1,499.90 המחיר הנוכחי'), true);
+  assert.equal(priceOnPage('₪49', '₪49.00'), true);
+  assert.equal(priceOnPage('₪49', '₪149'), false);
+  assert.equal(priceOnPage('₪49', '₪490'), false);
+});
+
 test('identifyPlatform: L2 and both L3 endpoint probes run concurrently, not serially', async () => {
   let inFlight = 0;
   let maxInFlight = 0;
@@ -1415,6 +1544,54 @@ test('callOpenAIJson: a good first answer costs no second call', async () => {
   }
 });
 
+/*
+ * An account out of credit refuses every call the same way. Asking again, a
+ * dozen times a search and once in series before the whole fan-out, bought
+ * nothing but the round trips.
+ */
+function refusingOpenAi(status: number, body: string) {
+  let calls = 0;
+  const fn = (async () => {
+    calls += 1;
+    return { ok: false, status, text: async () => body, json: async () => JSON.parse(body) };
+  }) as unknown as typeof fetch;
+  return { fn, calls: () => calls };
+}
+
+test('callOpenAIJson: an account out of credit is not asked again for a while', async () => {
+  resetOpenAIOutage();
+  const original = globalThis.fetch;
+  const stub = refusingOpenAi(
+    429,
+    '{"error":{"type":"insufficient_quota","code":"credit_balance_exhausted"}}'
+  );
+  globalThis.fetch = stub.fn;
+  try {
+    await assert.rejects(() => callOpenAIJson('p', 'k'), /OpenAI 429/);
+    await assert.rejects(() => callOpenAIJson('p', 'k'), /OpenAI unavailable/);
+    await assert.rejects(() => callOpenAIJson('p', 'k'), /OpenAI unavailable/);
+    assert.equal(stub.calls(), 1, 'the refusal is remembered, not re-asked');
+  } finally {
+    globalThis.fetch = original;
+    resetOpenAIOutage();
+  }
+});
+
+test('callOpenAIJson: a plain rate limit is about one request, and the next one is sent', async () => {
+  resetOpenAIOutage();
+  const original = globalThis.fetch;
+  const stub = refusingOpenAi(429, '{"error":{"type":"requests","code":"rate_limit_exceeded"}}');
+  globalThis.fetch = stub.fn;
+  try {
+    await assert.rejects(() => callOpenAIJson('p', 'k'), /OpenAI 429/);
+    await assert.rejects(() => callOpenAIJson('p', 'k'), /OpenAI 429/);
+    assert.equal(stub.calls(), 2);
+  } finally {
+    globalThis.fetch = original;
+    resetOpenAIOutage();
+  }
+});
+
 // --- scrape speed: cached reads, quick-then-careful search, host memory -----
 
 /* A ScrapeFn that records every call and answers from a URL-substring map. */
@@ -1609,6 +1786,24 @@ test('createRateLimiter: holdUntil freezes every waiter until the server-named r
   assert.equal(rl.waitEstimateMs(), 0);
   await rl.take(); // hold is over, no further wait
   assert.deepEqual(c.waits, [51000]);
+});
+
+/*
+ * Page reads used to spend the whole window seconds before a shipper's JSON
+ * rescue asked for a slot, and the shipper went out as "couldn't check". A
+ * caller that leaves a reserve stops short of the window; one that does not can
+ * use what was left.
+ */
+test('createRateLimiter: a reserve is left for the caller that does not keep one', async () => {
+  const c = fakeClock();
+  const rl = createRateLimiter(5, c);
+  for (let i = 0; i < 3; i++) await rl.take(2); // page reads may fill 5 - 2 = 3
+  assert.deepEqual(c.waits, []);
+  assert.ok(rl.waitEstimateMs(2) > 0, 'a fourth page read would wait');
+  assert.equal(rl.waitEstimateMs(0), 0, 'a rescue would not');
+  await rl.take(0);
+  await rl.take(0);
+  assert.deepEqual(c.waits, [], 'the reserve was there for the rescue');
 });
 
 test('fetchSearchMarkdown: unknown platform probes one at a time and stops at a confident hit', async () => {
@@ -1997,13 +2192,109 @@ test('a host we have never met is asked for its JSON before it is identified', a
   assert.equal(res.platform, 'woo');
 });
 
+/*
+ * A shipper that refuses the API host's datacenter address. The first search
+ * pays one refusal and is answered by the rescue; after that the rescue leads,
+ * so no later search pays the refusal again.
+ */
+test('a shop that refuses us directly is read the second way, and led that way next time', async () => {
+  const directCalls: string[] = [];
+  const rescueCalls: string[] = [];
+  const refusing = (async (url: string) => {
+    directCalls.push(url);
+    return { ok: false, status: 403, text: async () => 'Forbidden' };
+  }) as any;
+  const rescue = (async (url: string) => {
+    rescueCalls.push(url);
+    if (url.includes('/wp-json/wc/store/v1/products')) {
+      return { ok: true, status: 200, text: async () => JSON.stringify([wooApiRow('מונסטרה', '6500')]) };
+    }
+    return { ok: false, status: 404, text: async () => 'no' };
+  }) as any;
+  const searcher = createSearcher('fc-key', {
+    apiEnabled: true,
+    fetchApi: refusing,
+    rescueFetch: rescue,
+    fetchHtml: async () => '',
+    scrape: async () => '',
+  });
+  const plan = buildQueryPlan({ original: 'מונסטרה', hebrew: 'מונסטרה' });
+
+  const first = await searcher.fetchSearchMarkdown('https://www.plantit.co.il/', plan, 'plantit.co.il');
+  assert.equal(first.retrieval, 'api');
+  assert.equal(first.products?.[0]?.price, 65);
+
+  const directBefore = directCalls.length;
+  const second = await searcher.fetchSearchMarkdown('https://www.plantit.co.il/', plan, 'plantit.co.il');
+  assert.equal(second.products?.length, 1);
+  assert.equal(directCalls.length, directBefore, 'the refusing route was not asked again');
+});
+
+/*
+ * A shop whose Store API refuses us (a bot wall, and no rescue got past it)
+ * used to be re-probed and then page-scraped - the scrape refused the same way,
+ * and paid Firecrawl reads out of the shared window to find out. It is now
+ * reported unread straight away, and its platform is not forgotten.
+ */
+test('a Store API that refuses us is not re-probed or scraped', async () => {
+  const scrapes: string[] = [];
+  const apiCalls: string[] = [];
+  const hostsFile = path.join(os.tmpdir(), `hosts-refused-${process.pid}-${Date.now()}.json`);
+  fs.writeFileSync(hostsFile, JSON.stringify({ 'wall.co.il': { platform: 'woo', at: Date.now() } }));
+  const searcher = createSearcher('fc-key', {
+    apiEnabled: true,
+    hostsFile,
+    fetchApi: (async (url: string) => {
+      apiCalls.push(url);
+      return { ok: false, status: 403, text: async () => '<title>Just a moment...</title>' };
+    }) as any,
+    fetchHtml: async () => '',
+    scrape: async (url: string) => {
+      scrapes.push(url);
+      return '';
+    },
+  });
+  const plan = buildQueryPlan({ original: 'מונסטרה', hebrew: 'מונסטרה' });
+  const res = await searcher.fetchSearchMarkdown('https://wall.co.il/', plan, 'wall.co.il');
+  assert.equal(res.answered, false, 'never read as "does not stock it"');
+  assert.equal(scrapes.length, 0, 'no page scrape');
+  assert.equal(apiCalls.length, 1, 'no re-probe');
+  assert.equal(JSON.parse(fs.readFileSync(hostsFile, 'utf8'))['wall.co.il']?.platform, 'woo');
+  fs.rmSync(hostsFile, { force: true });
+});
+
+test('jsonOnly: a shop with no storefront JSON is left unread, not scraped', async () => {
+  const scrapes: string[] = [];
+  const searcher = createSearcher('fc-key', {
+    apiEnabled: true,
+    fetchApi: (async () => ({ ok: false, status: 404, text: async () => 'no' })) as any,
+    fetchHtml: async () => '',
+    scrape: async (url: string) => {
+      scrapes.push(url);
+      return '# מונסטרה ₪90';
+    },
+  });
+  const plan = buildQueryPlan({ original: 'מונסטרה', hebrew: 'מונסטרה' });
+  const res = await searcher.fetchSearchMarkdown('https://brochure.co.il/', plan, 'brochure.co.il', {
+    jsonOnly: true,
+  });
+  assert.equal(scrapes.length, 0);
+  assert.equal(res.answered, false);
+});
+
+test('unwrapBrowserJson: JSON painted into a browser page comes back as JSON', () => {
+  const page = '<html><head></head><body><pre style="word-wrap: break-word;">[{&quot;name&quot;:&quot;מונסטרה&quot;}]</pre></body></html>';
+  assert.deepEqual(JSON.parse(unwrapBrowserJson(page)), [{ name: 'מונסטרה' }]);
+  assert.equal(unwrapBrowserJson('[1,2]'), '[1,2]');
+});
+
 test('the platform a probe established is not re-learned on the next search', async () => {
   let probes = 0;
   const searcher = createSearcher('fc-key', {
     apiEnabled: true,
     fetchApi: (async (url: string) => {
       if (url.includes('/wp-json/wc/store/v1/products')) {
-        if (/per_page=1$/.test(url)) probes += 1; // the probe asks for one row
+        if (/per_page=1(&|$)/.test(url)) probes += 1; // the probe asks for one row
         return { ok: true, status: 200, text: async () => JSON.stringify([wooApiRow('מונסטרה')]) };
       }
       return { ok: false, status: 404, text: async () => 'no' };

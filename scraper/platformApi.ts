@@ -61,6 +61,12 @@ export interface ApiResult {
   /* Shopify only: false when paging stopped at the cap rather than at the end,
    * so the catalogue is a prefix and absence from it proves nothing. */
   complete: boolean;
+  /*
+   * The answer came through the SECOND way to the shop, not the first - see
+   * getJson. Carried so the caller can lead with that way next time instead of
+   * paying for a refusal on every search.
+   */
+  rescued?: boolean;
 }
 
 /* Same budget as core.ts RAW_HTML_TIMEOUT_MS: this is a plain request to the
@@ -150,16 +156,16 @@ export function cleanName(raw: unknown): string {
  * throw here would turn a shop we could have read by HTML into a shop we
  * reported as broken.
  */
-async function getJson(
+async function getJsonOnce(
   url: string,
   fetchImpl: FetchLike
-): Promise<{ body: unknown; status: number }> {
+): Promise<{ body: unknown; status: number; challenge: boolean }> {
   try {
     const res = await fetchImpl(url, {
       headers: { 'User-Agent': BROWSER_UA, Accept: 'application/json' },
       signal: AbortSignal.timeout(API_TIMEOUT_MS),
     });
-    if (!res.ok) return { body: null, status: res.status };
+    if (!res.ok) return { body: null, status: res.status, challenge: false };
     /*
      * A shop without the endpoint often answers 200 with its HTML 404 page
      * rather than a JSON error, so the status alone does not prove we got JSON.
@@ -167,13 +173,65 @@ async function getJson(
      */
     const text = await res.text();
     try {
-      return { body: JSON.parse(text), status: res.status };
+      return { body: JSON.parse(text), status: res.status, challenge: false };
     } catch {
-      return { body: null, status: res.status };
+      return { body: null, status: res.status, challenge: CHALLENGE_RE.test(text.slice(0, 20000)) };
     }
   } catch {
-    return { body: null, status: 0 };
+    return { body: null, status: 0, challenge: false };
   }
+}
+
+/* A bot wall answering 200 with a page instead of the data. Kept to markers
+ * that only a challenge page carries - a shop's own 404 page must not match. */
+const CHALLENGE_RE = /cf-chl|challenge-platform|just a moment\.\.\.|attention required|captcha/i;
+
+/*
+ * A read that failed for a reason a DIFFERENT network path could fix.
+ *
+ * The Israeli shops behind Cloudflare let a home connection straight through
+ * and turn datacenter addresses away - measured on 2026-09-21, plantit.co.il
+ * and peer-nursery.co.il answer their Store API in half a second from a home
+ * line and "Failed to fetch url" to Tavily's fetchers, and the API host runs in
+ * a datacenter. Those two were the shops production reported as unreadable on
+ * every search while they read perfectly well from a laptop.
+ *
+ * A 404 is not on the list: it is the shop telling us the route does not
+ * exist, and no other path will change its mind.
+ */
+function refused(r: { body: unknown; status: number; challenge: boolean }): boolean {
+  if (r.body !== null) return false;
+  return refusedStatus(r.status) || r.challenge;
+}
+
+/*
+ * One JSON request, with every failure flattened into a status - and, when the
+ * shop refused the first way in, one more try by the second (`rescue`).
+ */
+async function getJson(
+  url: string,
+  fetchImpl: FetchLike,
+  rescue?: FetchLike
+): Promise<{ body: unknown; status: number; rescued?: boolean }> {
+  const first = await getJsonOnce(url, fetchImpl);
+  if (!rescue || !refused(first)) return asRead(first);
+  const second = await getJsonOnce(url, rescue);
+  return second.body !== null ? { body: second.body, status: second.status, rescued: true } : asRead(first);
+}
+
+/*
+ * A bot wall is reported as the refusal it is. Served as a 200 page, it read
+ * as "the route answered with something that is not JSON" - which is what a
+ * shop WITHOUT the route looks like, and sent the search off to re-probe and
+ * then scrape a shop that had just refused us.
+ */
+function asRead(r: { body: unknown; status: number; challenge: boolean }): { body: unknown; status: number } {
+  return { body: r.body, status: r.challenge ? 403 : r.status };
+}
+
+/* The statuses that mean "not you, not now" rather than "no such route". */
+export function refusedStatus(status: number): boolean {
+  return status === 0 || status === 401 || status === 403 || status === 429 || status >= 500;
 }
 
 const empty = (route: ApiRoute, status: number, filteredByServer: boolean): ApiResult => ({
@@ -186,6 +244,22 @@ const empty = (route: ApiRoute, status: number, filteredByServer: boolean): ApiR
 
 // --- WooCommerce Store API ---------------------------------------------------
 
+/*
+ * Only the four fields wooProduct reads.
+ *
+ * WordPress trims any REST response to `_fields`, and the default row carries
+ * the product's description and short description as HTML - most of the bytes,
+ * none of the use. Asking for less made plantit's monstera shelf a fraction of
+ * its 59KB, which matters on a slow shop read against an 8s budget.
+ *
+ * It also makes the rescue path possible at all. A fetcher that drives a
+ * browser hands the body back as a page, and parsing that page strips the <p>
+ * tags out of the description strings - leaving JSON with unescaped quotes in
+ * it that no parser will accept. With no HTML in the payload there is nothing
+ * for it to strip.
+ */
+export const WOO_FIELDS = 'name,permalink,prices,is_in_stock';
+
 export function wooSearchUrl(
   origin: string,
   term: string,
@@ -195,7 +269,7 @@ export function wooSearchUrl(
   const paged = page > 1 ? `&page=${page}` : '';
   return `${origin.replace(/\/$/, '')}/wp-json/wc/store/v1/products?search=${encodeURIComponent(
     term
-  )}&per_page=${perPage}${paged}`;
+  )}&per_page=${perPage}${paged}&_fields=${WOO_FIELDS}`;
 }
 
 /*
@@ -284,7 +358,7 @@ export const WOO_MAX_PAGES = 3;
 export async function wooStoreSearch(
   origin: string,
   term: string,
-  opts: { perPage?: number; maxPages?: number; fetchImpl?: FetchLike } = {}
+  opts: { perPage?: number; maxPages?: number; fetchImpl?: FetchLike; rescue?: FetchLike } = {}
 ): Promise<ApiResult> {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const perPage = opts.perPage ?? WOO_DEFAULT_PER_PAGE;
@@ -293,12 +367,15 @@ export async function wooStoreSearch(
   const products: StructuredProduct[] = [];
   let status = 0;
   let complete = false;
+  let rescued = false;
 
   for (let page = 1; page <= maxPages; page++) {
-    const { body, status: s } = await getJson(
+    const { body, status: s, rescued: viaRescue } = await getJson(
       wooSearchUrl(origin, term, perPage, page),
-      fetchImpl
+      fetchImpl,
+      opts.rescue
     );
+    rescued = rescued || viaRescue === true;
     /*
      * Page 1 failing is a route that does not answer, which is what the caller
      * falls back on. A LATER page failing leaves a prefix we can still rank, so
@@ -323,7 +400,7 @@ export async function wooStoreSearch(
     }
   }
 
-  return { products, status, filteredByServer: true, route: 'woo-store', complete };
+  return { products, status, filteredByServer: true, route: 'woo-store', complete, rescued };
 }
 
 // --- Shopify catalogue -------------------------------------------------------
@@ -454,21 +531,45 @@ export async function shopifyCatalogue(
  */
 export async function probeApiRoute(
   origin: string,
-  opts: { fetchImpl?: FetchLike } = {}
+  opts: { fetchImpl?: FetchLike; rescue?: FetchLike } = {}
 ): Promise<ApiRoute> {
+  return (await probeApiRouteDetailed(origin, opts)).route;
+}
+
+/*
+ * The probe, and whether its 'none' is an ANSWER.
+ *
+ * 'none' is remembered for a week, which is right when the shop said so (a 404,
+ * a WordPress site with no Store API) and wrong when it said nothing at all -
+ * a timeout, or a bot wall turning a datacenter away. Remembering THAT as "this
+ * shop has no JSON" cost a Cloudflare-fronted shipper its only fast route for a
+ * week on the strength of one refused request.
+ *
+ * Only the Woo probe is rescued. It is the route the refusing shops run, and a
+ * Shopify catalogue is paged, so a rescued probe would lead to eight rescued
+ * pages against a ten-a-minute budget.
+ */
+export async function probeApiRouteDetailed(
+  origin: string,
+  opts: { fetchImpl?: FetchLike; rescue?: FetchLike } = {}
+): Promise<{ route: ApiRoute; definitive: boolean; rescued: boolean }> {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const [woo, shopify] = await Promise.all([
-    getJson(wooSearchUrl(origin, '', 1), fetchImpl),
+    getJson(wooSearchUrl(origin, '', 1), fetchImpl, opts.rescue),
     getJson(shopifyPageUrl(origin, 1, 1), fetchImpl),
   ]);
 
   /* An array - even an empty one - is the Store API answering. A WordPress site
    * without WooCommerce returns a `rest_no_route` object instead. */
-  if (woo.status === 200 && Array.isArray(woo.body)) return 'woo-store';
-  if (shopify.status === 200 && Array.isArray((shopify.body as any)?.products)) {
-    return 'shopify-json';
+  if (woo.status === 200 && Array.isArray(woo.body)) {
+    return { route: 'woo-store', definitive: true, rescued: woo.rescued === true };
   }
-  return 'none';
+  if (shopify.status === 200 && Array.isArray((shopify.body as any)?.products)) {
+    return { route: 'shopify-json', definitive: true, rescued: false };
+  }
+  /* The shop answered, and the answer was no: a page, a 404, a JSON error. */
+  const answered = (s: number) => (s >= 200 && s < 300) || s === 404 || s === 410;
+  return { route: 'none', definitive: answered(woo.status) || answered(shopify.status), rescued: false };
 }
 
 /* The route a known platform implies, so a host we already identified does not

@@ -56,6 +56,9 @@ export interface AvailabilityCopy {
    * read at all. Not a failure on our side, and not a claim about the shelf -
    * a nursery you phone. */
   noOnlineShop: string;
+  /* We searched this shop's online catalogue and the product is not in it.
+   * Pick Up hides these; Deliver Today lists every shipper, and says this. */
+  notSold: string;
   estimate: (band: string, confidence: number) => string;
   /* Found the product and its price; the page never says whether it is in
    * stock. Distinct from both 'in stock' and 'did not find it'. */
@@ -73,6 +76,7 @@ export const EN_AVAILABILITY_COPY: AvailabilityCopy = {
   notFound: "Didn't find the product",
   couldNotCheck: "Couldn't check this shop",
   noOnlineShop: 'No online shop - call to check',
+  notSold: 'Not in their online shop right now',
   estimate: (bandLabel, confidence) => `${bandLabel} · ${confidence}%`,
   stockUnknown: 'Listed · stock not stated',
   unknown: 'Availability unknown',
@@ -156,6 +160,44 @@ export function byPickupOrder(
   return a.distanceKm - b.distanceKm;
 }
 
+/*
+ * Deliver Today order: every shipper, the ones showing a price first and the
+ * cheapest of those first; then the ones we could not price; the shops that do
+ * not carry it last. Distance means nothing here - they all post it to you.
+ */
+export function byDeliveryOrder(
+  a: Pick<Nursery, 'hasPlant' | 'plantPrice' | 'priceSuspect' | 'outcome' | 'name'>,
+  b: Pick<Nursery, 'hasPlant' | 'plantPrice' | 'priceSuspect' | 'outcome' | 'name'>
+): number {
+  const rank = (n: typeof a) => (showsPrice(n) ? 0 : n.outcome === 'not_sold' ? 2 : 1);
+  const ra = rank(a);
+  const rb = rank(b);
+  if (ra !== rb) return ra - rb;
+  if (ra === 0) {
+    const byPrice = priceOf(a.plantPrice) - priceOf(b.plantPrice);
+    if (byPrice !== 0 && Number.isFinite(byPrice)) return byPrice;
+  }
+  return a.name.localeCompare(b.name);
+}
+
+/*
+ * The listings to draw on a card, and how many more the shop has.
+ *
+ * `matchCount` counts every row that matched, `offers` carries the first few;
+ * the remainder is what the "more at this shop" link stands for.
+ */
+export const VISIBLE_OFFERS = 3;
+
+export function visibleOffers(
+  n: Pick<Nursery, 'offers' | 'matchCount'>,
+  max = VISIBLE_OFFERS
+): { shown: NonNullable<Nursery['offers']>; more: number } {
+  const offers = n.offers ?? [];
+  const shown = offers.slice(0, max);
+  const total = Math.max(n.matchCount ?? 0, offers.length);
+  return { shown, more: Math.max(0, total - shown.length) };
+}
+
 export function availabilityBadge(
   n: AvailabilityInput,
   words: AvailabilityCopy = EN_AVAILABILITY_COPY
@@ -185,6 +227,21 @@ export function availabilityBadge(
    * Neither says "the scrape failed" - our plumbing is not the user's problem.
    * Both keep the row, because they may still want to ring the place.
    */
+  /*
+   * Searched, and not there. Only ever rendered on Deliver Today - Pick Up
+   * drops these rows (isWorthShowing) - where a shipper that does not carry the
+   * product is still one of the few shops that could deliver something, and a
+   * tab that silently shows three of its four shops reads as a broken search.
+   */
+  if (n.outcome === 'not_sold') {
+    return {
+      text: words.notSold,
+      tone: 'unknown',
+      detail: n.availability?.detail ?? '',
+      hasDetail: Boolean(n.availability?.detail),
+    };
+  }
+
   if (n.outcome === 'not_found') {
     const kind = n.availability?.kind;
     const unread = kind === 'unreadable' || kind === 'error';

@@ -21,6 +21,7 @@ import {
   wooStoreSearch,
   shopifyCatalogue,
   probeApiRoute,
+  probeApiRouteDetailed,
   routeForPlatform,
   wooSearchUrl,
   shopifyPageUrl,
@@ -377,4 +378,113 @@ test('a known platform implies its route without paying for a probe', () => {
 
 test('page URLs are built the way the endpoints expect', () => {
   assert.equal(shopifyPageUrl('https://x.co.il/', 2), 'https://x.co.il/products.json?limit=250&page=2');
+});
+
+// --- the second way in ------------------------------------------------------
+
+/*
+ * plantit.co.il and peer-nursery.co.il answer a home connection and refuse a
+ * datacenter one, and the API host runs in a datacenter. The rescue is the same
+ * request made from somewhere the shop will answer.
+ */
+function countingFetch(inner: any) {
+  const urls: string[] = [];
+  const fn = async (url: string, init?: unknown) => {
+    urls.push(url);
+    return inner(url, init);
+  };
+  return { fn: fn as any, urls };
+}
+
+test('a refused Store API read is asked again the second way, and says so', async () => {
+  const direct = fakeFetch({ '/wp-json/wc/store/v1/products': { status: 403, body: 'Forbidden' } });
+  const rescue = countingFetch(fakeFetch({ '/wp-json/wc/store/v1/products': { body: [wooRow()] } }));
+  const res = await wooStoreSearch(ORIGIN, 'אלוקסיה', { fetchImpl: direct, rescue: rescue.fn });
+  assert.equal(res.products.length, 1);
+  assert.equal(res.status, 200);
+  assert.equal(res.rescued, true);
+  assert.equal(rescue.urls.length, 1);
+});
+
+test('a read that never completed is rescued too', async () => {
+  const direct = async () => {
+    throw new Error('The operation was aborted due to timeout');
+  };
+  const rescue = fakeFetch({ '/wp-json/wc/store/v1/products': { body: [wooRow()] } });
+  const res = await wooStoreSearch(ORIGIN, 'אלוקסיה', { fetchImpl: direct as any, rescue });
+  assert.equal(res.products.length, 1);
+  assert.equal(res.rescued, true);
+});
+
+test('a bot wall served as a 200 page is a refusal, not an empty shelf', async () => {
+  const wall = '<html><title>Just a moment...</title><script src="/cdn-cgi/challenge-platform/x.js"></script></html>';
+  const direct = fakeFetch({ '/wp-json/wc/store/v1/products': { body: wall } });
+  const rescue = fakeFetch({ '/wp-json/wc/store/v1/products': { body: [wooRow()] } });
+  const res = await wooStoreSearch(ORIGIN, 'אלוקסיה', { fetchImpl: direct, rescue });
+  assert.equal(res.products.length, 1);
+});
+
+test('a 404 is the shop answering, and is not asked twice', async () => {
+  const rescue = countingFetch(fakeFetch({ '/wp-json/wc/store/v1/products': { body: [wooRow()] } }));
+  const res = await wooStoreSearch(ORIGIN, 'אלוקסיה', { fetchImpl: fakeFetch({}), rescue: rescue.fn });
+  assert.equal(res.status, 404);
+  assert.equal(res.products.length, 0);
+  assert.equal(rescue.urls.length, 0);
+});
+
+test('a read that answers the first time never touches the rescue', async () => {
+  const rescue = countingFetch(fakeFetch({}));
+  const direct = fakeFetch({ '/wp-json/wc/store/v1/products': { body: [wooRow()] } });
+  const res = await wooStoreSearch(ORIGIN, 'אלוקסיה', { fetchImpl: direct, rescue: rescue.fn });
+  assert.equal(res.rescued, false);
+  assert.equal(rescue.urls.length, 0);
+});
+
+/*
+ * 'none' is remembered for a week. A shop that answered nothing at all has not
+ * told us it has no JSON, and must not lose its fastest route over one refusal.
+ */
+test('a probe nobody answered is not a definitive "none"', async () => {
+  const silent = async () => {
+    throw new Error('timeout');
+  };
+  const res = await probeApiRouteDetailed(ORIGIN, { fetchImpl: silent as any });
+  assert.equal(res.route, 'none');
+  assert.equal(res.definitive, false);
+});
+
+test('a probe the shop answered with 404s is a definitive "none"', async () => {
+  const res = await probeApiRouteDetailed(ORIGIN, { fetchImpl: fakeFetch({}) });
+  assert.equal(res.route, 'none');
+  assert.equal(res.definitive, true);
+});
+
+test('a refused probe is rescued, and names the Woo route it found', async () => {
+  const direct = fakeFetch({
+    '/wp-json/': { status: 403, body: 'Forbidden' },
+    '/products.json': { status: 403, body: 'Forbidden' },
+  });
+  const rescue = fakeFetch({ '/wp-json/wc/store/v1/products': { body: [] } });
+  const res = await probeApiRouteDetailed(ORIGIN, { fetchImpl: direct, rescue });
+  assert.deepEqual(res, { route: 'woo-store', definitive: true, rescued: true });
+});
+
+/*
+ * The rescue path reads the body back out of a browser page, which strips the
+ * HTML tags inside the description strings and breaks the JSON. Asking for the
+ * four fields we map keeps HTML out of the payload entirely.
+ */
+test('the Store API is asked for only the fields we map', () => {
+  const url = new URL(wooSearchUrl(ORIGIN, 'מונסטרה'));
+  assert.equal(url.searchParams.get('_fields'), 'name,permalink,prices,is_in_stock');
+  assert.equal(url.searchParams.get('search'), 'מונסטרה');
+});
+
+test('a bot wall served as a 200 page reads as a refusal, not an empty shelf', async () => {
+  const wall = '<html><title>Just a moment...</title><script src="/cdn-cgi/challenge-platform/x.js"></script></html>';
+  const res = await wooStoreSearch(ORIGIN, 'אלוקסיה', {
+    fetchImpl: fakeFetch({ '/wp-json/wc/store/v1/products': { body: wall } }),
+  });
+  assert.equal(res.status, 403);
+  assert.equal(res.products.length, 0);
 });

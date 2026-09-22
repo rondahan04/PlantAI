@@ -223,7 +223,7 @@ const searcher = createSearcher(FIRECRAWL_KEY, {
 const deps: PipelineDeps = {
   discover: (lat, lng, radiusM) =>
     discoverNurseries(lat, lng, GOOGLE_KEY!, { radiusM, richFields: true }),
-  search: (website, query, host) => searcher.fetchSearchMarkdown(website, query, host),
+  search: (website, query, host, opts) => searcher.fetchSearchMarkdown(website, query, host, opts),
   extract: (o) => extractAndVerifyPlants({ ...o, openaiKey: OPENAI_KEY }),
   /*
    * English in, a search plan out - see planQuery. One call per search.

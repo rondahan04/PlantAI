@@ -1,4 +1,4 @@
-import { Nursery } from '../types';
+import { Nursery, NurseryOffer } from '../types';
 import { apiFetch, apiHeaders, readApiError } from '../lib/api';
 import { hasInlineResults } from '../lib/nursery/jobResponse';
 import { clampRadius, DEFAULT_RADIUS_M } from '../lib/nursery/radius';
@@ -62,6 +62,7 @@ interface NurseryResultJSON {
   productUrl?: string;
   productName?: string;
   matchCount?: number;
+  offers?: unknown;
   priceSuspect?: boolean;
   priceNote?: string;
   shipsToHome: boolean;
@@ -94,6 +95,24 @@ function formatDistance(km: number): string {
   return km < 1 ? `${Math.round(km * 1000)}m` : `${km.toFixed(1)} km`;
 }
 
+/*
+ * The listings a shop matched, kept only where each row is whole. A result
+ * cached by an older server has none, and a row missing its name or price is
+ * a row we cannot show - neither is worth failing the card over.
+ */
+function toOffers(raw: unknown): NurseryOffer[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const offers = raw
+    .filter((o: any) => o && typeof o.name === 'string' && typeof o.price === 'string' && o.name && o.price)
+    .map((o: any) => ({
+      name: o.name as string,
+      price: o.price as string,
+      ...(typeof o.url === 'string' && /^https?:\/\//i.test(o.url) ? { url: o.url as string } : {}),
+      inStock: o.inStock !== false,
+    }));
+  return offers.length ? offers : undefined;
+}
+
 function toNursery(r: NurseryResultJSON): Nursery {
   return {
     id: r.id,
@@ -111,6 +130,7 @@ function toNursery(r: NurseryResultJSON): Nursery {
     productUrl: r.productUrl,
     productName: r.productName,
     matchCount: r.matchCount,
+    offers: toOffers(r.offers),
     priceSuspect: r.priceSuspect,
     priceNote: r.priceNote,
     shipsToHome: r.shipsToHome,
