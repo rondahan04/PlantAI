@@ -79,6 +79,7 @@ export default function NotificationsScreen({ navigation }: Props) {
           <View style={s.row}>
             <Text style={s.rowLabel}>{copy.settings.pushNotifications}</Text>
             <Switch
+              style={s.switch}
               value={pushGranted}
               onValueChange={handlePushToggle}
               trackColor={{ false: t.color.border, true: t.color.primary }}
@@ -91,6 +92,7 @@ export default function NotificationsScreen({ navigation }: Props) {
           <View style={s.row}>
             <Text style={s.rowLabel}>{copy.settings.wateringReminder}</Text>
             <Switch
+              style={s.switch}
               value={wateringEnabled}
               onValueChange={handleWateringToggle}
               trackColor={{ false: t.color.border, true: t.color.primary }}
@@ -131,6 +133,9 @@ function makeStyles(t: Theme) {
       paddingHorizontal: t.space.lg,
     },
     rowLabel: { ...t.type.bodyStrong, color: t.color.foreground },
+    /* React Native's iOS Switch gives itself alignSelf: 'flex-start', which
+     * beats the row's alignItems and pins it to the top edge of the card. */
+    switch: { alignSelf: 'center' },
     note: { ...t.type.caption, color: t.color.textMuted, marginTop: t.space.sm },
   });
 }

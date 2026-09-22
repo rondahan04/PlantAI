@@ -178,6 +178,7 @@ export const en = {
      * which. Getting this wrong is worse than a broken link, because
      * "Get Aroid Fertilizer now!" on a neem oil card looks perfectly fine. */
     buyShop: {
+      confidor: 'Get Confidor now!',
       nutrient: 'Get Aroid Fertilizer now!',
       neem: 'Get Neem Oil now!',
       fungicide: 'Get Fungicide now!',
@@ -654,6 +655,7 @@ export const en = {
      * which. Getting this wrong is worse than a broken link, because
      * "Get Aroid Fertilizer now!" on a neem oil card looks perfectly fine. */
     buyShop: {
+      confidor: 'Get Confidor now!',
       nutrient: 'Get Aroid Fertilizer now!',
       neem: 'Get Neem Oil now!',
       fungicide: 'Get Fungicide now!',
